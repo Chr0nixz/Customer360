@@ -1,0 +1,21 @@
+config_version: "0.1"
+scale: tiny
+seed: 42
+anchor_date: 2025-06-30
+horizon_start: 2024-07-01
+customers: 100
+transactions: 2000
+managers: 10
+products: 8
+cash_flows: 800
+snapshot_dates:
+  - 2024-12-31
+  - 2025-01-31
+  - 2025-02-28
+  - 2025-03-31
+  - 2025-04-30
+  - 2025-05-31
+  - 2025-06-30
+customers_without_transactions: 5
+customers_without_positions: 5
+customers_with_null_occupation: 3

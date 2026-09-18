@@ -1,0 +1,254 @@
+join_paths_version: "0.1"
+paths:
+  - path_name: customer_transactions
+    left_table: dim_customer
+    left_column: customer_id
+    right_table: fact_transaction
+    right_column: customer_id
+    cardinality: one_to_many
+    target_grain: customer
+    compile_status: executable
+    time_validity: fact_transaction.transaction_date rolling window required
+    duplicate_count_risk: COUNT(*) after join duplicates customers; must COUNT DISTINCT customer_id
+    pre_aggregation: count distinct customer_id after customer filters and transaction window
+    description: 客户属性筛选后连接交易明细，按customer_id去重；交易条件在交易表侧执行。
+
+  - path_name: customer_cash_flows
+    left_table: dim_customer
+    left_column: customer_id
+    right_table: fact_cash_flow
+    right_column: customer_id
+    cardinality: one_to_many
+    target_grain: customer
+    time_validity: fact_cash_flow.flow_date rolling window required
+    duplicate_count_risk: one customer has many flows; customer grain needs distinct customer_id
+    pre_aggregation: aggregate flows before counting customers
+    description: 客户连接资金流明细；流出为负，不能取绝对值后再加总。
+
+  - path_name: customer_holdings
+    left_table: dim_customer
+    left_column: customer_id
+    right_table: fact_holding
+    right_column: customer_id
+    cardinality: one_to_many
+    target_grain: customer
+    time_validity: holding snapshot_date must be named or latest; not a rolling window
+    duplicate_count_risk: multiple products per customer per date
+    pre_aggregation: decide customer vs holding grain before counting
+    description: 客户连接持仓明细；持仓按估值日粒度，不能跨日直接相加。
+
+  - path_name: customer_asset_snapshots
+    left_table: dim_customer
+    left_column: customer_id
+    right_table: fact_asset_snapshot
+    right_column: customer_id
+    cardinality: one_to_many
+    target_grain: customer_snapshot
+    time_validity: named snapshot_date equality; not latest-snapshot
+    duplicate_count_risk: multiple valuation dates per customer
+    pre_aggregation: filter one snapshot_date before SUM
+    description: 客户连接资产快照；指定估值日合计，不是逐客户最新快照。
+
+  - path_name: customer_service_relations
+    left_table: dim_customer
+    left_column: customer_id
+    right_table: fact_service_relation
+    right_column: customer_id
+    cardinality: one_to_many
+    target_grain: service_relation
+    time_validity: interval [start_date, end_date); NULL end means ongoing
+    duplicate_count_risk: historical relations fan out; relation count is not distinct customers
+    pre_aggregation: apply is_primary and end_date before counting
+    description: 客户连接服务关系；关系条数不是去重客户数。
+
+  - path_name: manager_service_relations
+    left_table: dim_service_manager
+    left_column: manager_id
+    right_table: fact_service_relation
+    right_column: manager_id
+    cardinality: one_to_many
+    target_grain: service_relation
+    time_validity: interval [start_date, end_date)
+    duplicate_count_risk: one manager serves many customers over time
+    pre_aggregation: do not reverse-count as a second path from relation to manager
+    description: 服务经理连接其服务关系；反向同一条边不重复计数。
+
+  - path_name: product_transactions
+    left_table: dim_product
+    left_column: product_id
+    right_table: fact_transaction
+    right_column: product_id
+    cardinality: one_to_many
+    target_grain: transaction
+    time_validity: transaction_date rolling window required
+    duplicate_count_risk: product join does not imply customer distinct
+    pre_aggregation: keep transaction grain unless a customer path is declared
+    description: 产品连接交易明细；不是客户去重路径。
+
+  - path_name: product_holdings
+    left_table: dim_product
+    left_column: product_id
+    right_table: fact_holding
+    right_column: product_id
+    cardinality: one_to_many
+    target_grain: holding
+    time_validity: named holding snapshot_date
+    duplicate_count_risk: many customers hold the same product
+    pre_aggregation: keep holding grain unless a customer path is declared
+    description: 产品连接持仓明细。
+
+  - path_name: transaction_calendar
+    left_table: fact_transaction
+    left_column: transaction_date
+    right_table: dim_date
+    right_column: calendar_date
+    cardinality: many_to_many
+    target_grain: transaction
+    time_validity: calendar_date equals transaction_date; not a month/quarter alias
+    duplicate_count_risk: calendar attributes must not multiply transaction rows
+    pre_aggregation: join date dimension after selecting the transaction set
+    description: 交易日期连接公共日历；近90天不能换成最近三个月。
+
+  - path_name: cash_flow_calendar
+    left_table: fact_cash_flow
+    left_column: flow_date
+    right_table: dim_date
+    right_column: calendar_date
+    cardinality: many_to_many
+    target_grain: cash_flow
+    time_validity: calendar_date equals flow_date
+    duplicate_count_risk: calendar join must stay many-to-one on date
+    pre_aggregation: join date dimension after selecting the flow set
+    description: 资金流日期连接公共日历。
+
+  - path_name: holding_calendar
+    left_table: fact_holding
+    left_column: snapshot_date
+    right_table: dim_date
+    right_column: calendar_date
+    cardinality: many_to_many
+    target_grain: holding
+    time_validity: calendar_date equals holding snapshot_date
+    duplicate_count_risk: month_end flags are attributes, not extra rows
+    pre_aggregation: join date dimension after selecting the holding set
+    description: 持仓估值日连接公共日历。
+
+  - path_name: asset_snapshot_calendar
+    left_table: fact_asset_snapshot
+    left_column: snapshot_date
+    right_table: dim_date
+    right_column: calendar_date
+    cardinality: many_to_many
+    target_grain: customer_snapshot
+    time_validity: calendar_date equals asset snapshot_date
+    duplicate_count_risk: calendar join must not fan out snapshots
+    pre_aggregation: join date dimension after selecting the snapshot set
+    description: 资产估值日连接公共日历。
+
+  - path_name: service_start_calendar
+    left_table: fact_service_relation
+    left_column: start_date
+    right_table: dim_date
+    right_column: calendar_date
+    cardinality: many_to_many
+    target_grain: service_relation
+    time_validity: calendar_date equals relation start_date
+    duplicate_count_risk: start_date and end_date are different keys
+    pre_aggregation: do not treat start_date as the open interval end
+    description: 服务关系开始日连接公共日历。
+
+  - path_name: service_end_calendar
+    left_table: fact_service_relation
+    left_column: end_date
+    right_table: dim_date
+    right_column: calendar_date
+    cardinality: many_to_many
+    target_grain: service_relation
+    time_validity: calendar_date equals nullable end_date; NULL means ongoing
+    duplicate_count_risk: NULL end_date rows drop out of an inner calendar join
+    pre_aggregation: ongoing relations must use IS NULL, not a calendar match
+    description: 服务关系结束日连接公共日历；未结束关系没有日历匹配。
+
+  - path_name: customer_managers
+    left_table: dim_customer
+    left_column: customer_id
+    right_table: dim_service_manager
+    right_column: manager_id
+    hops:
+      - {left_table: dim_customer, left_column: customer_id, right_table: fact_service_relation, right_column: customer_id}
+      - {left_table: fact_service_relation, left_column: manager_id, right_table: dim_service_manager, right_column: manager_id}
+    cardinality: many_to_many
+    target_grain: service_relation
+    time_validity: historical relations; interval [start_date, end_date)
+    duplicate_count_risk: counting managers without relation filters duplicates customers
+    pre_aggregation: aggregate on the intended grain before counting
+    description: 客户经服务关系连接经理；历史关系全部保留。
+
+  - path_name: current_primary_customer_manager
+    left_table: dim_customer
+    left_column: customer_id
+    right_table: dim_service_manager
+    right_column: manager_id
+    hops:
+      - {left_table: dim_customer, left_column: customer_id, right_table: fact_service_relation, right_column: customer_id}
+      - {left_table: fact_service_relation, left_column: manager_id, right_table: dim_service_manager, right_column: manager_id}
+    cardinality: one_to_one
+    target_grain: customer
+    time_validity: is_primary and end_date IS NULL
+    duplicate_count_risk: dropping the primary/open filter fans out to historical managers
+    pre_aggregation: filter current primary relation before joining manager
+    description: 客户当前主服务经理；与历史经理路径时间有效性不同。
+
+  - path_name: customer_products_via_transaction
+    left_table: dim_customer
+    left_column: customer_id
+    right_table: dim_product
+    right_column: product_id
+    hops:
+      - {left_table: dim_customer, left_column: customer_id, right_table: fact_transaction, right_column: customer_id}
+      - {left_table: fact_transaction, left_column: product_id, right_table: dim_product, right_column: product_id}
+    cardinality: many_to_many
+    target_grain: transaction
+    time_validity: transaction_date rolling window required
+    duplicate_count_risk: repeating products across trades inflates customer or product counts
+    pre_aggregation: COUNT DISTINCT on the declared grain
+    description: 客户经交易连接产品。
+
+  - path_name: customer_products_via_holding
+    left_table: dim_customer
+    left_column: customer_id
+    right_table: dim_product
+    right_column: product_id
+    hops:
+      - {left_table: dim_customer, left_column: customer_id, right_table: fact_holding, right_column: customer_id}
+      - {left_table: fact_holding, left_column: product_id, right_table: dim_product, right_column: product_id}
+    cardinality: many_to_many
+    target_grain: holding
+    time_validity: named holding snapshot_date
+    duplicate_count_risk: one customer holding many products
+    pre_aggregation: COUNT DISTINCT on the declared grain
+    description: 客户经持仓连接产品；与交易产品路径不同。
+
+  - path_name: latest_customer_asset_snapshot
+    left_table: dim_customer
+    left_column: customer_id
+    right_table: fact_asset_snapshot
+    right_column: customer_id
+    cardinality: one_to_one
+    target_grain: customer
+    time_validity: per-customer MAX(snapshot_date) <= anchor; missing snapshots excluded
+    duplicate_count_risk: a global MAX(snapshot_date) then SUM is the wrong grain
+    pre_aggregation: reduce to one snapshot per customer before SUM
+    description: 客户连接各自锚点前最近一次资产快照；不是指定估值日路径。
+
+  - path_name: customer_holdings_point_in_time
+    left_table: dim_customer
+    left_column: customer_id
+    right_table: fact_holding
+    right_column: customer_id
+    cardinality: one_to_many
+    target_grain: holding
+    time_validity: snapshot_date equals a named valuation day
+    duplicate_count_risk: multiple products remain after the date filter
+    pre_aggregation: filter snapshot_date before summing market_value
+    description: 客户在指定估值日的持仓；与未定时点的持仓路径不同。

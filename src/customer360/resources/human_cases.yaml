@@ -1,0 +1,122 @@
+catalog_version: "0.3"
+artifact_kind: public_human_cases
+cases:
+  - case_id: C360_0001
+    task_version: human-0.1
+    split: dev
+    question: 统计VIP客户数。
+    rewrites: [VIP客户一共有多少人？, 请给出VIP客户数量。, 目前VIP等级客户的总数是多少？]
+
+  - case_id: C360_0002
+    task_version: human-0.1
+    split: dev
+    question: 统计活跃客户数。
+    rewrites: [活跃客户有多少？, 请统计当前活跃客户总数。, 现在处于活跃状态的客户数量是多少？]
+
+  - case_id: C360_0003
+    task_version: human-0.1
+    split: dev
+    question: 统计截至2025年6月30日近90天成功交易笔数。
+    rewrites: [截至2025年6月30日，往前90天成功交易有几笔？, 请计算2025年6月30日前近90天的成功交易次数。, 2025年6月30日这个锚点往前90天成功交易笔数是多少？]
+
+  - case_id: C360_0004
+    task_version: human-0.1
+    split: dev
+    question: 统计截至2025年6月30日近90天成功交易金额。
+    rewrites: [截至2025年6月30日近90天成功交易的金额总和是多少？, 请汇总2025年6月30日前90天的成功交易金额。, 以2025年6月30日为截止日，近90天成功交易金额有多少？]
+
+  - case_id: C360_0005
+    task_version: human-0.1
+    split: dev
+    question: 统计截至2025年6月30日近90天失败交易笔数。
+    rewrites: [2025年6月30日前近90天失败交易有多少笔？, 请统计截至2025年6月30日往前90天的失败交易次数。, 近90天（截止2025年6月30日）的失败交易笔数是多少？]
+
+  - case_id: C360_0006
+    task_version: human-0.1
+    split: dev
+    question: 统计截至2025年6月30日近90天成功资金净流入。
+    rewrites: [截至2025年6月30日近90天成功资金净流入是多少？, 请计算近90天成功资金的流入减流出金额。, 以2025年6月30日为锚点，近90天成功资金净流入总额是多少？]
+
+  - case_id: C360_0007
+    task_version: human-0.1
+    split: dev
+    question: 统计截至2025年6月30日近90天成功资金流入。
+    rewrites: [请汇总截至2025年6月30日近90天成功资金流入金额。, 2025年6月30日前90天成功流入资金有多少？, 近90天成功入账金额（截止2025年6月30日）是多少？]
+
+  - case_id: C360_0008
+    task_version: human-0.1
+    split: dev
+    question: 统计当前主服务关系数。
+    rewrites: [现在仍有效的主服务关系有多少条？, 请统计未结束的主服务关系数量。, 当前客户主服务关系总数是多少？]
+
+  - case_id: C360_0009
+    task_version: human-0.1
+    split: dev
+    question: 统计2025年6月30日估值日总资产合计。
+    rewrites: [2025年6月30日估值日的总资产是多少？, 请汇总估值日2025-06-30的总资产。, 截至2025年6月30日这个估值日，客户总资产合计多少？]
+
+  - case_id: C360_0010
+    task_version: human-0.1
+    split: dev
+    question: 统计2025年6月30日估值日净资产合计。
+    rewrites: [2025年6月30日估值日净资产总额是多少？, 请计算2025-06-30估值日的净资产合计。, 在2025年6月30日这个估值日，净资产一共多少？]
+
+  - case_id: C360_0011
+    task_version: human-0.1
+    split: dev
+    question: 统计截至2025年6月30日近90天窗口首日的成功交易笔数。
+    rewrites: [近90天窗口第一天（2025年4月2日）的成功交易有几笔？, 请统计90天窗口起始日的成功交易次数。, 截止2025年6月30日的90天范围首日成功交易笔数是多少？]
+
+  - case_id: C360_0012
+    task_version: human-0.1
+    split: dev
+    question: 统计截至2025年6月30日近90天窗口外前一日的成功交易笔数。
+    rewrites: [2025年4月1日（90天窗口外一天）成功交易有几笔？, 请统计近90天起始日前一天的成功交易次数。, 2025年6月30日往前90天窗口之外的前一日有多少成功交易？]
+
+  - case_id: C360_0013
+    task_version: human-0.1
+    split: dev
+    question: 统计职业为空的客户数。
+    rewrites: [没有填写职业的客户有多少？, 请统计职业字段为空的客户数量。, 客户职业信息缺失的有几人？]
+
+  - case_id: C360_0014
+    task_version: human-0.1
+    split: dev
+    question: 统计华东地区的VIP客户数。
+    rewrites: [华东的VIP客户一共有多少？, 请计算地区为华东且等级为VIP的客户数。, 华东区域VIP客户数量是多少？]
+
+  - case_id: C360_0015
+    task_version: human-0.1
+    split: dev
+    question: 统计2024年12月31日估值日净资产合计。
+    rewrites: [2024年12月31日估值日净资产总额是多少？, 请汇总估值日2024-12-31的净资产。, 在2024-12-31这个估值日，所有客户净资产合计多少？]
+
+  - case_id: C360_0016
+    task_version: human-0.1
+    split: dev
+    question: 统计近90天有成功交易的VIP客户数。
+    rewrites: [近90天发生过成功交易的VIP客户有多少？, 请统计近90天内有成功交易的VIP客户数量。, 截至2025年6月30日往前90天，成功交易VIP客户数是多少？]
+
+  - case_id: C360_0017
+    task_version: human-0.1
+    split: dev
+    question: 统计每个客户最新快照的总资产合计。
+    rewrites: [请按每位客户取最新资产快照并求总资产。, 每个客户最近一次快照的总资产合计是多少？, 统计所有客户各自最新快照中的总资产。]
+
+  - case_id: C360_0018
+    task_version: human-0.1
+    split: dev
+    question: 按地区统计活跃客户数。
+    rewrites: [请分地区汇总活跃客户数量。, 各地区的活跃客户数分别是多少？, 按客户地区列出活跃客户人数。]
+
+  - case_id: C360_0019
+    task_version: human-0.1
+    split: dev
+    question: 帮我看一下最近交易多不多。
+    rewrites: [最近的交易量大概怎么样？, 想了解一下近期交易是否频繁。, 帮我看看最近交易数量多不多。]
+
+  - case_id: C360_0020
+    task_version: human-0.1
+    split: dev
+    question: 统计客户手机号数量。
+    rewrites: [客户手机号码总数是多少？, 请统计有多少个客户手机号。, 我想知道客户手机号的数量。]

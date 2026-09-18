@@ -1,0 +1,21 @@
+cff-version: 1.2.0
+title: Customer360 Agent Benchmark
+message: If you use this benchmark, please cite it.
+type: software
+authors:
+  - name: Customer360 contributors
+license: Apache-2.0
+version: 1.0.0
+url: "https://github.com/Chr0nixz/Customer360"
+repository-code: "https://github.com/Chr0nixz/Customer360"
+abstract: >-
+  A local, offline, auditable Agent benchmark over synthetic
+  Customer360 data with a constrained SQL gateway. Public Dev
+  and Private Hidden scores are reported separately;
+  ranking_enabled is permanently false.
+keywords:
+  - benchmark
+  - agent
+  - evaluation
+  - nl2sql
+  - duckdb

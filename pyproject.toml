@@ -1,0 +1,99 @@
+[build-system]
+requires = ["hatchling>=1.27,<2"]
+build-backend = "hatchling.build"
+
+[project]
+name = "customer360-agent-benchmark"
+version = "1.0.0"
+license = {text = "Apache-2.0"}
+readme = "README.md"
+authors = [{ name = "Customer360 contributors" }]
+description = "Reproducible Customer360 agent benchmark foundations"
+requires-python = ">=3.11,<3.13"
+keywords = ["benchmark", "agent", "evaluation", "nl2sql", "duckdb"]
+classifiers = [
+  "License :: OSI Approved :: Apache Software License",
+  "Programming Language :: Python :: 3.11",
+  "Programming Language :: Python :: 3.12",
+  "Operating System :: OS Independent",
+  "Intended Audience :: Science/Research",
+  "Topic :: Scientific/Engineering :: Artificial Intelligence",
+]
+dependencies = [
+  "duckdb>=1.4,<2",
+  "pydantic>=2.10,<3",
+  "PyYAML>=6.0,<7",
+  "sqlglot>=28,<31",
+  "typer>=0.16,<1",
+]
+
+[project.urls]
+Homepage = "https://github.com/Chr0nixz/Customer360"
+Documentation = "https://github.com/Chr0nixz/Customer360/blob/main/docs/user-guide.md"
+Issues = "https://github.com/Chr0nixz/Customer360/issues"
+Source = "https://github.com/Chr0nixz/Customer360"
+
+[project.scripts]
+c360 = "customer360.cli:app"
+
+[dependency-groups]
+dev = ["pytest>=8,<10", "ruff>=0.11,<1"]
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/customer360"]
+
+[tool.hatch.build.targets.sdist]
+only-include = [
+  "src/customer360",
+  "tests",
+  "configs",
+  "docs",
+  ".github",
+  "pyproject.toml",
+  "uv.lock",
+  "README.md",
+  "AGENTS.md",
+  "ROADMAP.md",
+  "HANDOFF.md",
+  ".python-version",
+  ".gitignore",
+  ".editorconfig",
+  "Customer360-Agent-Benchmark-Implementation-Plan.md",
+  "LICENSE",
+  "NOTICE",
+  "THIRD_PARTY_NOTICES.md",
+  "CONTRIBUTING.md",
+  "SECURITY.md",
+  "CODE_OF_CONDUCT.md",
+  "CITATION.cff",
+  "Dockerfile",
+  ".dockerignore",
+  ".gitattributes",
+]
+exclude = [
+  "outputs",
+  ".venv",
+  ".private",
+  "dist",
+  "dist-ci",
+  "dist-m2-final",
+  "tmp-formal-release",
+  "tmp-formal-release2",
+  "tmp-formal-public",
+  "data/hidden",
+  "data/trusted",
+  ".env",
+  ".env.*",
+]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-ra"
+markers = ["integration: subprocess and DuckDB integration tests"]
+
+[tool.ruff]
+target-version = "py311"
+line-length = 100
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B"]

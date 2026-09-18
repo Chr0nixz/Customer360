@@ -1,0 +1,48 @@
+name: Bug report
+description: 公开仓库里的缺陷。不要粘贴 hidden pack、Gold SQL 或私有报告。
+title: "[bug] "
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        这是本地离线 benchmark，不是在线服务。安全漏洞请走 SECURITY.md，不要开公开 Issue。
+  - type: textarea
+    id: happened
+    attributes:
+      label: 发生了什么
+      description: 实际行为与预期行为。不要粘贴 Gold、hidden oracle、候选 SQL 结果行或完整私有 JSONL。
+    validations:
+      required: true
+  - type: textarea
+    id: repro
+    attributes:
+      label: 复现命令
+      description: 从仓库根目录开始的 uv/c360 命令。输出目录请用新路径。
+      render: bash
+    validations:
+      required: true
+  - type: dropdown
+    id: area
+    attributes:
+      label: 大致范围
+      options:
+        - CLI / 安装
+        - 数据生成
+        - Gold / 任务包
+        - SQL Guard / 权限
+        - evaluator / score
+        - 文档
+        - CI / 打包
+        - 其它
+    validations:
+      required: true
+  - type: checkboxes
+    id: safety
+    attributes:
+      label: 确认
+      options:
+        - label: 我没有附上 hidden pack、hidden_oracles、Gold SQL 或真实客户数据。
+          required: true
+        - label: 我没有把 C360_0001–0020 改标成 hidden。
+          required: true

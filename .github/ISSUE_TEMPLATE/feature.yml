@@ -1,0 +1,29 @@
+name: Feature request
+description: 建议新能力。默认不包含排名、外部模型和额外可执行 Join。
+title: "[idea] "
+labels: [enhancement]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        优先级是评测可信、业务语义、安全默认、可复现。题量和模型效果排在后面。
+  - type: textarea
+    id: ask
+    attributes:
+      label: 想解决什么问题
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: 建议的做法
+      description: 说明对 SQL 白名单、Gold、split、评分权重的影响。没有影响也请写明。
+    validations:
+      required: true
+  - type: checkboxes
+    id: out_of_scope
+    attributes:
+      label: 范围
+      options:
+        - label: 我知道 v1.0 不包含在线排行榜、FastAPI 服务、未许可的外部模型 API，以及除 customer_transactions 以外的可执行 Join。
+          required: true

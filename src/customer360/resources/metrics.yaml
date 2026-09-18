@@ -1,0 +1,525 @@
+metrics_version: "0.3"
+metrics:
+  - metric_name: distinct_customer_count
+    business_name: 客户数
+    description: 当前数据快照内按customer_id去重的客户数；默认包含所有客户状态。
+    unit: count
+    deduplicate: true
+    output_column: customer_count
+    source_table: dim_customer
+    grain: customer
+    operation: count_distinct
+    measure_column: customer_id
+    time_semantics: none
+    allowed_filter_columns: [customer_level, gender, risk_level, region, status, occupation]
+    sensitivity: internal
+    forbidden_contexts: [把该指标当作历史快照客户数, 未显式筛选时默认排除注销客户]
+    example_questions: [统计VIP客户数。]
+
+  - metric_name: successful_transaction_count
+    business_name: 成功交易笔数
+    description: 含anchor日的指定自然日窗口内成功交易笔数；只计status=success，不限制交易类型。
+    unit: count
+    deduplicate: false
+    output_column: transaction_count
+    source_table: fact_transaction
+    grain: transaction
+    operation: count
+    measure_column: transaction_id
+    time_semantics: rolling_required
+    time_column: transaction_date
+    fixed_filters: {status: success}
+    allowed_filter_columns: [customer_id, product_id, transaction_type, channel, transaction_date]
+    sensitivity: financial
+    forbidden_contexts: [缺少时间窗口, 将近90天替换为三个月]
+    example_questions: [统计截至2025年6月30日近90天成功交易笔数。]
+
+  - metric_name: successful_transaction_amount
+    business_name: 成功交易金额
+    description: 指定自然日窗口内成功交易amount总和；不扣手续费，不按买卖方向相抵；当前数据契约仅支持CNY。
+    unit: CNY
+    deduplicate: false
+    output_column: transaction_amount
+    source_table: fact_transaction
+    grain: transaction
+    operation: sum
+    measure_column: amount
+    time_semantics: rolling_required
+    time_column: transaction_date
+    fixed_filters: {status: success}
+    allowed_filter_columns: [customer_id, product_id, transaction_type, channel, transaction_date]
+    sensitivity: financial
+    forbidden_contexts: [跨币种直接汇总, 将交易金额解释为净流入或收益, 缺少时间窗口]
+    example_questions: [统计截至2025年6月30日近90天成功交易金额。]
+
+  - metric_name: active_customer_count
+    business_name: 活跃客户数
+    description: 当前数据快照内status=active的去重客户数；不包含dormant与closed。
+    unit: count
+    deduplicate: true
+    output_column: active_customer_count
+    source_table: dim_customer
+    grain: customer
+    operation: count_distinct
+    measure_column: customer_id
+    time_semantics: none
+    fixed_filters: {status: active}
+    allowed_filter_columns: [customer_level, gender, risk_level, region]
+    allowed_group_dimensions: [region]
+    sensitivity: internal
+    forbidden_contexts: [把dormant或closed计入活跃客户, 把该指标当作历史快照客户数]
+    example_questions: [统计活跃客户数。]
+
+  - metric_name: failed_transaction_count
+    business_name: 失败交易笔数
+    description: 含anchor日的指定自然日窗口内失败交易笔数；只计status=failed，不是成功交易指标。
+    unit: count
+    deduplicate: false
+    output_column: failed_transaction_count
+    source_table: fact_transaction
+    grain: transaction
+    operation: count
+    measure_column: transaction_id
+    time_semantics: rolling_required
+    time_column: transaction_date
+    fixed_filters: {status: failed}
+    allowed_filter_columns: [customer_id, product_id, transaction_type, channel, transaction_date]
+    sensitivity: financial
+    forbidden_contexts: [把失败交易计入成功交易, 缺少时间窗口, 将近90天替换为三个月]
+    example_questions: [统计截至2025年6月30日近90天失败交易笔数。]
+
+  - metric_name: successful_net_cash_flow
+    business_name: 成功资金净流入
+    description: 指定自然日窗口内status=success的signed_amount总和；in为正、out为负，不取绝对值。
+    unit: CNY
+    deduplicate: false
+    output_column: net_cash_flow
+    source_table: fact_cash_flow
+    grain: cash_flow
+    operation: sum
+    measure_column: signed_amount
+    time_semantics: rolling_required
+    time_column: flow_date
+    fixed_filters: {status: success}
+    allowed_filter_columns: [customer_id, flow_type, channel, flow_date]
+    sensitivity: financial
+    forbidden_contexts: [对流出取绝对值后再加总, 将净流入解释为交易金额或收益, 缺少时间窗口]
+    example_questions: [统计截至2025年6月30日近90天成功资金净流入。]
+
+  - metric_name: successful_cash_inflow
+    business_name: 成功资金流入
+    description: 指定自然日窗口内status=success且flow_type=in的signed_amount总和；流入为正，不含流出。
+    unit: CNY
+    deduplicate: false
+    output_column: cash_inflow
+    source_table: fact_cash_flow
+    grain: cash_flow
+    operation: sum
+    measure_column: signed_amount
+    time_semantics: rolling_required
+    time_column: flow_date
+    fixed_filters: {status: success, flow_type: in}
+    allowed_filter_columns: [customer_id, channel, flow_date]
+    sensitivity: financial
+    forbidden_contexts: [把流出计入流入, 缺少时间窗口, 将流入解释为交易金额]
+    example_questions: [统计截至2025年6月30日近90天成功资金流入。]
+
+  - metric_name: current_primary_service_relation_count
+    business_name: 当前主服务关系数
+    description: 当前仍有效的主服务关系条数；is_primary为真且end_date为空，区间左闭右开。
+    unit: count
+    deduplicate: false
+    output_column: primary_service_relation_count
+    source_table: fact_service_relation
+    grain: service_relation
+    operation: count
+    measure_column: customer_id
+    time_semantics: none
+    fixed_filters: {is_primary: true}
+    fixed_null_columns: [end_date]
+    allowed_filter_columns: [customer_id, manager_id, relation_type, start_date]
+    sensitivity: internal
+    forbidden_contexts: [计入已结束的主服务关系, 计入非主服务关系, 用去重客户数替代关系条数]
+    example_questions: [统计当前主服务关系数。]
+
+  - metric_name: snapshot_total_asset
+    business_name: 指定估值日总资产合计
+    description: 指定snapshot_date当天全部客户total_asset之和；必须给出估值日，不能跨多个估值日相加，也不是逐客户取最近一次估值。
+    unit: CNY
+    deduplicate: false
+    output_column: total_asset
+    source_table: fact_asset_snapshot
+    grain: customer_snapshot
+    operation: sum
+    measure_column: total_asset
+    time_semantics: point_in_time_required
+    time_column: snapshot_date
+    allowed_filter_columns: [customer_id, snapshot_date]
+    sensitivity: financial
+    forbidden_contexts: [缺少snapshot_date, 跨多个估值日直接相加, 当作每个客户最新快照, 把总资产解释为净资产]
+    example_questions: [统计2025年6月30日估值日总资产合计。]
+
+  - metric_name: snapshot_net_asset
+    business_name: 指定估值日净资产合计
+    description: 指定snapshot_date当天全部客户net_asset之和；必须给出估值日，不能跨多个估值日相加，也不是逐客户取最近一次估值。
+    unit: CNY
+    deduplicate: false
+    output_column: net_asset
+    source_table: fact_asset_snapshot
+    grain: customer_snapshot
+    operation: sum
+    measure_column: net_asset
+    time_semantics: point_in_time_required
+    time_column: snapshot_date
+    allowed_filter_columns: [customer_id, snapshot_date]
+    sensitivity: financial
+    forbidden_contexts: [缺少snapshot_date, 跨多个估值日直接相加, 当作每个客户最新快照, 把净资产解释为总资产]
+    example_questions: [统计2025年6月30日估值日净资产合计。]
+
+  - metric_name: latest_total_asset
+    business_name: 最新总资产合计
+    description: 截止指定anchor_date，每个客户取其snapshot_date不超过锚点的最近一次快照，再对total_asset求和；缺失快照的客户不计入，不当作0。不是指定估值日合计，也不是逐客户明细。
+    unit: CNY
+    deduplicate: false
+    output_column: latest_total_asset
+    source_table: fact_asset_snapshot
+    grain: customer
+    operation: sum
+    measure_column: total_asset
+    time_semantics: latest_snapshot_required
+    time_column: snapshot_date
+    allowed_filter_columns: [customer_id]
+    sensitivity: financial
+    forbidden_contexts: [当作指定估值日合计, 跨客户取全局最大估值日再求和, 把缺失快照当成0, 输出逐客户明细]
+    example_questions: [统计每个客户最新快照的总资产合计。]
+
+  - metric_name: closed_customer_count
+    business_name: 已注销客户人数
+    description: 当前数据快照内status=closed的去重客户人数；不是活跃或休眠客户。
+    unit: count
+    deduplicate: true
+    output_column: closed_customer_count
+    source_table: dim_customer
+    grain: customer
+    operation: count_distinct
+    measure_column: customer_id
+    time_semantics: none
+    fixed_filters: {status: closed}
+    allowed_filter_columns: [customer_level, gender, risk_level, region, occupation]
+    sensitivity: internal
+    forbidden_contexts: [把已注销客户计入活跃客户, 把该指标当作历史快照客户数]
+    example_questions: [统计已注销客户人数。]
+
+  - metric_name: dormant_customer_count
+    business_name: 休眠客户人数
+    description: 当前数据快照内status=dormant的去重客户人数；不含active与closed。
+    unit: count
+    deduplicate: true
+    output_column: dormant_customer_count
+    source_table: dim_customer
+    grain: customer
+    operation: count_distinct
+    measure_column: customer_id
+    time_semantics: none
+    fixed_filters: {status: dormant}
+    allowed_filter_columns: [customer_level, gender, risk_level, region, occupation]
+    sensitivity: internal
+    forbidden_contexts: [把休眠客户计入活跃客户, 把该指标当作历史快照客户数]
+    example_questions: [统计休眠客户人数。]
+
+  - metric_name: high_risk_customer_count
+    business_name: 高风险客户人数
+    description: 当前数据快照内risk_level=high的去重客户人数；不是交易失败人数。
+    unit: count
+    deduplicate: true
+    output_column: high_risk_customer_count
+    source_table: dim_customer
+    grain: customer
+    operation: count_distinct
+    measure_column: customer_id
+    time_semantics: none
+    fixed_filters: {risk_level: high}
+    allowed_filter_columns: [customer_level, gender, region, status, occupation]
+    sensitivity: internal
+    forbidden_contexts: [把高风险客户解释为失败交易, 缺少显式risk_level却默认高风险]
+    example_questions: [统计高风险客户人数。]
+
+  - metric_name: cancelled_transaction_count
+    business_name: 撤销交易笔数
+    description: 含anchor日的指定自然日窗口内撤销交易笔数；只计status=cancelled，不是失败或成功交易。
+    unit: count
+    deduplicate: false
+    output_column: cancelled_transaction_count
+    source_table: fact_transaction
+    grain: transaction
+    operation: count
+    measure_column: transaction_id
+    time_semantics: rolling_required
+    time_column: transaction_date
+    fixed_filters: {status: cancelled}
+    allowed_filter_columns: [customer_id, product_id, transaction_type, channel, transaction_date]
+    sensitivity: financial
+    forbidden_contexts: [把撤销交易计入成功或失败交易, 缺少时间窗口, 将近90天替换为三个月]
+    example_questions: [统计截至2025年6月30日近90天撤销交易笔数。]
+
+  - metric_name: cancelled_transaction_amount
+    business_name: 撤销交易金额
+    description: 指定自然日窗口内撤销交易amount总和；不扣手续费，不是成功交易金额。
+    unit: CNY
+    deduplicate: false
+    output_column: cancelled_transaction_amount
+    source_table: fact_transaction
+    grain: transaction
+    operation: sum
+    measure_column: amount
+    time_semantics: rolling_required
+    time_column: transaction_date
+    fixed_filters: {status: cancelled}
+    allowed_filter_columns: [customer_id, product_id, transaction_type, channel, transaction_date]
+    sensitivity: financial
+    forbidden_contexts: [把撤销金额计入成功交易金额, 缺少时间窗口]
+    example_questions: [统计截至2025年6月30日近90天撤销交易金额。]
+
+  - metric_name: failed_transaction_amount
+    business_name: 失败交易金额
+    description: 指定自然日窗口内失败交易amount总和；只计status=failed，不是失败笔数。
+    unit: CNY
+    deduplicate: false
+    output_column: failed_transaction_amount
+    source_table: fact_transaction
+    grain: transaction
+    operation: sum
+    measure_column: amount
+    time_semantics: rolling_required
+    time_column: transaction_date
+    fixed_filters: {status: failed}
+    allowed_filter_columns: [customer_id, product_id, transaction_type, channel, transaction_date]
+    sensitivity: financial
+    forbidden_contexts: [把失败金额当成失败笔数, 把失败金额计入成功交易, 缺少时间窗口]
+    example_questions: [统计截至2025年6月30日近90天失败交易金额。]
+
+  - metric_name: successful_buy_transaction_count
+    business_name: 成功买入交易笔数
+    description: 指定自然日窗口内status=success且transaction_type=buy的笔数；不含卖出、申购、赎回。
+    unit: count
+    deduplicate: false
+    output_column: successful_buy_transaction_count
+    source_table: fact_transaction
+    grain: transaction
+    operation: count
+    measure_column: transaction_id
+    time_semantics: rolling_required
+    time_column: transaction_date
+    fixed_filters: {status: success, transaction_type: buy}
+    allowed_filter_columns: [customer_id, product_id, channel, transaction_date]
+    sensitivity: financial
+    forbidden_contexts: [把卖出计入买入, 缺少时间窗口, 用交易金额替代笔数]
+    example_questions: [统计截至2025年6月30日近90天成功买入交易笔数。]
+
+  - metric_name: successful_app_transaction_count
+    business_name: 成功App交易笔数
+    description: 指定自然日窗口内status=success且channel=app的笔数；不含branch渠道。
+    unit: count
+    deduplicate: false
+    output_column: successful_app_transaction_count
+    source_table: fact_transaction
+    grain: transaction
+    operation: count
+    measure_column: transaction_id
+    time_semantics: rolling_required
+    time_column: transaction_date
+    fixed_filters: {status: success, channel: app}
+    allowed_filter_columns: [customer_id, product_id, transaction_type, transaction_date]
+    sensitivity: financial
+    forbidden_contexts: [把branch渠道计入App, 缺少时间窗口]
+    example_questions: [统计截至2025年6月30日近90天成功App交易笔数。]
+
+  - metric_name: successful_cash_outflow
+    business_name: 成功资金流出
+    description: 指定自然日窗口内status=success且flow_type=out的signed_amount总和；流出为负，不取绝对值。
+    unit: CNY
+    deduplicate: false
+    output_column: cash_outflow
+    source_table: fact_cash_flow
+    grain: cash_flow
+    operation: sum
+    measure_column: signed_amount
+    time_semantics: rolling_required
+    time_column: flow_date
+    fixed_filters: {status: success, flow_type: out}
+    allowed_filter_columns: [customer_id, channel, flow_date]
+    sensitivity: financial
+    forbidden_contexts: [对流出取绝对值后再加总, 把流出计入流入, 缺少时间窗口]
+    example_questions: [统计截至2025年6月30日近90天成功资金流出。]
+
+  - metric_name: successful_cash_flow_count
+    business_name: 成功资金流笔数
+    description: 指定自然日窗口内status=success的资金流笔数；不是金额或净流入。
+    unit: count
+    deduplicate: false
+    output_column: cash_flow_count
+    source_table: fact_cash_flow
+    grain: cash_flow
+    operation: count
+    measure_column: flow_id
+    time_semantics: rolling_required
+    time_column: flow_date
+    fixed_filters: {status: success}
+    allowed_filter_columns: [customer_id, flow_type, channel, flow_date]
+    sensitivity: financial
+    forbidden_contexts: [把笔数解释为净流入, 缺少时间窗口]
+    example_questions: [统计截至2025年6月30日近90天成功资金流笔数。]
+
+  - metric_name: snapshot_holding_market_value
+    business_name: 指定估值日持仓市值合计
+    description: 指定snapshot_date当天全部持仓market_value之和；必须给出估值日，不能跨日相加。
+    unit: CNY
+    deduplicate: false
+    output_column: holding_market_value
+    source_table: fact_holding
+    grain: holding
+    operation: sum
+    measure_column: market_value
+    time_semantics: point_in_time_required
+    time_column: snapshot_date
+    allowed_filter_columns: [customer_id, product_id, snapshot_date, holding_status]
+    sensitivity: financial
+    forbidden_contexts: [缺少snapshot_date, 跨多个估值日直接相加, 把市值解释为成本]
+    example_questions: [统计2025年6月30日估值日持仓市值合计。]
+
+  - metric_name: snapshot_holding_cost_value
+    business_name: 指定估值日持仓成本合计
+    description: 指定snapshot_date当天全部持仓cost_value之和；必须给出估值日。
+    unit: CNY
+    deduplicate: false
+    output_column: holding_cost_value
+    source_table: fact_holding
+    grain: holding
+    operation: sum
+    measure_column: cost_value
+    time_semantics: point_in_time_required
+    time_column: snapshot_date
+    allowed_filter_columns: [customer_id, product_id, snapshot_date, holding_status]
+    sensitivity: financial
+    forbidden_contexts: [缺少snapshot_date, 把成本解释为市值]
+    example_questions: [统计2025年6月30日估值日持仓成本合计。]
+
+  - metric_name: snapshot_holding_unrealized_profit
+    business_name: 指定估值日持仓未实现盈亏合计
+    description: 指定snapshot_date当天全部持仓unrealized_profit之和；必须给出估值日。
+    unit: CNY
+    deduplicate: false
+    output_column: holding_unrealized_profit
+    source_table: fact_holding
+    grain: holding
+    operation: sum
+    measure_column: unrealized_profit
+    time_semantics: point_in_time_required
+    time_column: snapshot_date
+    allowed_filter_columns: [customer_id, product_id, snapshot_date, holding_status]
+    sensitivity: financial
+    forbidden_contexts: [缺少snapshot_date, 把未实现盈亏解释为净流入]
+    example_questions: [统计2025年6月30日估值日持仓未实现盈亏合计。]
+
+  - metric_name: snapshot_holding_count
+    business_name: 指定估值日持仓条数
+    description: 指定snapshot_date当天持仓记录条数；不是去重客户数或去重产品数。
+    unit: count
+    deduplicate: false
+    output_column: holding_count
+    source_table: fact_holding
+    grain: holding
+    operation: count
+    measure_column: product_id
+    time_semantics: point_in_time_required
+    time_column: snapshot_date
+    allowed_filter_columns: [customer_id, product_id, snapshot_date, holding_status]
+    sensitivity: financial
+    forbidden_contexts: [用去重客户数替代持仓条数, 缺少snapshot_date]
+    example_questions: [统计2025年6月30日估值日持仓条数。]
+
+  - metric_name: snapshot_active_holding_count
+    business_name: 指定估值日有效持仓条数
+    description: 指定snapshot_date当天holding_status=active的持仓条数。
+    unit: count
+    deduplicate: false
+    output_column: active_holding_count
+    source_table: fact_holding
+    grain: holding
+    operation: count
+    measure_column: product_id
+    time_semantics: point_in_time_required
+    time_column: snapshot_date
+    fixed_filters: {holding_status: active}
+    allowed_filter_columns: [customer_id, product_id, snapshot_date]
+    sensitivity: financial
+    forbidden_contexts: [计入非active持仓, 缺少snapshot_date]
+    example_questions: [统计2025年6月30日估值日有效持仓条数。]
+
+  - metric_name: snapshot_cash_asset
+    business_name: 指定估值日现金资产合计
+    description: 指定snapshot_date当天全部客户cash_asset之和；必须给出估值日，不是总资产。
+    unit: CNY
+    deduplicate: false
+    output_column: cash_asset
+    source_table: fact_asset_snapshot
+    grain: customer_snapshot
+    operation: sum
+    measure_column: cash_asset
+    time_semantics: point_in_time_required
+    time_column: snapshot_date
+    allowed_filter_columns: [customer_id, snapshot_date]
+    sensitivity: financial
+    forbidden_contexts: [缺少snapshot_date, 把现金资产解释为总资产或净资产]
+    example_questions: [统计2025年6月30日估值日现金资产合计。]
+
+  - metric_name: snapshot_investment_asset
+    business_name: 指定估值日投资资产合计
+    description: 指定snapshot_date当天全部客户investment_asset之和；必须给出估值日。
+    unit: CNY
+    deduplicate: false
+    output_column: investment_asset
+    source_table: fact_asset_snapshot
+    grain: customer_snapshot
+    operation: sum
+    measure_column: investment_asset
+    time_semantics: point_in_time_required
+    time_column: snapshot_date
+    allowed_filter_columns: [customer_id, snapshot_date]
+    sensitivity: financial
+    forbidden_contexts: [缺少snapshot_date, 把投资资产解释为总资产]
+    example_questions: [统计2025年6月30日估值日投资资产合计。]
+
+  - metric_name: snapshot_liability
+    business_name: 指定估值日负债合计
+    description: 指定snapshot_date当天全部客户liability之和；必须给出估值日。
+    unit: CNY
+    deduplicate: false
+    output_column: liability
+    source_table: fact_asset_snapshot
+    grain: customer_snapshot
+    operation: sum
+    measure_column: liability
+    time_semantics: point_in_time_required
+    time_column: snapshot_date
+    allowed_filter_columns: [customer_id, snapshot_date]
+    sensitivity: financial
+    forbidden_contexts: [缺少snapshot_date, 把负债与净资产正负抵消后当作指标]
+    example_questions: [统计2025年6月30日估值日负债合计。]
+
+  - metric_name: current_service_relation_count
+    business_name: 当前服务关系数
+    description: 当前仍有效的服务关系条数；end_date为空，不限制是否主服务经理。
+    unit: count
+    deduplicate: false
+    output_column: service_relation_count
+    source_table: fact_service_relation
+    grain: service_relation
+    operation: count
+    measure_column: customer_id
+    time_semantics: none
+    fixed_null_columns: [end_date]
+    allowed_filter_columns: [customer_id, manager_id, relation_type, start_date, is_primary]
+    sensitivity: internal
+    forbidden_contexts: [计入已结束的服务关系, 用去重客户数替代关系条数, 把该指标当成当前主服务关系数]
+    example_questions: [统计当前服务关系数。]

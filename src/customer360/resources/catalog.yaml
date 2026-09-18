@@ -1,0 +1,152 @@
+catalog_version: "0.1"
+tables:
+  - table_name: dim_customer
+    business_name: 客户信息表
+    grain: 一个客户一条记录
+    scope: customer
+    time_column: null
+    columns:
+      - {column_name: customer_id, business_name: 客户ID, kind: string, nullable: false, primary_key: true, sensitivity: internal}
+      - {column_name: customer_name, business_name: 客户名称, kind: string, nullable: false, primary_key: false, sensitivity: restricted}
+      - {column_name: gender, business_name: 性别, kind: string, nullable: false, primary_key: false, sensitivity: internal}
+      - {column_name: birth_date, business_name: 出生日期, kind: date, nullable: false, primary_key: false, sensitivity: restricted}
+      - {column_name: customer_level, business_name: 客户等级, kind: string, nullable: false, primary_key: false, sensitivity: internal}
+      - {column_name: risk_level, business_name: 风险等级, kind: string, nullable: false, primary_key: false, sensitivity: internal}
+      - {column_name: region, business_name: 地区, kind: string, nullable: false, primary_key: false, sensitivity: internal}
+      - {column_name: city, business_name: 城市, kind: string, nullable: false, primary_key: false, sensitivity: internal}
+      - {column_name: occupation, business_name: 职业, kind: string, nullable: true, primary_key: false, sensitivity: internal}
+      - {column_name: registration_date, business_name: 注册日期, kind: date, nullable: false, primary_key: false, sensitivity: internal}
+      - {column_name: status, business_name: 客户状态, kind: string, nullable: false, primary_key: false, sensitivity: internal}
+
+  - table_name: dim_service_manager
+    business_name: 服务经理表
+    grain: 一个服务经理一条记录
+    scope: global
+    time_column: null
+    columns:
+      - {column_name: manager_id, business_name: 经理ID, kind: string, nullable: false, primary_key: true, sensitivity: internal}
+      - {column_name: manager_name, business_name: 经理名称, kind: string, nullable: false, primary_key: false, sensitivity: restricted}
+      - {column_name: branch_id, business_name: 分行ID, kind: string, nullable: false, primary_key: false, sensitivity: internal}
+      - {column_name: branch_name, business_name: 分行名称, kind: string, nullable: false, primary_key: false, sensitivity: internal}
+      - {column_name: region, business_name: 地区, kind: string, nullable: false, primary_key: false, sensitivity: internal}
+      - {column_name: entry_date, business_name: 入职日期, kind: date, nullable: false, primary_key: false, sensitivity: internal}
+      - {column_name: status, business_name: 经理状态, kind: string, nullable: false, primary_key: false, sensitivity: internal}
+
+  - table_name: dim_product
+    business_name: 产品信息表
+    grain: 一个产品一条记录
+    scope: global
+    time_column: null
+    columns:
+      - {column_name: product_id, business_name: 产品ID, kind: string, nullable: false, primary_key: true, sensitivity: internal}
+      - {column_name: product_name, business_name: 产品名称, kind: string, nullable: false, primary_key: false, sensitivity: internal}
+      - {column_name: product_type, business_name: 产品类型, kind: string, nullable: false, primary_key: false, sensitivity: internal}
+      - {column_name: risk_level, business_name: 产品风险等级, kind: string, nullable: false, primary_key: false, sensitivity: internal}
+      - {column_name: issuer, business_name: 发行方, kind: string, nullable: false, primary_key: false, sensitivity: internal}
+      - {column_name: currency, business_name: 币种, kind: string, nullable: false, primary_key: false, sensitivity: internal}
+      - {column_name: listing_date, business_name: 上市日期, kind: date, nullable: false, primary_key: false, sensitivity: internal}
+      - {column_name: status, business_name: 产品状态, kind: string, nullable: false, primary_key: false, sensitivity: internal}
+
+  - table_name: fact_service_relation
+    unique_keys: [[customer_id, manager_id, start_date, relation_type]]
+    foreign_keys:
+      - {column: customer_id, target_table: dim_customer, target_column: customer_id}
+      - {column: manager_id, target_table: dim_service_manager, target_column: manager_id}
+    business_name: 服务关系表
+    grain: 一个客户和一个经理的一段服务关系
+    scope: customer
+    time_column: start_date
+    columns:
+      - {column_name: customer_id, business_name: 客户ID, kind: string, nullable: false, primary_key: false, sensitivity: internal}
+      - {column_name: manager_id, business_name: 经理ID, kind: string, nullable: false, primary_key: false, sensitivity: internal}
+      - {column_name: start_date, business_name: 开始日期, kind: date, nullable: false, primary_key: false, sensitivity: internal}
+      - {column_name: end_date, business_name: 结束日期, kind: date, nullable: true, primary_key: false, sensitivity: internal}
+      - {column_name: relation_type, business_name: 关系类型, kind: string, nullable: false, primary_key: false, sensitivity: internal}
+      - {column_name: is_primary, business_name: 是否主服务经理, kind: boolean, nullable: false, primary_key: false, sensitivity: internal}
+
+  - table_name: dim_date
+    business_name: 公共日期表
+    grain: 一个日期一条记录
+    scope: global
+    time_column: calendar_date
+    columns:
+      - {column_name: date_id, business_name: 日期ID, kind: string, nullable: false, primary_key: true, sensitivity: internal}
+      - {column_name: calendar_date, business_name: 日历日期, kind: date, nullable: false, primary_key: false, sensitivity: internal}
+      - {column_name: year, business_name: 年, kind: integer, nullable: false, primary_key: false, sensitivity: internal}
+      - {column_name: quarter, business_name: 季度, kind: integer, nullable: false, primary_key: false, sensitivity: internal}
+      - {column_name: month, business_name: 月, kind: integer, nullable: false, primary_key: false, sensitivity: internal}
+      - {column_name: week, business_name: 周, kind: integer, nullable: false, primary_key: false, sensitivity: internal}
+      - {column_name: is_month_end, business_name: 是否月末, kind: boolean, nullable: false, primary_key: false, sensitivity: internal}
+      - {column_name: is_quarter_end, business_name: 是否季末, kind: boolean, nullable: false, primary_key: false, sensitivity: internal}
+
+  - table_name: fact_holding
+    unique_keys: [[snapshot_date, customer_id, product_id]]
+    foreign_keys:
+      - {column: customer_id, target_table: dim_customer, target_column: customer_id}
+      - {column: product_id, target_table: dim_product, target_column: product_id}
+    business_name: 客户持仓表
+    grain: 一个客户、产品、快照日一条记录
+    scope: customer
+    time_column: snapshot_date
+    columns:
+      - {column_name: snapshot_date, business_name: 快照日期, kind: date, nullable: false, primary_key: false, sensitivity: internal}
+      - {column_name: customer_id, business_name: 客户ID, kind: string, nullable: false, primary_key: false, sensitivity: internal}
+      - {column_name: product_id, business_name: 产品ID, kind: string, nullable: false, primary_key: false, sensitivity: internal}
+      - {column_name: quantity, business_name: 持仓数量, kind: decimal, nullable: false, primary_key: false, sensitivity: financial}
+      - {column_name: market_value, business_name: 市值, kind: decimal, nullable: false, primary_key: false, sensitivity: financial}
+      - {column_name: cost_value, business_name: 成本市值, kind: decimal, nullable: false, primary_key: false, sensitivity: financial}
+      - {column_name: unrealized_profit, business_name: 未实现盈亏, kind: decimal, nullable: false, primary_key: false, sensitivity: financial}
+      - {column_name: holding_status, business_name: 持仓状态, kind: string, nullable: false, primary_key: false, sensitivity: internal}
+
+  - table_name: fact_asset_snapshot
+    unique_keys: [[snapshot_date, customer_id]]
+    foreign_keys:
+      - {column: customer_id, target_table: dim_customer, target_column: customer_id}
+    business_name: 客户资产表
+    grain: 一个客户、一个估值日一条记录
+    scope: customer
+    time_column: snapshot_date
+    columns:
+      - {column_name: snapshot_date, business_name: 快照日期, kind: date, nullable: false, primary_key: false, sensitivity: internal}
+      - {column_name: customer_id, business_name: 客户ID, kind: string, nullable: false, primary_key: false, sensitivity: internal}
+      - {column_name: total_asset, business_name: 总资产, kind: decimal, nullable: false, primary_key: false, sensitivity: financial}
+      - {column_name: cash_asset, business_name: 现金资产, kind: decimal, nullable: false, primary_key: false, sensitivity: financial}
+      - {column_name: investment_asset, business_name: 投资资产, kind: decimal, nullable: false, primary_key: false, sensitivity: financial}
+      - {column_name: liability, business_name: 负债, kind: decimal, nullable: false, primary_key: false, sensitivity: financial}
+      - {column_name: net_asset, business_name: 净资产, kind: decimal, nullable: false, primary_key: false, sensitivity: financial}
+
+  - table_name: fact_transaction
+    foreign_keys:
+      - {column: customer_id, target_table: dim_customer, target_column: customer_id}
+      - {column: product_id, target_table: dim_product, target_column: product_id}
+    business_name: 客户交易表
+    grain: 一笔交易一条记录
+    scope: customer
+    time_column: transaction_date
+    columns:
+      - {column_name: transaction_id, business_name: 交易ID, kind: string, nullable: false, primary_key: true, sensitivity: internal}
+      - {column_name: transaction_date, business_name: 交易日期, kind: date, nullable: false, primary_key: false, sensitivity: internal}
+      - {column_name: customer_id, business_name: 客户ID, kind: string, nullable: false, primary_key: false, sensitivity: internal}
+      - {column_name: product_id, business_name: 产品ID, kind: string, nullable: false, primary_key: false, sensitivity: internal}
+      - {column_name: transaction_type, business_name: 交易类型, kind: string, nullable: false, primary_key: false, sensitivity: internal}
+      - {column_name: amount, business_name: 交易金额, kind: decimal, nullable: false, primary_key: false, sensitivity: financial}
+      - {column_name: quantity, business_name: 交易数量, kind: decimal, nullable: false, primary_key: false, sensitivity: financial}
+      - {column_name: fee, business_name: 费用, kind: decimal, nullable: false, primary_key: false, sensitivity: financial}
+      - {column_name: status, business_name: 交易状态, kind: string, nullable: false, primary_key: false, sensitivity: internal}
+      - {column_name: channel, business_name: 交易渠道, kind: string, nullable: false, primary_key: false, sensitivity: internal}
+
+  - table_name: fact_cash_flow
+    foreign_keys:
+      - {column: customer_id, target_table: dim_customer, target_column: customer_id}
+    business_name: 客户资产流入流出表
+    grain: 一笔资金流一条记录
+    scope: customer
+    time_column: flow_date
+    columns:
+      - {column_name: flow_id, business_name: 资金流ID, kind: string, nullable: false, primary_key: true, sensitivity: internal}
+      - {column_name: flow_date, business_name: 资金流日期, kind: date, nullable: false, primary_key: false, sensitivity: internal}
+      - {column_name: customer_id, business_name: 客户ID, kind: string, nullable: false, primary_key: false, sensitivity: internal}
+      - {column_name: flow_type, business_name: 资金流类型, kind: string, nullable: false, primary_key: false, sensitivity: internal}
+      - {column_name: signed_amount, business_name: 有符号金额, kind: decimal, nullable: false, primary_key: false, sensitivity: financial}
+      - {column_name: channel, business_name: 资金渠道, kind: string, nullable: false, primary_key: false, sensitivity: internal}
+      - {column_name: status, business_name: 资金流状态, kind: string, nullable: false, primary_key: false, sensitivity: internal}

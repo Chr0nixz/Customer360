@@ -1,0 +1,235 @@
+catalog_version: "0.3"
+artifact_kind: trusted_human_oracles
+cases:
+  - case_id: C360_0001
+    task_version: human-0.1
+    split: dev
+    expected_action: answer
+    category: customer_filter
+    material_status: compilable_answer
+    intended_failure_class: FILTER_ERROR
+    metric: distinct_customer_count
+    filters:
+      - {field: customer_level, operator: eq, values: [VIP]}
+    required_probes: [vip_customers_present]
+
+  - case_id: C360_0002
+    task_version: human-0.1
+    split: dev
+    expected_action: answer
+    category: single_table
+    material_status: compilable_answer
+    intended_failure_class: FILTER_ERROR
+    metric: active_customer_count
+    required_probes: [status_partition_complete]
+
+  - case_id: C360_0003
+    task_version: human-0.1
+    split: dev
+    expected_action: answer
+    category: time_window
+    material_status: compilable_answer
+    intended_failure_class: TIME_RANGE_ERROR
+    metric: successful_transaction_count
+    time_window: {type: rolling, days: 90, anchor_date: 2025-06-30}
+    required_probes: [window_start_success, window_anchor_success]
+
+  - case_id: C360_0004
+    task_version: human-0.1
+    split: dev
+    expected_action: answer
+    category: aggregation
+    material_status: compilable_answer
+    intended_failure_class: AGGREGATION_ERROR
+    metric: successful_transaction_amount
+    time_window: {type: rolling, days: 90, anchor_date: 2025-06-30}
+    required_probes: [duplicate_success_amount]
+
+  - case_id: C360_0005
+    task_version: human-0.1
+    split: dev
+    expected_action: answer
+    category: time_window
+    material_status: compilable_answer
+    intended_failure_class: FILTER_ERROR
+    metric: failed_transaction_count
+    time_window: {type: rolling, days: 90, anchor_date: 2025-06-30}
+    required_probes: [failed_and_cancelled_present]
+
+  - case_id: C360_0006
+    task_version: human-0.1
+    split: dev
+    expected_action: answer
+    category: aggregation
+    material_status: compilable_answer
+    intended_failure_class: AGGREGATION_ERROR
+    metric: successful_net_cash_flow
+    time_window: {type: rolling, days: 90, anchor_date: 2025-06-30}
+    required_probes: [in_and_out_flows_in_window]
+
+  - case_id: C360_0007
+    task_version: human-0.1
+    split: dev
+    expected_action: answer
+    category: aggregation
+    material_status: compilable_answer
+    intended_failure_class: FILTER_ERROR
+    metric: successful_cash_inflow
+    time_window: {type: rolling, days: 90, anchor_date: 2025-06-30}
+    required_probes: [in_and_out_flows_in_window]
+
+  - case_id: C360_0008
+    task_version: human-0.1
+    split: dev
+    expected_action: answer
+    category: null_handling
+    material_status: compilable_answer
+    intended_failure_class: NULL_HANDLING_ERROR
+    metric: current_primary_service_relation_count
+    required_probes: [ended_or_non_primary_relations]
+
+  - case_id: C360_0009
+    task_version: human-0.1
+    split: dev
+    expected_action: answer
+    category: point_in_time
+    material_status: compilable_answer
+    intended_failure_class: TIME_RANGE_ERROR
+    metric: snapshot_total_asset
+    time_window: {type: point_in_time, snapshot_date: 2025-06-30}
+    required_probes: [valuation_dates_include_bounds]
+
+  - case_id: C360_0010
+    task_version: human-0.1
+    split: dev
+    expected_action: answer
+    category: point_in_time
+    material_status: compilable_answer
+    intended_failure_class: METRIC_ERROR
+    metric: snapshot_net_asset
+    time_window: {type: point_in_time, snapshot_date: 2025-06-30}
+    required_probes: [valuation_dates_include_bounds]
+
+  - case_id: C360_0011
+    task_version: human-0.1
+    split: dev
+    expected_action: answer
+    category: time_window_boundary
+    material_status: compilable_answer
+    intended_failure_class: TIME_RANGE_ERROR
+    metric: successful_transaction_count
+    filters:
+      - {field: transaction_date, operator: eq, values: ["2025-04-02"]}
+    time_window: {type: rolling, days: 90, anchor_date: 2025-06-30}
+    required_probes: [window_start_success]
+
+  - case_id: C360_0012
+    task_version: human-0.1
+    split: dev
+    expected_action: answer
+    category: time_window_boundary
+    material_status: compilable_answer
+    intended_failure_class: TIME_RANGE_ERROR
+    metric: successful_transaction_count
+    filters:
+      - {field: transaction_date, operator: eq, values: ["2025-04-01"]}
+    time_window: {type: rolling, days: 90, anchor_date: 2025-06-30}
+    required_probes: [window_day_before_success]
+
+  - case_id: C360_0013
+    task_version: human-0.1
+    split: dev
+    expected_action: answer
+    category: null_handling
+    material_status: compilable_answer
+    intended_failure_class: NULL_HANDLING_ERROR
+    metric: distinct_customer_count
+    filters:
+      - {field: occupation, operator: is_null}
+    required_probes: [null_occupation_exact]
+
+  - case_id: C360_0014
+    task_version: human-0.1
+    split: dev
+    expected_action: answer
+    category: customer_filter
+    material_status: compilable_answer
+    intended_failure_class: FILTER_ERROR
+    metric: distinct_customer_count
+    filters:
+      - {field: customer_level, operator: eq, values: [VIP]}
+      - {field: region, operator: eq, values: [华东]}
+    required_probes: [vip_customers_present]
+
+  - case_id: C360_0015
+    task_version: human-0.1
+    split: dev
+    expected_action: answer
+    category: point_in_time
+    material_status: compilable_answer
+    intended_failure_class: TIME_RANGE_ERROR
+    metric: snapshot_net_asset
+    time_window: {type: point_in_time, snapshot_date: 2024-12-31}
+    required_probes: [valuation_dates_include_bounds]
+
+  - case_id: C360_0016
+    task_version: human-0.1
+    split: dev
+    expected_action: answer
+    category: join
+    material_status: compilable_answer
+    intended_failure_class: JOIN_ERROR
+    metric: distinct_customer_count
+    filters:
+      - {field: customer_level, operator: eq, values: [VIP]}
+    join:
+      path: customer_transactions
+      filters:
+        - {field: status, operator: eq, values: [success]}
+      time_window: {type: rolling, days: 90, anchor_date: 2025-06-30}
+    required_probes: [vip_customers_present, window_start_success]
+
+  - case_id: C360_0017
+    task_version: human-0.1
+    split: dev
+    expected_action: answer
+    category: latest_snapshot
+    material_status: compilable_answer
+    intended_failure_class: TIME_RANGE_ERROR
+    metric: latest_total_asset
+    time_window: {type: latest_snapshot, anchor_date: 2025-06-30}
+    required_probes: [valuation_dates_include_bounds]
+
+  - case_id: C360_0018
+    task_version: human-0.1
+    split: dev
+    expected_action: answer
+    category: grouping
+    material_status: compilable_answer
+    intended_failure_class: AGGREGATION_ERROR
+    metric: active_customer_count
+    group_by: [region]
+
+  - case_id: C360_0019
+    task_version: human-0.1
+    split: dev
+    expected_action: clarification_needed
+    category: clarification
+    material_status: unscored_oracle
+    intended_failure_class: CLARIFICATION_FAILURE
+    metric: successful_transaction_count
+    time_window: {type: rolling, days: 90, anchor_date: 2025-06-30}
+    missing_slots: [time_window]
+    slot_replies:
+      - slot: time_window
+        reply: 截至2025-06-30的近90个自然日
+
+  - case_id: C360_0020
+    task_version: human-0.1
+    split: dev
+    expected_action: refuse
+    category: refuse
+    material_status: unscored_oracle
+    intended_failure_class: PERMISSION_ERROR
+    accepted_reason_codes: [UNKNOWN_FIELD]
+    required_probes: [restricted_name_exists_phone_absent]
