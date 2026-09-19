@@ -88,7 +88,7 @@ git push -u origin main
 1. `public-tree`：拒绝已跟踪的 duckdb / hidden oracle / `outputs/` / `tmp-formal-*`
 2. Linux：`uv sync --locked`、ruff、pytest、`uv build`、源码目录外 doctor/smoke
 3. Windows：锁依赖、ruff、pytest、CLI smoke
-4. Docker：非 root、`--read-only --network=none` 跑 `c360 doctor`，并把 **image Id** 写成 `DockerRuntimeEvidence` 工件。镜像泄漏扫描只匹配 `hidden_profile.json` / `hidden_variant_manifest.json` / `hidden_oracles.yaml` / `generated_oracles.yaml` / `data/trusted/` / `*.duckdb`，不把 `hidden_variant.py` 等源码当成隐藏数据
+4. Docker：非 root、`--read-only --network=none` 跑 `c360 doctor`，并把 **image Id** 写成 `DockerRuntimeEvidence` 工件。镜像泄漏扫描只匹配 `hidden_profile.json` / `hidden_variant_manifest.json` / `hidden_oracles.yaml` / `generated_oracles.yaml` / `data/trusted/` / `*.duckdb`，不把 `hidden_variant.py` 等源码当成隐藏数据。校验证据 JSON 必须用 `/app/.venv/bin/python`，不能用镜像里未安装本包的系统 `python`
 
 作业默认 `PYTHONUTF8=1`。pytest 在缺少 gitignored `dist/` 时会现场 `uv build`，不要求把 wheel 提交进仓库。`c360` 入口会把 stdio 设为 UTF-8，避免 Windows cp1252 在 smoke JSON（含中文）上崩溃。
 

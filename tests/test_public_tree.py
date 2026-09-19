@@ -125,6 +125,16 @@ def test_ci_docker_scan_matches_exact_artifact_names() -> None:
     assert "hidden_profile|hidden_variant|hidden_oracles" not in text
 
 
+def test_ci_docker_evidence_uses_venv_python() -> None:
+    workflow = (REPO / ".github/workflows/ci.yml").read_text(encoding="utf-8")
+    dockerfile = (REPO / "Dockerfile").read_text(encoding="utf-8")
+    evidence_lines = [line for line in workflow.splitlines() if "DockerRuntimeEvidence" in line]
+    assert evidence_lines
+    assert "--entrypoint /app/.venv/bin/python" in evidence_lines[0]
+    assert "--entrypoint python " not in evidence_lines[0]
+    assert 'PATH="/app/.venv/bin:${PATH}"' in dockerfile or "PATH=/app/.venv/bin" in dockerfile
+
+
 def test_docker_runtime_evidence_shape_matches_ci_script() -> None:
     digest = "sha256:" + "ab" * 32
     payload = {

@@ -12,5 +12,6 @@ COPY configs /app/configs
 RUN pip install --no-cache-dir --disable-pip-version-check uv \
     && uv sync --frozen --no-dev
 
+ENV PATH="/app/.venv/bin:${PATH}"
 USER c360
 ENTRYPOINT ["/app/.venv/bin/c360"]
