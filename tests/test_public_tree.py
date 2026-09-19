@@ -18,6 +18,7 @@ FORBIDDEN_NAMES = {
     "generated_oracles.yaml",
     ".env",
 }
+IMAGE_LEAK_NAMES = FORBIDDEN_NAMES - {".env"}
 ALLOWED_TRUSTED = {
     Path("data/trusted/human_oracles.yaml"),
     Path("data/trusted/README.txt"),
@@ -90,6 +91,38 @@ def test_trusted_oracles_are_public_human_cases_only() -> None:
     assert "C360_0020" in text
     assert "C360_4001" not in text
     assert "C360_1001" not in text
+
+
+def _is_docker_image_leak(path: Path) -> bool:
+    posix = path.as_posix()
+    if path.name in IMAGE_LEAK_NAMES or path.suffix.lower() == ".duckdb":
+        return True
+    return "/data/trusted/" in f"/{posix}" or posix.endswith("data/trusted")
+
+
+def test_docker_image_scan_ignores_hidden_source_modules() -> None:
+    assert _is_docker_image_leak(Path("hidden_profile.json")) is True
+    assert _is_docker_image_leak(Path("pack/hidden_variant_manifest.json")) is True
+    assert _is_docker_image_leak(Path("pack/hidden_oracles.yaml")) is True
+    assert _is_docker_image_leak(Path("data/trusted/human_oracles.yaml")) is True
+    assert _is_docker_image_leak(Path("dataset.duckdb")) is True
+    assert _is_docker_image_leak(Path("src/customer360/contracts/hidden_variant.py")) is False
+    assert _is_docker_image_leak(Path("src/customer360/tasks/hidden_variants.py")) is False
+    leaked = [
+        str(path.relative_to(REPO)).replace("\\", "/")
+        for path in (REPO / "src").rglob("*")
+        if path.is_file() and _is_docker_image_leak(path)
+    ]
+    assert leaked == []
+
+
+def test_ci_docker_scan_matches_exact_artifact_names() -> None:
+    text = (REPO / ".github/workflows/ci.yml").read_text(encoding="utf-8")
+    assert "-name hidden_profile.json" in text
+    assert "-name hidden_variant_manifest.json" in text
+    assert "-name hidden_oracles.yaml" in text
+    assert "-name generated_oracles.yaml" in text
+    assert "hidden_profile|hidden_variant|hidden_oracles" not in text
 
 
 def test_docker_runtime_evidence_shape_matches_ci_script() -> None:

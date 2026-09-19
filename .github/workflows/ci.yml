@@ -109,8 +109,10 @@ jobs:
         run: |
           set -euo pipefail
           test "$(docker run --rm --network=none --read-only --entrypoint python customer360:ci -c 'import os; print(os.getuid())')" != "0"
-          if docker run --rm --network=none --read-only --entrypoint sh customer360:ci -c 'find /app -type f | grep -E "(hidden_profile|hidden_variant|hidden_oracles|data/trusted)"'; then
+          leaked=$(docker run --rm --network=none --read-only --entrypoint sh customer360:ci -c 'find /app -type f \( -name hidden_profile.json -o -name hidden_variant_manifest.json -o -name hidden_oracles.yaml -o -name generated_oracles.yaml -o -name "*.duckdb" -o -path "*/data/trusted/*" \)')
+          if [ -n "$leaked" ]; then
             echo "hidden or trusted files found in image"
+            echo "$leaked"
             exit 1
           fi
           docker run --rm --read-only --network=none --user 10001 customer360:ci doctor
