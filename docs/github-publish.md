@@ -90,6 +90,8 @@ git push -u origin main
 3. Windows：锁依赖、ruff、pytest、CLI smoke
 4. Docker：非 root、`--read-only --network=none` 跑 `c360 doctor`，并把 **image Id** 写成 `DockerRuntimeEvidence` 工件
 
+作业默认 `PYTHONUTF8=1`。pytest 在缺少 gitignored `dist/` 时会现场 `uv build`，不要求把 wheel 提交进仓库。`c360` 入口会把 stdio 设为 UTF-8，避免 Windows cp1252 在 smoke JSON（含中文）上崩溃。
+
 Docker 工件不是自动签署的 v1.0.0。维护者下载 `docker-runtime-evidence` 后，用 `prepare-formal-release --docker-smoke-report ...` 绑定。digest 必须是 `sha256:` + 64 位十六进制；不要填 `sha256:abc123`。本地 `docker inspect --format='{{.Id}}'` 即可；`RepoDigests` 只有 push 到 registry 之后才有。
 
 ## 6. 仍然不要在这一步做的事

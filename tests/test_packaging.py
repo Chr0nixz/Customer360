@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import os
+import shutil
 import subprocess
 import sys
 from pathlib import Path
@@ -73,17 +74,32 @@ def _sdist_relative(name: str) -> str:
     return "/".join(parts[1:]) if len(parts) > 1 else parts[0]
 
 
+def _run(args: list[str], *, cwd: Path, env: dict[str, str]) -> subprocess.CompletedProcess[str]:
+    return subprocess.run(
+        args,
+        cwd=cwd,
+        env=env,
+        check=False,
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+    )
+
+
 @pytest.fixture(scope="module")
 def distributions(tmp_path_factory) -> tuple[Path, Path]:
     dest = tmp_path_factory.mktemp("dist")
+    uv = shutil.which("uv")
+    assert uv, "uv executable is required to build wheel/sdist"
     completed = subprocess.run(
-        ["uv", "build", "--out-dir", str(dest)],
+        [uv, "build", "--out-dir", str(dest)],
         cwd=REPO,
         check=False,
         capture_output=True,
         text=True,
+        encoding="utf-8",
     )
-    assert completed.returncode == 0, completed.stderr
+    assert completed.returncode == 0, completed.stderr or completed.stdout
     wheels = tuple(dest.glob("*.whl"))
     sdists = tuple(path for path in dest.glob("*.tar.gz") if path.stat().st_size > 1)
     assert len(wheels) == 1, wheels
@@ -166,7 +182,9 @@ def test_wheel_doctor_and_smoke_without_source_tree(
     env = os.environ.copy()
     env["PYTHONPATH"] = str(site)
     env["PYTHONNOUSERSITE"] = "1"
-    located = subprocess.run(
+    # GitHub-hosted Windows runners use cp1252; smoke JSON includes Chinese text.
+    env["PYTHONIOENCODING"] = "cp1252"
+    located = _run(
         [
             sys.executable,
             "-c",
@@ -174,22 +192,16 @@ def test_wheel_doctor_and_smoke_without_source_tree(
         ],
         cwd=work,
         env=env,
-        check=False,
-        capture_output=True,
-        text=True,
     )
     assert located.returncode == 0, located.stderr
     loaded = Path(located.stdout.strip()).resolve()
     assert loaded == (site / "customer360" / "__init__.py").resolve()
     assert REPO.resolve() not in loaded.parents
 
-    doctor = subprocess.run(
+    doctor = _run(
         [sys.executable, "-m", "customer360", "doctor"],
         cwd=work,
         env=env,
-        check=False,
-        capture_output=True,
-        text=True,
     )
     assert doctor.returncode == 0, doctor.stderr
     payload = json.loads(doctor.stdout)
@@ -200,7 +212,7 @@ def test_wheel_doctor_and_smoke_without_source_tree(
     assert payload["foreign_keys"] == 8
     assert payload["glossary_entries"] == 111
 
-    cases = subprocess.run(
+    cases = _run(
         [
             sys.executable,
             "-c",
@@ -211,13 +223,10 @@ def test_wheel_doctor_and_smoke_without_source_tree(
         ],
         cwd=work,
         env=env,
-        check=False,
-        capture_output=True,
-        text=True,
     )
     assert cases.returncode == 0, cases.stderr
     assert cases.stdout.strip() == "20"
-    trusted = subprocess.run(
+    trusted = _run(
         [
             sys.executable,
             "-c",
@@ -225,21 +234,15 @@ def test_wheel_doctor_and_smoke_without_source_tree(
         ],
         cwd=work,
         env=env,
-        check=False,
-        capture_output=True,
-        text=True,
     )
     assert trusted.returncode != 0
     assert "trusted human oracles" in (trusted.stderr + trusted.stdout)
 
     smoke_dir = work / "smoke"
-    smoke = subprocess.run(
+    smoke = _run(
         [sys.executable, "-m", "customer360", "smoke", "--output", str(smoke_dir)],
         cwd=work,
         env=env,
-        check=False,
-        capture_output=True,
-        text=True,
     )
     assert smoke.returncode == 0, smoke.stderr
     report = json.loads(smoke.stdout)

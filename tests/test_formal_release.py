@@ -1,6 +1,8 @@
 """v1.0 formal score and RC evidence boundaries."""
 
 import json
+import shutil
+import subprocess
 from pathlib import Path
 
 import pytest
@@ -27,6 +29,34 @@ from customer360.release import (
 )
 
 REPO = Path(__file__).resolve().parents[1]
+
+
+def _formal_dist_present(root: Path) -> bool:
+    dist = root / "dist"
+    wheels = sorted(dist.glob("customer360_agent_benchmark-1.0.0-*.whl"))
+    sdists = sorted(dist.glob("customer360_agent_benchmark-1.0.0.tar.gz"))
+    return bool(wheels and sdists)
+
+
+@pytest.fixture(scope="module")
+def formal_distributions() -> None:
+    """CI checkouts do not commit dist/; build 1.0.0 artifacts when missing."""
+    if _formal_dist_present(REPO):
+        return
+    uv = shutil.which("uv")
+    assert uv, "uv executable is required to build 1.0.0 wheel/sdist"
+    dest = REPO / "dist"
+    dest.mkdir(parents=True, exist_ok=True)
+    completed = subprocess.run(
+        [uv, "build", "--out-dir", str(dest)],
+        cwd=REPO,
+        check=False,
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+    )
+    assert completed.returncode == 0, completed.stderr or completed.stdout
+    assert _formal_dist_present(REPO), completed.stderr or completed.stdout
 
 
 def _dimension(name: str, passed: int, eligible: int) -> ScoreDimension:
@@ -220,7 +250,15 @@ def test_semantic_acceptance_typed_file(tmp_path: Path) -> None:
     assert loaded.public_variant_count == 4
 
 
-def test_license_and_public_artifacts_from_repo() -> None:
+def test_public_artifacts_missing_dist_is_unsigned(tmp_path: Path) -> None:
+    artifacts = public_artifacts_evidence(tmp_path)
+    assert artifacts.wheel_present is False
+    assert artifacts.sdist_present is False
+    assert artifacts.leak_count == 1
+    assert artifacts.passed is False
+
+
+def test_license_and_public_artifacts_from_repo(formal_distributions) -> None:
     license_row = license_evidence(REPO)
     assert license_row.passed is True
     artifacts = public_artifacts_evidence(REPO)
@@ -230,7 +268,9 @@ def test_license_and_public_artifacts_from_repo() -> None:
     assert artifacts.passed is True
 
 
-def test_prepare_formal_release_unsigned_docker_fails_check(tmp_path: Path) -> None:
+def test_prepare_formal_release_unsigned_docker_fails_check(
+    tmp_path: Path, formal_distributions
+) -> None:
     from customer360.tasks.generator import generate_task_pack, write_generated_pack
 
     pack_dir = tmp_path / "pack"

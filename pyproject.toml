@@ -34,7 +34,7 @@ Issues = "https://github.com/Chr0nixz/Customer360/issues"
 Source = "https://github.com/Chr0nixz/Customer360"
 
 [project.scripts]
-c360 = "customer360.cli:app"
+c360 = "customer360.cli:run"
 
 [dependency-groups]
 dev = ["pytest>=8,<10", "ruff>=0.11,<1"]

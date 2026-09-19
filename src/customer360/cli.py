@@ -1,3 +1,4 @@
+import sys
 from importlib.metadata import version
 from pathlib import Path
 from typing import Annotated
@@ -60,6 +61,24 @@ app = typer.Typer(
         "are separate; ranking is disabled."
     ),
 )
+
+
+def _configure_utf8_stdio() -> None:
+    """JSON reports include Chinese text; Windows cp1252 consoles must not crash."""
+    for stream in (sys.stdout, sys.stderr):
+        reconfigure = getattr(stream, "reconfigure", None)
+        if not callable(reconfigure):
+            continue
+        try:
+            reconfigure(encoding="utf-8")
+        except (OSError, ValueError, AttributeError):
+            continue
+
+
+def run() -> None:
+    """Console entry that forces UTF-8 stdio before Typer starts."""
+    _configure_utf8_stdio()
+    app()
 
 
 @app.command()
@@ -898,4 +917,4 @@ def build_gold(
 
 
 if __name__ == "__main__":
-    app()
+    run()

@@ -119,3 +119,4 @@ def test_pyproject_keeps_apache_literal_for_license_gate() -> None:
     assert 'license = {text = "Apache-2.0"}' in text
     assert "CONTRIBUTING.md" in text
     assert "data/trusted" in text
+    assert 'c360 = "customer360.cli:run"' in text
