@@ -9,7 +9,9 @@ from customer360 import __version__
 from customer360.application import FIXTURE_ANCHOR, run_single_case, run_smoke
 from customer360.artifacts import json_text, write_json_new
 from customer360.config import resolve_settings
+from customer360.contracts.hidden import HiddenTaskPack
 from customer360.contracts.pack import GeneratedTaskPack
+from customer360.evaluator.diagnostics import diagnose_matrix_run, write_diagnostics_report
 from customer360.evaluator.formal import evaluate_formal, write_formal_input
 from customer360.evaluator.hidden import evaluate_hidden_pack, write_hidden_run
 from customer360.evaluator.matrix import evaluate_matrix, resolve_eval_agent
@@ -35,6 +37,7 @@ from customer360.synth.fixture import build_public_fixture
 from customer360.synth.generator import generate_dataset, load_generation_config
 from customer360.synth.schema import render_ddl
 from customer360.synth.variants import generate_named_variant
+from customer360.tasks.audit import audit_splits
 from customer360.tasks.catalog import DEFAULT_TRUSTED_ORACLES, load_human_cases
 from customer360.tasks.coverage import write_coverage_report
 from customer360.tasks.generator import generate_task_pack, write_generated_pack
@@ -914,6 +917,81 @@ def build_gold(
             }
         )
     )
+
+
+@app.command("audit-splits")
+def audit_splits_cmd(
+    public: Annotated[
+        Path | None,
+        typer.Option(
+            help="Generated public pack directory containing pack.json, or omitted for human cases"
+        ),
+    ] = None,
+    hidden: Annotated[
+        Path | None,
+        typer.Option(help="Hidden task pack directory containing hidden_pack.json"),
+    ] = None,
+    output: Annotated[
+        Path | None,
+        typer.Option(help="Optional output path to write JSON audit report"),
+    ] = None,
+    oracles: Annotated[
+        Path, typer.Option(help="Trusted human oracle YAML; not shipped in wheel")
+    ] = DEFAULT_TRUSTED_ORACLES,
+) -> None:
+    """Audit splits for template novelty, combinatorial orthogonality, and variant sensitivity."""
+    try:
+        if public is not None and (public / "pack.json").is_file():
+            pub_pack = GeneratedTaskPack.model_validate_json(
+                (public / "pack.json").read_text(encoding="utf-8")
+            )
+            public_cases = pub_pack.cases
+        else:
+            public_cases = load_human_cases(oracles=oracles).cases
+
+        if hidden is not None and (hidden / "hidden_pack.json").is_file():
+            hid_pack = HiddenTaskPack.model_validate_json(
+                (hidden / "hidden_pack.json").read_text(encoding="utf-8")
+            )
+            hidden_cases = hid_pack.cases
+        else:
+            hidden_cases = ()
+
+        report = audit_splits(public_cases=public_cases, hidden_cases=hidden_cases)
+        payload = report.model_dump(mode="json")
+        if output is not None:
+            write_json_new(output, payload)
+    except (OSError, ValueError) as exc:
+        typer.echo(f"Split audit failed: {exc}", err=True)
+        raise typer.Exit(2) from exc
+    typer.echo(json_text(payload))
+
+
+@app.command("diagnose")
+def diagnose_cmd(
+    source: Annotated[
+        Path, typer.Option("--input", help="Matrix run directory (containing private/matrix.json)")
+    ],
+    output: Annotated[
+        Path,
+        typer.Option(
+            help="New output directory for diagnostics JSON, Markdown, and HTML dashboard"
+        ),
+    ],
+    oracles: Annotated[
+        Path, typer.Option(help="Trusted human oracle YAML; not shipped in wheel")
+    ] = DEFAULT_TRUSTED_ORACLES,
+) -> None:
+    """Generate failure attribution and HTML diagnostics dashboard from a matrix run."""
+    try:
+        report = load_private_matrix(source)
+        catalog = load_human_cases(oracles=oracles)
+        diag_summary = diagnose_matrix_run(report, catalog.cases)
+        result = write_diagnostics_report(output, diag_summary)
+    except (OSError, ValueError) as exc:
+        typer.echo(f"Diagnostics failed: {exc}", err=True)
+        raise typer.Exit(2) from exc
+    typer.echo(json_text(result))
 
 
 if __name__ == "__main__":
