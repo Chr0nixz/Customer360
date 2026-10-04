@@ -89,8 +89,8 @@ class BaselineAgent:
                 "time_column": plan.time_column,
             }
             val_res = tools.validate_query_plan(plan_payload)
-            if not val_res.get("is_valid", False):
-                issues = val_res.get("issues", [])
+            if not isinstance(val_res, dict) or not val_res.get("is_valid", False):
+                issues = val_res.get("issues", []) if isinstance(val_res, dict) else []
                 primary = issues[0] if issues else {}
                 msg = primary.get("message", "查询计划未通过受控校验。")
                 return self._refusal("UNSUPPORTED_QUERY", msg)

@@ -5,6 +5,7 @@ without executing SQL or accessing customer data.
 """
 
 from datetime import date
+from decimal import Decimal, InvalidOperation
 from typing import Any
 
 from customer360.contracts.execution import AccessPolicy
@@ -25,6 +26,20 @@ def _is_valid_date_str(val: Any) -> bool:
         return True
     except (ValueError, TypeError):
         return False
+
+
+def _is_valid_decimal_literal(val: Any) -> bool:
+    if isinstance(val, bool):
+        return False
+    if isinstance(val, (int, float)):
+        return True
+    if isinstance(val, str):
+        try:
+            d = Decimal(val)
+            return d.is_finite()
+        except (InvalidOperation, ValueError, TypeError):
+            return False
+    return False
 
 
 def validate_query_plan(
@@ -307,5 +322,21 @@ def _check_predicate_literals(
                     code="INVALID_PREDICATE_LITERAL",
                     field=pred.field,
                     message=f"Expected ISO date for '{pred.field}', got '{val}'.",
+                )
+            )
+        elif kind == "decimal" and not _is_valid_decimal_literal(val):
+            issues.append(
+                QueryPlanIssue(
+                    code="INVALID_PREDICATE_LITERAL",
+                    field=pred.field,
+                    message=f"Expected numeric literal for decimal '{pred.field}', got '{val}'.",
+                )
+            )
+        elif kind == "string" and not isinstance(val, str):
+            issues.append(
+                QueryPlanIssue(
+                    code="INVALID_PREDICATE_LITERAL",
+                    field=pred.field,
+                    message=f"Expected string for '{pred.field}', got {type(val).__name__}.",
                 )
             )

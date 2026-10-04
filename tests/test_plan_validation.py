@@ -145,3 +145,31 @@ def test_tool_session_validate_query_plan(baseline, repository):
     # Verify trace recorded
     tool_calls = [c for c in tools.calls if c["tool"] == "validate_query_plan"]
     assert len(tool_calls) == 2
+
+
+def test_validate_query_plan_decimal_and_string_hardening(repository):
+    policy = tiny_eval_policy()
+
+    # 1. Decimal column with non-numeric string literal must be rejected
+    req_bad_decimal = QueryPlanValidationRequest(
+        source_table="fact_transaction",
+        operation="sum",
+        measure_column="amount",
+        output_column="tot",
+        predicates=(PlanPredicate(field="amount", operator="gte", values=("not_a_number",)),),
+    )
+    res_bad_dec = validate_query_plan(req_bad_decimal, repository, policy)
+    assert res_bad_dec.is_valid is False
+    assert any(i.code == "INVALID_PREDICATE_LITERAL" for i in res_bad_dec.issues)
+
+    # 2. String column with boolean literal must be rejected
+    req_bad_string = QueryPlanValidationRequest(
+        source_table="dim_customer",
+        operation="count_distinct",
+        measure_column="customer_id",
+        output_column="cnt",
+        predicates=(PlanPredicate(field="customer_level", operator="eq", values=(True,)),),
+    )
+    res_bad_str = validate_query_plan(req_bad_string, repository, policy)
+    assert res_bad_str.is_valid is False
+    assert any(i.code == "INVALID_PREDICATE_LITERAL" for i in res_bad_str.issues)
