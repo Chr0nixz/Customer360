@@ -3,9 +3,11 @@ from typing import Any, TypeVar
 
 from customer360.contracts.execution import ExecutionRecord
 from customer360.contracts.public import QueryReceipt
+from customer360.contracts.validation import QueryPlanValidationRequest
 from customer360.errors import ExecutionFailure, QueryRejected
 from customer360.metadata.metrics import MetadataRepository
 from customer360.runtime.gateway import ExecutionGateway
+from customer360.runtime.validator import validate_query_plan as _validate_plan
 
 T = TypeVar("T")
 
@@ -195,6 +197,14 @@ class ToolSession:
             )
 
         return self._trace("get_join_paths", {"query": query}, run)
+
+    def validate_query_plan(self, plan: dict) -> dict:
+        def run() -> dict:
+            req = QueryPlanValidationRequest.model_validate(plan)
+            res = _validate_plan(req, self._repository, self._gateway.policy)
+            return res.model_dump(mode="json")
+
+        return self._trace("validate_query_plan", {"plan": plan}, run)
 
     def lookup_execution(self, query_id: str) -> ExecutionRecord:
         """Host-only: results must originate from THIS session."""

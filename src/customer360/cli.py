@@ -24,6 +24,7 @@ from customer360.evaluator.perf import (
 from customer360.evaluator.report import load_private_matrix, public_summary, write_matrix_run
 from customer360.evaluator.score import build_score_inputs as bind_score_inputs
 from customer360.evaluator.score import score_report, write_score
+from customer360.metadata.audit import audit_metadata
 from customer360.metadata.metrics import MetadataRepository
 from customer360.release import (
     bind_reproducible_build,
@@ -992,6 +993,28 @@ def diagnose_cmd(
         typer.echo(f"Diagnostics failed: {exc}", err=True)
         raise typer.Exit(2) from exc
     typer.echo(json_text(result))
+
+
+@app.command("audit-metadata")
+def audit_metadata_cmd(
+    output: Annotated[
+        Path | None,
+        typer.Option(help="Optional output path to write JSON audit report"),
+    ] = None,
+) -> None:
+    """Run static integrity audit across catalog tables, metrics, and join paths."""
+    try:
+        repo = MetadataRepository()
+        report = audit_metadata(repo)
+        payload = report.model_dump(mode="json")
+        if output is not None:
+            write_json_new(output, payload)
+    except (OSError, ValueError) as exc:
+        typer.echo(f"Metadata audit failed: {exc}", err=True)
+        raise typer.Exit(2) from exc
+    typer.echo(json_text(payload))
+    if not report.passed:
+        raise typer.Exit(1)
 
 
 if __name__ == "__main__":

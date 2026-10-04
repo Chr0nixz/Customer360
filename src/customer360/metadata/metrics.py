@@ -1,3 +1,4 @@
+from datetime import date
 from pathlib import Path
 from typing import Literal
 
@@ -5,6 +6,7 @@ import yaml
 from pydantic import Field, model_validator
 
 from customer360.contracts.base import Contract, Identifier, Text
+from customer360.errors import QueryRejected
 from customer360.metadata.models import (
     Catalog,
     CatalogForeignKey,
@@ -23,13 +25,19 @@ TimeSemantics = Literal[
     "none", "rolling_required", "point_in_time_required", "latest_snapshot_required"
 ]
 FixedFilterValue = str | bool
+MetricStatus = Literal["active", "deprecated", "retired"]
 
 
 class MetricDef(Contract):
     metric_name: Identifier
     business_name: Text
     description: Text
-    metric_version: Literal["0.1"] = "0.1"
+    metric_version: str = "0.1"
+    status: MetricStatus = "active"
+    effective_date: date | None = None
+    deprecation_date: date | None = None
+    replaced_by: Identifier | None = None
+    previous_version: str | None = None
     unit: Literal["count", "CNY"]
     null_policy: Literal["exclude"] = "exclude"
     deduplicate: bool
@@ -50,6 +58,12 @@ class MetricDef(Contract):
 
     @model_validator(mode="after")
     def validate_metric(self) -> "MetricDef":
+        if self.status == "retired" and not self.replaced_by:
+            raise ValueError("retired metric must declare replaced_by pointing to replacement")
+        if self.replaced_by and self.replaced_by == self.metric_name:
+            raise ValueError("replaced_by cannot point to the metric itself")
+        if self.replaced_by and self.status not in {"deprecated", "retired"}:
+            raise ValueError("active metric must not declare replaced_by")
         if self.time_semantics in {
             "rolling_required",
             "point_in_time_required",
@@ -196,6 +210,8 @@ class MetadataRepository:
 
     def _assert_metrics_searchable(self) -> None:
         for metric in self.metrics.metrics:
+            if metric.status == "retired":
+                continue
             hits = {item.metric_name for item in self.search_metrics(metric.business_name)}
             if metric.metric_name not in hits:
                 raise ValueError(f"metric {metric.metric_name} is not searchable by business_name")
@@ -246,11 +262,12 @@ class MetadataRepository:
                     )
         return tuple(hits)
 
-    def search_metrics(self, query: str) -> tuple[MetricDef, ...]:
+    def search_metrics(self, query: str, *, include_retired: bool = False) -> tuple[MetricDef, ...]:
         return tuple(
             metric
             for metric in self.metrics.metrics
-            if _matches(
+            if (include_retired or metric.status != "retired")
+            and _matches(
                 query,
                 metric.metric_name,
                 metric.business_name,
@@ -262,6 +279,11 @@ class MetadataRepository:
     def get_metric_definition(self, metric_name: str) -> MetricDef:
         for metric in self.metrics.metrics:
             if metric.metric_name == metric_name:
+                if metric.status == "retired":
+                    raise QueryRejected(
+                        "DEPRECATED_METRIC_REJECTED",
+                        f"指标 '{metric_name}' 已停用；请使用替代指标 '{metric.replaced_by}'。",
+                    )
                 return metric
         raise KeyError(f"unknown metric: {metric_name}")
 

@@ -69,6 +69,32 @@ class BaselineAgent:
             if intent.join_path:
                 tools.get_table_schema("fact_transaction")
             plan = self._plan(intent, metric, request.anchor_date)
+            # Pre-execution validation check
+            plan_payload = {
+                "source_table": plan.source_table,
+                "operation": plan.operation,
+                "measure_column": plan.measure_column,
+                "output_column": plan.output_column,
+                "predicates": [
+                    {
+                        "field": p.field,
+                        "operator": p.operator,
+                        "values": list(p.values),
+                        "alias": p.alias,
+                    }
+                    for p in plan.predicates
+                ],
+                "join_path": plan.join_path,
+                "group_by": list(plan.group_by),
+                "time_column": plan.time_column,
+            }
+            val_res = tools.validate_query_plan(plan_payload)
+            if not val_res.get("is_valid", False):
+                issues = val_res.get("issues", [])
+                primary = issues[0] if issues else {}
+                msg = primary.get("message", "查询计划未通过受控校验。")
+                return self._refusal("UNSUPPORTED_QUERY", msg)
+
             sql = render_sql(plan)
         except QueryRejected as exc:
             return self._refusal(exc.code, str(exc))
@@ -222,10 +248,9 @@ class BaselineAgent:
     def _refusal(
         self, code: str, reason: str, alternative: str | None = None
     ) -> Refusal | AgentError:
-        if code in _REFUSAL_CODES:
-            return Refusal(
-                reason_code=code,  # type: ignore[arg-type]
-                reason=reason,
-                alternative=alternative or "请使用授权范围内、受支持的聚合查询。",
-            )
-        return AgentError(reason_code="UNSUPPORTED_REQUEST", message=reason)
+        effective_code = code if code in _REFUSAL_CODES else "UNSUPPORTED_QUERY"
+        return Refusal(
+            reason_code=effective_code,  # type: ignore[arg-type]
+            reason=reason,
+            alternative=alternative or "请使用授权范围内、受支持的聚合查询。",
+        )

@@ -44,3 +44,22 @@ class SplitAuditReport(Contract):
     variant_sensitivity: VariantSensitivityMetric
     audit_passed: bool
     summary: Text
+
+
+class MetadataAuditIssue(Contract):
+    """Specific referential or structural issue found during metadata audit."""
+
+    code: Text
+    target: Text
+    message: Text
+
+
+class MetadataAuditReport(Contract):
+    """Complete static integrity audit for catalog, metrics, and join paths."""
+
+    tables_count: int = Field(ge=0)
+    metrics_count: int = Field(ge=0)
+    join_paths_count: int = Field(ge=0)
+    issues: tuple[MetadataAuditIssue, ...] = Field(default_factory=tuple)
+    passed: bool
+    summary: Text
