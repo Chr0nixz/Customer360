@@ -55,10 +55,10 @@
 | M4 矩阵评测 | `c360 evaluate --agent template --mode same_sql`：一次提交的候选 SQL 在 Tiny baseline+四变体上重放；`--mode scoring` 拒绝；公开报告不含 Gold/spec/候选 SQL；不是加权总分 |
 | M5 官方 Baseline | `c360 run-case --agent baseline` 与 `evaluate --agent baseline`：公开元数据检索→本地 adapter 规划→候选 SQL→网关；记录参数/重试/缓存/network_used；TemplateAgent 仍可选用但不是官方；外部 gpt/openai/network 标识 fail-closed |
 | 正式评分协议 1.0 | 已实现：`c360 evaluate-public` / `evaluate-hidden --formal` 写 evaluator 0.6 `formal_input`；`c360 score` 分别输出 public_dev / private_hidden；`ranking_enabled=false`。历史 `evaluate --mode scoring` 仍拒绝 |
-| 正式 RC 发布关卡 | 工具链已落地：Apache-2.0、Dockerfile、SHA256/SBOM、`prepare-formal-release`/`check-formal-release`。八个 RC 门改为内容校验（D057）。本机无 Docker、无 git：`docker_runtime` 未签署，不打 `v1.0.0` |
+| 正式 RC 发布关卡 | 工具链已落地：Apache-2.0、Dockerfile、SHA256/SBOM、`prepare-formal-release`/`check-formal-release`。八个 RC 门为严格内容校验（D057）。当前 7/8 门已就绪，本机因无 Linux/Docker 环境，`docker_runtime` 留待 CI/Linux 运行签署，不打 `v1.0.0` |
 | FastAPI、任意插件沙箱、私有竞赛部署、外部模型 | 未实现；网络 adapter 仍 fail-closed |
 
-本地使用 uv 管理的 Python 3.11.15 和项目 .venv；未替换系统默认 Python。已 `git init -b main` 并暂存公开树（gitignore 挡住 outputs/tmp/duckdb）；未 commit、未配置 remote、未打标签。
+本地使用 uv 管理的 Python 3.11.15 和项目 .venv；代码库已对齐远程 main 分支，八项门全过前保持干净未打标签状态。
 
 ## 3. 验证与复跑
 

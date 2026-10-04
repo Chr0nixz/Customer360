@@ -257,3 +257,234 @@ def test_help_lists_run_case():
     assert result.exit_code == 0
     assert "run-case" in result.output
     assert "evaluate" in result.output
+
+
+def test_baseline_extended_filters_and_join_combinations(baseline, repository):
+    """Verify Agent B expanded filters: risk, gender, tx type, channel, flow type, and joins."""
+    gateway = ExecutionGateway(baseline / "dataset.duckdb", tiny_eval_policy())
+    agent = BaselineAgent()
+    tools = ToolSession(gateway, repository)
+
+    # 1. Risk level filter on distinct_customer_count
+    resp = agent.respond(
+        AgentRequest(
+            case_id="probe_risk",
+            question="统计低风险客户数。",
+            anchor_date=ANCHOR,
+            metadata_version=repository.metrics.metrics_version,
+        ),
+        tools,
+    )
+    assert resp.status == "success"
+    assert "\"risk_level\" = 'low'" in resp.sql
+
+    # 2. Gender and standard level combined filter
+    resp = agent.respond(
+        AgentRequest(
+            case_id="probe_gender_level",
+            question="统计女性标准等级客户数。",
+            anchor_date=ANCHOR,
+            metadata_version=repository.metrics.metrics_version,
+        ),
+        tools,
+    )
+    assert resp.status == "success"
+    assert "\"gender\" = 'F'" in resp.sql
+    assert "\"customer_level\" = 'standard'" in resp.sql
+
+    # 3. Customer status (dormant)
+    resp = agent.respond(
+        AgentRequest(
+            case_id="probe_dormant",
+            question="统计休眠客户数。",
+            anchor_date=ANCHOR,
+            metadata_version=repository.metrics.metrics_version,
+        ),
+        tools,
+    )
+    assert resp.status == "success"
+    assert "\"status\" = 'dormant'" in resp.sql
+
+    # 4. Transaction type (sell) on successful_transaction_count
+    resp = agent.respond(
+        AgentRequest(
+            case_id="probe_tx_sell",
+            question="统计截至2025年6月30日近90天卖出交易笔数。",
+            anchor_date=ANCHOR,
+            metadata_version=repository.metrics.metrics_version,
+        ),
+        tools,
+    )
+    assert resp.status == "success"
+    assert "\"transaction_type\" = 'sell'" in resp.sql
+
+    # 5. Channel (branch) on successful_transaction_count
+    resp = agent.respond(
+        AgentRequest(
+            case_id="probe_tx_branch",
+            question="统计截至2025年6月30日近90天网点渠道成功交易笔数。",
+            anchor_date=ANCHOR,
+            metadata_version=repository.metrics.metrics_version,
+        ),
+        tools,
+    )
+    assert resp.status == "success"
+    assert "\"channel\" = 'branch'" in resp.sql
+
+    # 6. Cash flow filter (flow_type = in, channel = bank)
+    resp = agent.respond(
+        AgentRequest(
+            case_id="probe_cash_flow",
+            question="统计截至2025年6月30日近90天银行渠道流入资金流笔数。",
+            anchor_date=ANCHOR,
+            metadata_version=repository.metrics.metrics_version,
+        ),
+        tools,
+    )
+    assert resp.status == "success"
+    assert "\"channel\" = 'bank'" in resp.sql
+    assert "\"flow_type\" = 'in'" in resp.sql
+
+    # 7. Join query with trade filters (App trade and customer level)
+    resp = agent.respond(
+        AgentRequest(
+            case_id="probe_join_app",
+            question="统计VIP客户中截至2025年6月30日近90天有成功App交易的去重客户数。",
+            anchor_date=ANCHOR,
+            metadata_version=repository.metrics.metrics_version,
+        ),
+        tools,
+    )
+    assert resp.status == "success"
+    assert 'JOIN "fact_transaction"' in resp.sql
+    assert '"c"."customer_level" = \'VIP\'' in resp.sql
+    assert '"t"."status" = \'success\'' in resp.sql
+    assert '"t"."channel" = \'app\'' in resp.sql
+
+    # 8. Join query with trade transaction_type (buy trade and risk level)
+    resp = agent.respond(
+        AgentRequest(
+            case_id="probe_join_buy",
+            question="统计低风险客户中截至2025年6月30日近90天有成功买入交易的去重客户数。",
+            anchor_date=ANCHOR,
+            metadata_version=repository.metrics.metrics_version,
+        ),
+        tools,
+    )
+    assert resp.status == "success"
+    assert 'JOIN "fact_transaction"' in resp.sql
+    assert '"c"."risk_level" = \'low\'' in resp.sql
+    assert '"t"."status" = \'success\'' in resp.sql
+    assert '"t"."transaction_type" = \'buy\'' in resp.sql
+
+    # 9. PII unknown field refusal remains fail-closed
+    resp = agent.respond(
+        AgentRequest(
+            case_id="probe_pii",
+            question="统计手机号以138开头的客户数。",
+            anchor_date=ANCHOR,
+            metadata_version=repository.metrics.metrics_version,
+        ),
+        tools,
+    )
+    assert resp.status == "refused"
+    assert resp.reason_code == "UNKNOWN_FIELD"
+
+
+def test_baseline_hardening_negation_join_distinction_and_conflict(baseline, repository):
+    """Hardening checks: negation interception, join distinction, and conflict."""
+    gateway = ExecutionGateway(baseline / "dataset.duckdb", tiny_eval_policy())
+    agent = BaselineAgent()
+    tools = ToolSession(gateway, repository)
+
+    # 1. Distinction: Single-table app transaction count should not be treated as Join
+    resp = agent.respond(
+        AgentRequest(
+            case_id="probe_app_tx_count",
+            question="统计截至2025年6月30日近90天成功App交易笔数。",
+            anchor_date=ANCHOR,
+            metadata_version=repository.metrics.metrics_version,
+        ),
+        tools,
+    )
+    assert resp.status == "success"
+    assert "JOIN" not in resp.sql
+    assert "fact_transaction" in resp.sql
+
+    # 2. Negation safety: Non-VIP must be refused fail-closed instead of positive match
+    resp = agent.respond(
+        AgentRequest(
+            case_id="probe_neg_vip",
+            question="统计非VIP客户数。",
+            anchor_date=ANCHOR,
+            metadata_version=repository.metrics.metrics_version,
+        ),
+        tools,
+    )
+    assert resp.status == "refused"
+    assert resp.reason_code == "UNSUPPORTED_QUERY"
+
+    # 3. Negation safety: Occupation not null must be refused instead of matching is_null
+    resp = agent.respond(
+        AgentRequest(
+            case_id="probe_neg_occ",
+            question="统计职业不为空的客户数。",
+            anchor_date=ANCHOR,
+            metadata_version=repository.metrics.metrics_version,
+        ),
+        tools,
+    )
+    assert resp.status == "refused"
+    assert resp.reason_code == "UNSUPPORTED_QUERY"
+
+    # 4. Negation safety: Non-low risk must be refused
+    resp = agent.respond(
+        AgentRequest(
+            case_id="probe_neg_risk",
+            question="统计非低风险客户数。",
+            anchor_date=ANCHOR,
+            metadata_version=repository.metrics.metrics_version,
+        ),
+        tools,
+    )
+    assert resp.status == "refused"
+    assert resp.reason_code == "UNSUPPORTED_QUERY"
+
+    # 5. Mutually exclusive conflict: Multiple regions in single question
+    resp = agent.respond(
+        AgentRequest(
+            case_id="probe_conflict_region",
+            question="统计华东和华南的客户数。",
+            anchor_date=ANCHOR,
+            metadata_version=repository.metrics.metrics_version,
+        ),
+        tools,
+    )
+    assert resp.status == "refused"
+    assert resp.reason_code == "UNSUPPORTED_QUERY"
+
+    # 6. Mutually exclusive conflict: Both VIP and standard customer level
+    resp = agent.respond(
+        AgentRequest(
+            case_id="probe_conflict_level",
+            question="统计VIP和标准等级客户数。",
+            anchor_date=ANCHOR,
+            metadata_version=repository.metrics.metrics_version,
+        ),
+        tools,
+    )
+    assert resp.status == "refused"
+    assert resp.reason_code == "UNSUPPORTED_QUERY"
+
+    # 7. Mutually exclusive conflict: Both male and female
+    resp = agent.respond(
+        AgentRequest(
+            case_id="probe_conflict_gender",
+            question="统计男性和女性客户数。",
+            anchor_date=ANCHOR,
+            metadata_version=repository.metrics.metrics_version,
+        ),
+        tools,
+    )
+    assert resp.status == "refused"
+    assert resp.reason_code == "UNSUPPORTED_QUERY"

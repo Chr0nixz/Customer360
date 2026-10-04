@@ -12,7 +12,7 @@ PrivateCase 属于可信 evaluator。其 CaseOracle 是按 expected_action 区�
 - clarification_needed：脚本化 SlotReply 列表、可选多轮 ClarificationTurn 和补齐后的 SemanticSpec；
 - refuse：允许的 reason code，不要求 SQL。
 
-当前 evaluator 0.5 支持 answer、clarification_needed 和 refuse：澄清按隐藏 ClarificationTurn 脚本逐轮回放（缺省时全部 SlotReply 仍是一轮，且顶层 replies 必须与 turns 文本一致），比较最终受控查询，并记录每轮请求、完整响应、工具（含超时/崩溃/物化输入超限）和回执结果；拒答校验 reason code，未捕获的策略拒绝保留具体稳定码。零贡献参考查询记为 POLICY_INCOMPATIBLE。这已是可序列化多轮契约，但不是正式评分。evaluator 0.4 记录仍是历史格式，不与 0.5 混作同一发布批次。官方 Baseline runner 是本地 `BaselineAgent`（`--agent baseline` / `c360 run-case`），仍不计算加权分数。
+evaluator 0.5 支持 answer、clarification_needed 和 refuse 的多轮脚本回放与状态审计（保留作为单 case 与历史矩阵运行契约）；正式评分基准升级为 evaluator 0.6 与 score protocol 1.0（`c360 evaluate-public` / `evaluate-hidden --formal` 生成 formal input，由 `c360 score` 分别输出 public_dev 与 private_hidden 加权评分和硬门槛报告）。澄清按隐藏 ClarificationTurn 脚本逐轮回放，比较最终受控查询，并记录每轮请求、完整响应、工具调用（含超时/崩溃/物化输入超限）和回执结果；拒答校验 reason code，未捕获的策略拒绝保留具体稳定码。零贡献参考查询记为 POLICY_INCOMPATIBLE。官方 Baseline runner 是本地 `BaselineAgent`（`--agent baseline` / `c360 run-case` / `c360 evaluate-public`）。当前唯一发布阻塞是 Docker runtime 真实证据签署，而非评分工具缺失。
 
 包内 `resources/human_cases.yaml` 是 `catalog_version: 0.3` 的公开题面：20 个 case 只有 `case_id`、`task_version: human-0.1`、`split: dev`、canonical question 和 3 条改写。semantic spec、expected action、missing slots、slot replies 和 reason codes 在仓库 `data/trusted/human_oracles.yaml`，不进入 wheel/sdist 或 Agent 输入。改写只作为输入变体，Gold 仍由 canonical semantic spec 编译。可信侧用 `c360 check-rewrites --oracles data/trusted/human_oracles.yaml` 核验槽位；漂移会得到 TIME_RANGE_ERROR / METRIC_ERROR / FILTER_ERROR / JOIN_ERROR 等稳定分类。当前 18 道可编译回答题（含分组与 latest-snapshot）的 Gold 是 semantic spec → 编译器；澄清/拒答仍是 unscored oracle。该包是 M2 的 dev 起点，不是完整评分集或隐藏集。C360_0001–0020 不得改标 train/test/private/hidden。
 

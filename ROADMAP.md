@@ -91,11 +91,11 @@
 - [x] M6 生成/隐藏包语义验收与正式发布工具链：独立 oracle、8 类错误 SQL、改写槽位；300 题绑定四个公开 Tiny 变体，私有隐藏 baseline 绑定四个带 provenance 变体并执行 same-SQL replay；正式 `score`、Apache-2.0、Docker、SHA256/SBOM 和 `check-formal-release` 已实现；
 - [x] M7（部分）受控资源预算与性能采集：D055 命名 profile；Tiny 默认 10k 物化上限保留；`c360 perf-baseline`；扫描量/Token unavailable；
 - [x] GitHub 开源准备：Apache-2.0 社区文件、CONTRIBUTING/SECURITY、issue/PR 模板、gitignore 覆盖 `outputs/`/`tmp-*/`/`*.duckdb`、发布清单；维护者仍需自建远程并审查 `git status`；
-- [ ] M6 剩余：完成八个 RC evidence gates 并签署 v1.0.0；M7 后续：PostgreSQL 适配设计、指标版本演化。
+- [ ] M6 剩余：完成八个 RC evidence gates 并签署 v1.0.0（唯一未通过的是 Linux CI 下的 docker_runtime 证据）；M7 后续：PostgreSQL 适配能力矩阵、指标版本演化规范及 split 泛化审计已完成设计文档（详见 [docs/future-protocols-v1.1-v1.3.md](docs/future-protocols-v1.1-v1.3.md)）。
 
 ### 下一阶段执行顺序（先修复，再扩展）
 
-详细工作包、依赖、验收标准与主/轻量 agent 分工见 [后续开发计划](docs/development-plan.md)。H1–H8 与阶段 B–F/S/G 及正式评分工具链已实施；剩余是签署八个 RC evidence gates（本机 docker_runtime 未签署）与 M7 PostgreSQL/指标演化。
+详细工作包、依赖、验收标准与主/轻量 agent 分工见 [后续开发计划](docs/development-plan.md)。H1–H8 与阶段 B–F/S/G 及正式评分工具链已实施，设计规范已建立在 [docs/future-protocols-v1.1-v1.3.md](docs/future-protocols-v1.1-v1.3.md)；剩余是签署八个 RC evidence gates（本机 docker_runtime 待 CI 签署）与后续版本能力演进。
 
 1. **H1–H8 修复关卡**：已实施。
 2. **M2 补齐与最小接入**：已实施分组/latest-snapshot（D038/D039）与确定性 TemplateAgent；覆盖仍非官方分数。

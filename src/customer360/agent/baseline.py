@@ -106,8 +106,16 @@ class BaselineAgent:
             if name and name not in seen:
                 seen[name] = item
         columns = tools.search_columns("客户等级") + tools.search_columns("地区")
-        if "职业" in request.question:
-            columns = columns + tools.search_columns("职业")
+        for token, kw in (
+            ("职业", "职业"),
+            ("风险", "风险等级"),
+            ("性别", "性别"),
+            ("渠道", "交易渠道"),
+            ("交易类型", "交易类型"),
+            ("资金流", "资金流类型"),
+        ):
+            if token in request.question:
+                columns = columns + tools.search_columns(kw)
         joins = tools.get_join_paths("")
         glossary = tools.get_business_glossary("客户")
         return AdapterPacket(

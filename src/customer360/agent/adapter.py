@@ -11,18 +11,50 @@ from time import perf_counter
 from typing import Any, Literal, Protocol
 
 from customer360.contracts.adapter import AdapterParameters, ModelCallRecord
+from customer360.errors import QueryRejected
 
 UNKNOWN_FIELD_TOKENS = ("手机号", "手机号码", "身份证", "身份证号")
 LATEST_TOKENS = ("最新快照", "最新资产快照", "最近一次快照", "各自最新快照")
 GROUP_REGION_TOKENS = ("按地区", "分地区", "各地区", "按客户地区")
-JOIN_TOKENS = ("有成功交易", "发生过成功交易", "成功交易VIP")
-NULL_OCCUPATION_TOKENS = ("职业为空", "职业字段为空", "没有填写职业", "职业信息缺失", "职业缺失")
+JOIN_TOKENS = (
+    "有成功交易",
+    "发生过成功交易",
+    "成功交易VIP",
+    "成功App交易",
+    "成功网点交易",
+    "成功买入交易",
+    "成功卖出交易",
+    "有成功App交易",
+    "有成功网点交易",
+    "有成功买入交易",
+    "有成功卖出交易",
+    "发生过成功App交易",
+    "发生过成功网点交易",
+    "发生过成功买入交易",
+    "发生过成功卖出交易",
+)
+NULL_OCCUPATION_TOKENS = (
+    "职业为空",
+    "职业字段为空",
+    "没有填写职业",
+    "职业信息缺失",
+    "职业缺失",
+    "未填写职业",
+)
 WINDOW_START_TOKENS = ("窗口首日", "第一天", "起始日")
 WINDOW_BEFORE_TOKENS = ("窗口外前一日", "窗口外一天", "前一天", "前一日")
 PII_REFUSAL = (
     "UNKNOWN_FIELD",
     "客户手机号或身份证不是已声明字段。",
     "请改用已授权的客户属性或指标。",
+)
+NEGATION_PATTERNS = (
+    re.compile(r"非\s*VIP|不是\s*VIP|不属于\s*VIP"),
+    re.compile(r"非\s*(?:低|中|高)风险|不是\s*(?:低|中|高)风险"),
+    re.compile(r"非\s*(?:在用|休眠|注销|已注销)|未\s*(?:在用|注销)"),
+    re.compile(r"职业\s*(?:不为空|非空|填写完整|有效|存在)"),
+    re.compile(r"非\s*(?:买入|卖出|申购|赎回)"),
+    re.compile(r"非\s*(?:App|网点|银行)"),
 )
 DATE_PATTERN = re.compile(
     r"(?P<iso>\d{4}-\d{2}-\d{2})|(?P<y>\d{4})年(?P<m>\d{1,2})月(?P<d>\d{1,2})日"
@@ -126,6 +158,40 @@ def _parse_days(text: str) -> int | None:
     return int(match.group("days"))
 
 
+def _has_unsupported_negation(text: str) -> bool:
+    return any(pattern.search(text) for pattern in NEGATION_PATTERNS)
+
+
+def _is_join_query(question: str) -> bool:
+    if "交易" not in question or "客户" not in question:
+        return False
+    if any(token in question for token in ("交易笔数", "交易次数", "交易金额", "交易量")):
+        return False
+    has_join_predicate = any(
+        token in question
+        for token in (
+            "有成功交易",
+            "发生过成功交易",
+            "发生过",
+            "有成功",
+            "成功交易",
+        )
+    )
+    is_customer_agg = any(
+        token in question
+        for token in (
+            "去重客户数",
+            "去重人数",
+            "去重客户",
+            "客户数量",
+            "客户有多少人",
+            "客户人数",
+            "客户数",
+        )
+    )
+    return has_join_predicate and is_customer_agg
+
+
 def _executable_join(packet: AdapterPacket) -> str | None:
     for item in packet.joins:
         if item.get("path_name") == "customer_transactions" and item.get("compile_status") == (
@@ -193,6 +259,14 @@ class LocalDeterministicAdapter:
                 alternative=alternative,
                 evidence=("unknown_entity_field",),
             )
+        if _has_unsupported_negation(question):
+            return Intent(
+                action="refuse",
+                reason_code="UNSUPPORTED_QUERY",
+                reason="不支持否定条件或反向过滤查询。",
+                alternative="请使用已授权的正向等值或存在性过滤条件。",
+                evidence=("negation_unsupported",),
+            )
         latest = any(token in text for token in LATEST_TOKENS)
         vague = (
             any(token in question for token in ("最近", "近期"))
@@ -218,7 +292,7 @@ class LocalDeterministicAdapter:
                 evidence=("unresolved_metric",),
             )
         join_path = None
-        if any(token in question for token in JOIN_TOKENS):
+        if _is_join_query(question):
             join_path = _executable_join(packet)
             if join_path is None:
                 return Intent(
@@ -239,7 +313,7 @@ class LocalDeterministicAdapter:
                 questions=("请给出含锚点日期的近N个自然日窗口。",),
                 evidence=("metric_requires_time", metric["metric_name"]),
             )
-        filters = self._filters(question, time_kind, days, time_date, join_path)
+        filters = self._filters(question, metric, time_kind, days, time_date, join_path)
         group_by: tuple[str, ...] = ()
         allowed_groups = tuple(metric.get("allowed_group_dimensions") or ())
         if any(token in question for token in GROUP_REGION_TOKENS) and "region" in allowed_groups:
@@ -320,13 +394,51 @@ class LocalDeterministicAdapter:
             for token in ("笔数", "次数", "客户数", "人数", "条数", "多不多", "数量", "多少人")
         )
         table = str(metric.get("source_table") or "")
-        if any(token in q for token in ("客户数", "客户人数", "多少人", "VIP客户", "客户一共")):
+        is_join = _is_join_query(q)
+        if is_join:
+            if metric_id == "distinct_customer_count":
+                score += 85
+            if table == "fact_transaction":
+                score -= 60
+        if any(
+            token in q
+            for token in (
+                "客户数",
+                "客户人数",
+                "多少人",
+                "VIP客户",
+                "标准等级客户",
+                "低风险客户",
+                "中风险客户",
+                "高风险客户",
+                "在用客户",
+                "休眠客户",
+                "已注销客户",
+                "客户一共",
+                "去重客户数",
+                "去重人数",
+            )
+        ):
             if metric_id == "distinct_customer_count":
                 score += 40
             if "服务关系" in name:
                 score -= 35
             if table == "dim_customer" and metric.get("operation") == "count_distinct":
                 score += 8
+        if "在用客户" in q and metric_id == "active_customer_count":
+            score += 50
+        if "休眠客户" in q and metric_id == "dormant_customer_count":
+            score += 50
+        if ("已注销客户" in q or "注销客户" in q) and metric_id == "closed_customer_count":
+            score += 50
+        if "高风险客户" in q and metric_id == "high_risk_customer_count":
+            score += 50
+        if "买入" in q and ("笔数" in q or "次数" in q) and not is_join:
+            if metric_id == "successful_buy_transaction_count":
+                score += 40
+        if "App" in q and ("笔数" in q or "次数" in q) and not is_join:
+            if metric_id == "successful_app_transaction_count":
+                score += 40
         if "服务关系" in q:
             score += 25 if "service_relation" in table else -20
         elif "客户" in q and "交易" not in q and "资金" not in q:
@@ -349,7 +461,7 @@ class LocalDeterministicAdapter:
         elif "估值日" in q:
             score += 30 if semantics == "point_in_time_required" else -25
         elif _parse_days(text) is not None or "近90" in q or "最近" in q or "近期" in q:
-            if any(token in q for token in JOIN_TOKENS):
+            if is_join:
                 if metric_id == "distinct_customer_count":
                     score += 55
                 if str(metric.get("source_table")) == "fact_transaction":
@@ -362,7 +474,7 @@ class LocalDeterministicAdapter:
             score += 16
         else:
             score -= 12
-        if any(token in q for token in JOIN_TOKENS):
+        if is_join:
             if metric_id == "distinct_customer_count":
                 score += 40
         if "活跃" in q and "活跃" in name:
@@ -419,22 +531,192 @@ class LocalDeterministicAdapter:
     def _filters(
         self,
         question: str,
+        metric: dict[str, Any],
         time_kind: str | None,
         days: int | None,
         time_date: date | None,
         join_path: str | None,
     ) -> tuple[IntentFilter, ...]:
         found: list[IntentFilter] = []
-        if any(token in question for token in NULL_OCCUPATION_TOKENS) or (
-            "职业" in question
-            and any(token in question for token in ("空", "缺失", "没有填写"))
-            and "非空" not in question
-            and "不为空" not in question
-        ):
-            found.append(IntentFilter(field="occupation", operator="is_null"))
-        for token, field_name, operator, value in VALUE_HINTS:
-            if token in question:
-                found.append(IntentFilter(field=field_name, operator=operator, values=(value,)))
+        allowed = set(metric.get("allowed_filter_columns") or ())
+        fixed = metric.get("fixed_filters") or {}
+
+        # 1. occupation IS NULL
+        if "occupation" in allowed and "occupation" not in fixed:
+            if any(token in question for token in NULL_OCCUPATION_TOKENS) or (
+                "职业" in question
+                and any(token in question for token in ("空", "缺失", "没有填写", "未填写"))
+                and "非空" not in question
+                and "不为空" not in question
+            ):
+                found.append(IntentFilter(field="occupation", operator="is_null", side="metric"))
+
+        # 2. customer_level
+        if "customer_level" in allowed and "customer_level" not in fixed:
+            has_vip = "VIP" in question
+            has_standard = "标准等级" in question
+            if has_vip and has_standard:
+                raise QueryRejected("UNSUPPORTED_QUERY", "不支持多等级组合条件。")
+            if has_vip:
+                found.append(
+                    IntentFilter(
+                        field="customer_level", operator="eq", values=("VIP",), side="metric"
+                    )
+                )
+            elif has_standard:
+                found.append(
+                    IntentFilter(
+                        field="customer_level", operator="eq", values=("standard",), side="metric"
+                    )
+                )
+
+        # 3. region
+        if "region" in allowed and "region" not in fixed:
+            matched_regions = [r for r in ("华东", "华北", "华南", "西南") if r in question]
+            if len(matched_regions) > 1:
+                raise QueryRejected("UNSUPPORTED_QUERY", "不支持跨地区多选或组合条件。")
+            if len(matched_regions) == 1:
+                found.append(
+                    IntentFilter(
+                        field="region", operator="eq", values=(matched_regions[0],), side="metric"
+                    )
+                )
+
+        # 4. gender
+        if "gender" in allowed and "gender" not in fixed:
+            has_m = "男性" in question or "男客户" in question
+            has_f = "女性" in question or "女客户" in question
+            if has_m and has_f:
+                raise QueryRejected("UNSUPPORTED_QUERY", "不支持多性别组合条件。")
+            if has_m:
+                found.append(
+                    IntentFilter(field="gender", operator="eq", values=("M",), side="metric")
+                )
+            elif has_f:
+                found.append(
+                    IntentFilter(field="gender", operator="eq", values=("F",), side="metric")
+                )
+
+        # 5. risk_level
+        if "risk_level" in allowed and "risk_level" not in fixed:
+            matched_risks = [
+                ("low", "低风险"),
+                ("medium", "中风险"),
+                ("high", "高风险"),
+            ]
+            found_risks = [val for val, kw in matched_risks if kw in question]
+            if len(found_risks) > 1:
+                raise QueryRejected("UNSUPPORTED_QUERY", "不支持多风险等级组合条件。")
+            if len(found_risks) == 1:
+                found.append(
+                    IntentFilter(
+                        field="risk_level", operator="eq", values=(found_risks[0],), side="metric"
+                    )
+                )
+
+        # 6. customer status (only for dim_customer table)
+        if str(metric.get("source_table")) == "dim_customer":
+            if "status" in allowed and "status" not in fixed:
+                if "在用" in question:
+                    found.append(
+                        IntentFilter(
+                            field="status", operator="eq", values=("active",), side="metric"
+                        )
+                    )
+                elif "休眠" in question:
+                    found.append(
+                        IntentFilter(
+                            field="status", operator="eq", values=("dormant",), side="metric"
+                        )
+                    )
+                elif "已注销" in question or "注销" in question:
+                    found.append(
+                        IntentFilter(
+                            field="status", operator="eq", values=("closed",), side="metric"
+                        )
+                    )
+
+        # 7. single-table transaction / cash flow / service relation filters
+        if not join_path:
+            if "transaction_type" in allowed and "transaction_type" not in fixed:
+                if "买入" in question:
+                    found.append(
+                        IntentFilter(
+                            field="transaction_type", operator="eq", values=("buy",), side="metric"
+                        )
+                    )
+                elif "卖出" in question:
+                    found.append(
+                        IntentFilter(
+                            field="transaction_type", operator="eq", values=("sell",), side="metric"
+                        )
+                    )
+                elif "申购" in question:
+                    found.append(
+                        IntentFilter(
+                            field="transaction_type",
+                            operator="eq",
+                            values=("subscribe",),
+                            side="metric",
+                        )
+                    )
+                elif "赎回" in question:
+                    found.append(
+                        IntentFilter(
+                            field="transaction_type",
+                            operator="eq",
+                            values=("redeem",),
+                            side="metric",
+                        )
+                    )
+
+            if "channel" in allowed and "channel" not in fixed:
+                if "App" in question or "App渠道" in question:
+                    found.append(
+                        IntentFilter(field="channel", operator="eq", values=("app",), side="metric")
+                    )
+                elif "网点" in question or "网点渠道" in question:
+                    found.append(
+                        IntentFilter(
+                            field="channel", operator="eq", values=("branch",), side="metric"
+                        )
+                    )
+                elif "银行" in question or "银行渠道" in question:
+                    found.append(
+                        IntentFilter(
+                            field="channel", operator="eq", values=("bank",), side="metric"
+                        )
+                    )
+
+            if "flow_type" in allowed and "flow_type" not in fixed:
+                if "流入" in question and "净流入" not in question:
+                    found.append(
+                        IntentFilter(
+                            field="flow_type", operator="eq", values=("in",), side="metric"
+                        )
+                    )
+                elif "流出" in question and "净流入" not in question:
+                    found.append(
+                        IntentFilter(
+                            field="flow_type", operator="eq", values=("out",), side="metric"
+                        )
+                    )
+
+            if "is_primary" in allowed and "is_primary" not in fixed:
+                if "主服务标记" in question:
+                    found.append(
+                        IntentFilter(
+                            field="is_primary", operator="eq", values=(True,), side="metric"
+                        )
+                    )
+                elif "非主服务标记" in question:
+                    found.append(
+                        IntentFilter(
+                            field="is_primary", operator="eq", values=(False,), side="metric"
+                        )
+                    )
+
+        # 8. rolling window boundary filters
         if time_kind == "rolling" and days is not None and time_date is not None:
             start = time_date - timedelta(days=days - 1)
             extra_date = None
@@ -451,6 +733,8 @@ class LocalDeterministicAdapter:
                         side="join" if join_path else "metric",
                     )
                 )
+
+        # 9. join-side filters
         if join_path:
             found.append(
                 IntentFilter(
@@ -460,4 +744,25 @@ class LocalDeterministicAdapter:
                     side="join",
                 )
             )
+            if "App" in question:
+                found.append(
+                    IntentFilter(field="channel", operator="eq", values=("app",), side="join")
+                )
+            elif "网点" in question:
+                found.append(
+                    IntentFilter(field="channel", operator="eq", values=("branch",), side="join")
+                )
+            if "买入" in question:
+                found.append(
+                    IntentFilter(
+                        field="transaction_type", operator="eq", values=("buy",), side="join"
+                    )
+                )
+            elif "卖出" in question:
+                found.append(
+                    IntentFilter(
+                        field="transaction_type", operator="eq", values=("sell",), side="join"
+                    )
+                )
+
         return tuple(found)
