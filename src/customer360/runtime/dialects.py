@@ -57,6 +57,18 @@ def get_dialect_capabilities(dialect: str) -> DialectCapability:
     return DIALECT_CAPABILITIES[key]
 
 
+_FORBIDDEN_AST_NODES = (
+    exp.Insert,
+    exp.Update,
+    exp.Delete,
+    exp.Drop,
+    exp.Create,
+    exp.Command,
+    exp.Copy,
+    exp.Pragma,
+)
+
+
 def transpile_sql(
     sql: str,
     source_dialect: EngineDialect = "duckdb",
@@ -66,6 +78,9 @@ def transpile_sql(
     stripped_sql = sql.strip()
     if not stripped_sql:
         raise ValueError("SQL query cannot be empty")
+
+    if ";" in stripped_sql.rstrip(";"):
+        raise ValueError("multi-statement queries are forbidden")
 
     source_key = str(source_dialect).lower()
     target_key = str(target_dialect).lower()
@@ -79,6 +94,14 @@ def transpile_sql(
         ast = sqlglot.parse_one(stripped_sql, read=source_key)
     except sqlglot.errors.ParseError as exc:
         raise ValueError(f"SQL parsing failed for dialect '{source_key}': {exc}") from exc
+
+    if ast is None or any(isinstance(ast, node_type) for node_type in _FORBIDDEN_AST_NODES):
+        raise ValueError("only read-only queries can be transpiled")
+
+    # Also search sub-nodes for forbidden commands (e.g. inside script blocks)
+    for node_type in _FORBIDDEN_AST_NODES:
+        if any(ast.find_all(node_type)):
+            raise ValueError("only read-only queries can be transpiled")
 
     differences: list[str] = []
 

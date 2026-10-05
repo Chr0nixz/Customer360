@@ -93,6 +93,41 @@ def test_transpile_hardening_invalid_inputs_and_unsupported_dialects():
     with pytest.raises(ValueError, match="SQL parsing failed"):
         transpile_sql("SELECT FROM WHERE", source_dialect="duckdb")
 
+    # 5. Multi-statement injection attempt must be blocked
+    with pytest.raises(ValueError, match="multi-statement queries are forbidden"):
+        transpile_sql(
+            'SELECT 1; DROP TABLE "dim_customer"',
+            source_dialect="duckdb",
+            target_dialect="postgres",
+        )
+
+    # 6. Non-read-only DDL/DML must be blocked
+    with pytest.raises(ValueError, match="only read-only queries can be transpiled"):
+        transpile_sql('DROP TABLE "dim_customer"', source_dialect="duckdb")
+
+    with pytest.raises(ValueError, match="only read-only queries can be transpiled"):
+        transpile_sql(
+            "INSERT INTO \"dim_customer\" VALUES (1, 'VIP')",
+            source_dialect="duckdb",
+        )
+
+
+def test_transpile_cte_query_equivalence():
+    duck_sql = (
+        "WITH active_cust AS ("
+        '  SELECT "customer_id" FROM "dim_customer" WHERE "status" = \'active\''
+        ") "
+        'SELECT COUNT(*) AS "active_cnt" FROM active_cust'
+    )
+    res = transpile_sql(duck_sql, source_dialect="duckdb", target_dialect="postgres")
+    assert res.ast_valid is True
+    assert "WITH" in res.transpiled_sql
+    assert '"active_cust"' in res.transpiled_sql
+
+    pg_ast = sqlglot.parse_one(res.transpiled_sql, read="postgres")
+    assert isinstance(pg_ast, exp.Select)
+    assert pg_ast.find(exp.With) is not None
+
 
 def test_postgresql_gateway_fail_closed_without_uri():
     import pytest
