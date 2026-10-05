@@ -18,6 +18,12 @@
 
 **2026-09-18 阶段 F 复审**：全量回归与 ruff 通过；本轮修复了极小合法生成配置的空集合随机访问、每层 SELECT 的 SQL clause/字面量类型边界、生成数据 sidecar 与 manifest 绑定、隐藏 profile/评测报告契约、隐藏 pack 对应的公开 pack 校验，以及 release 的 300（180 train/120 dev）硬验收。ToolSession 现在审计所有策略拒绝并将工具基础设施异常稳定归类为 `EXECUTION_ERROR`；因未捕获策略拒绝的分类行为变化，evaluator 记录版本升为 0.5，0.4 只作为历史格式。`pack.json`、`generated_oracles.yaml`、`hidden_oracles.yaml` 仍只属于可信侧，交给 Agent 的只能是公开 YAML 与受控工具。
 
+**2026-10-05 协议演化闭环 (v1.1–v1.3)**：
+- **v1.1**：落地四元组细粒度失败归因（`contracts/diagnostics.py`、`evaluator/diagnostics.py`）、`c360 audit-splits` 泛化与组合正交性审计、Baseline 多轮澄清状态机与交互测试网、离线现代 HTML 诊断看板；
+- **v1.2**：落地受控逻辑计划校验引擎 `validate_query_plan`（8 类稳定拒绝码）、指标生命周期管理（`active` / `deprecated` / `retired`）、Baseline 前置规划自检拦截、`c360 audit-metadata` 静态拓扑闭包审计；
+- **v1.3**：落地 SQLGlot 跨方言转译器（DuckDB <-> PostgreSQL）、多引擎网关抽象（`BaseExecutionGateway`、`DuckDBExecutionGateway`、`PostgreSQLExecutionGateway`）、双重超时物理回收守护、阶段拆分性能采样模型（`plan_ms`/`guard_ms`/`exec_ms`/`e2e_ms` 及 P50/P90/P95/P99 分位数）、`c360 transpile-sql` 命令行。
+全量 65 项自动化测试、Ruff 规范与 `c360 doctor` 诊断全部通过。
+
 阅读顺序：要跑命令先读 [使用说明](docs/user-guide.md)；改代码读 AGENTS.md → 本文件 → docs/architecture.md → docs/data_dictionary.md → ROADMAP.md；公开到 GitHub 读 [docs/github-publish.md](docs/github-publish.md) 与 [CONTRIBUTING.md](CONTRIBUTING.md)。原方案继续保留，矛盾处理见 ROADMAP。
 
 ## 2. 已完成与尚未完成
@@ -56,6 +62,9 @@
 | M5 官方 Baseline | `c360 run-case --agent baseline` 与 `evaluate --agent baseline`：公开元数据检索→本地 adapter 规划→候选 SQL→网关；记录参数/重试/缓存/network_used；TemplateAgent 仍可选用但不是官方；外部 gpt/openai/network 标识 fail-closed |
 | 正式评分协议 1.0 | 已实现：`c360 evaluate-public` / `evaluate-hidden --formal` 写 evaluator 0.6 `formal_input`；`c360 score` 分别输出 public_dev / private_hidden；`ranking_enabled=false`。历史 `evaluate --mode scoring` 仍拒绝 |
 | 正式 RC 发布关卡 | 工具链已落地：Apache-2.0、Dockerfile、SHA256/SBOM、`prepare-formal-release`/`check-formal-release`。八个 RC 门为严格内容校验（D057）。当前 7/8 门已就绪，本机因无 Linux/Docker 环境，`docker_runtime` 留待 CI/Linux 运行签署，不打 `v1.0.0` |
+| v1.1 诊断与交互加固 | 已实现：四元组失败归因（`contracts/diagnostics.py`、`evaluator/diagnostics.py`）、`c360 audit-splits` 泛化正交审计、多轮澄清收敛/持续模糊/越权拦截状态机、离线现代 HTML 诊断看板 |
+| v1.2 计划校验与元数据 | 已实现：受控计划校验引擎 `validate_query_plan`（8 类稳定拒绝码）、指标生命周期（active/deprecated/retired）、Baseline 前置规划自检拦截、`c360 audit-metadata` 静态拓扑闭包审计 |
+| v1.3 引擎适配与性能采样 | 已实现：SQLGlot 跨方言转译（DuckDB <-> Postgres）、多引擎网关抽象（`BaseExecutionGateway`/`PostgreSQLExecutionGateway`）、双重超时物理回收、阶段拆分性能采样（`phase_stats` P50/P90/P95/P99）、`c360 transpile-sql` |
 | FastAPI、任意插件沙箱、私有竞赛部署、外部模型 | 未实现；网络 adapter 仍 fail-closed |
 
 本地使用 uv 管理的 Python 3.11.15 和项目 .venv；代码库已对齐远程 main 分支，八项门全过前保持干净未打标签状态。
@@ -85,6 +94,10 @@ uv run c360 check-formal-release --input outputs/<正式发布目录>
 uv run c360 evaluate --dataset outputs/<Tiny seed42> --distribution-variant outputs/<seed43> --duplicate-variant outputs/<fanout> --null-variant outputs/<null> --date-variant outputs/<date> --agent template --mode same_sql --output outputs/<矩阵目录>
 uv run c360 run-case --case-id C360_0001 --agent baseline --dataset outputs/<Tiny seed42> --output outputs/<单题目录>
 uv run c360 report --input outputs/<上述矩阵目录> --format json
+uv run c360 audit-splits
+uv run c360 audit-metadata
+uv run c360 transpile-sql --sql "SELECT COUNT(DISTINCT customer_id) AS cnt FROM dim_customer"
+uv run c360 diagnose --input outputs/<上述矩阵目录> --output outputs/<诊断看板目录>
 uv run c360 generate-data --scale tiny --seed 42 --output outputs/<新目录>
 uv run c360 generate-data --scale standard --seed 42 --output outputs/<Standard目录>
 uv run c360 generate-data --scale tiny --seed 43 --output outputs/<变体目录>
