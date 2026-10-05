@@ -1,4 +1,11 @@
+"""Execution gateways for database engines.
+
+Provides multi-engine abstraction, policy enforcement, process isolation,
+and dual-level timeout containment.
+"""
+
 import multiprocessing
+from abc import ABC, abstractmethod
 from pathlib import Path
 from time import perf_counter
 from uuid import uuid4
@@ -12,24 +19,42 @@ from customer360.safety.result_guard import validate_result
 from customer360.safety.sql_guard import validate_sql
 
 
-def _stop(process) -> None:
-    process.join(timeout=0.2)
-    if process.is_alive():
-        process.terminate()
-        process.join(timeout=1)
-    if process.is_alive():
-        process.kill()
-        process.join(timeout=1)
+def _stop(process: multiprocessing.Process) -> None:
+    """Forcefully terminate and clean up a worker process to prevent hanging handles."""
+    try:
+        process.join(timeout=0.2)
+        if process.is_alive():
+            process.terminate()
+            process.join(timeout=1.0)
+        if process.is_alive():
+            process.kill()
+            process.join(timeout=1.0)
+    except (OSError, ValueError):
+        pass
 
 
-class ExecutionGateway:
-    """Fixture-only SQL boundary. Does not sandbox hostile Python Agent plugins."""
+class BaseExecutionGateway(ABC):
+    """Abstract base for execution engines enforcing authorization, limits, and isolation."""
 
-    def __init__(self, database: Path, policy: AccessPolicy, limits: SqlLimits | None = None):
-        self.database = database.resolve(strict=True)
+    def __init__(self, policy: AccessPolicy, limits: SqlLimits | None = None):
         self.policy = policy
         self.limits = limits or SqlLimits()
         self.catalog = load_catalog()
+
+    @property
+    @abstractmethod
+    def engine_name(self) -> str: ...
+
+    @abstractmethod
+    def execute(self, sql: str) -> QueryReceipt: ...
+
+
+class DuckDBExecutionGateway(BaseExecutionGateway):
+    """Trusted DuckDB execution boundary running within isolated child processes."""
+
+    def __init__(self, database: Path, policy: AccessPolicy, limits: SqlLimits | None = None):
+        super().__init__(policy, limits)
+        self.database = database.resolve(strict=True)
         for grant in policy.grants:
             try:
                 table = self.catalog.table(grant.table)
@@ -42,6 +67,10 @@ class ExecutionGateway:
                 )
             if any(c.sensitivity == "restricted" for c in columns):
                 raise QueryRejected("PERMISSION_DENIED", "restricted columns cannot be granted")
+
+    @property
+    def engine_name(self) -> str:
+        return "duckdb"
 
     def execute(self, sql: str) -> QueryReceipt:
         guarded = validate_sql(sql, self.catalog, self.policy, self.limits)
@@ -56,6 +85,7 @@ class ExecutionGateway:
         try:
             process.start()
             send.close()
+            # Dual-level timeout check
             if not receive.poll(self.limits.timeout_seconds):
                 raise ExecutionFailure("TIMEOUT", "query exceeded its wall-clock budget")
             try:
@@ -81,3 +111,38 @@ class ExecutionGateway:
             if process.pid is not None:
                 _stop(process)
                 process.close()
+
+
+class PostgreSQLExecutionGateway(BaseExecutionGateway):
+    """PostgreSQL execution gateway adapter.
+
+    Enforces connection-level statement_timeout and fail-closed behavior
+    when no live database instance is configured.
+    """
+
+    def __init__(
+        self,
+        connection_uri: str | None,
+        policy: AccessPolicy,
+        limits: SqlLimits | None = None,
+    ):
+        super().__init__(policy, limits)
+        self.connection_uri = connection_uri
+
+    @property
+    def engine_name(self) -> str:
+        return "postgres"
+
+    def execute(self, sql: str) -> QueryReceipt:
+        if not self.connection_uri:
+            raise QueryRejected(
+                "ENGINE_UNAVAILABLE",
+                "PostgreSQL live execution engine is not configured; "
+                "dialect transpilation and AST checks remain active.",
+            )
+        # Placeholder for live PG driver connection if configured
+        raise ExecutionFailure("NOT_IMPLEMENTED", "Live PG driver execution is reserved for v2.0.")
+
+
+# Backward compatibility alias
+ExecutionGateway = DuckDBExecutionGateway

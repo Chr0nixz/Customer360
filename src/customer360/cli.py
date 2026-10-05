@@ -34,6 +34,7 @@ from customer360.release import (
     prepare_formal_release,
     prepare_release,
 )
+from customer360.runtime.dialects import transpile_sql
 from customer360.synth.fixture import build_public_fixture
 from customer360.synth.generator import generate_dataset, load_generation_config
 from customer360.synth.schema import render_ddl
@@ -1015,6 +1016,34 @@ def audit_metadata_cmd(
     typer.echo(json_text(payload))
     if not report.passed:
         raise typer.Exit(1)
+
+
+@app.command("transpile-sql")
+def transpile_sql_cmd(
+    sql: Annotated[str, typer.Option(help="Input SQL query string to transpile")],
+    source: Annotated[
+        str,
+        typer.Option("--source", help="Source dialect: duckdb, postgres, ansi"),
+    ] = "duckdb",
+    target: Annotated[
+        str,
+        typer.Option("--target", help="Target dialect: duckdb, postgres, ansi"),
+    ] = "postgres",
+    output: Annotated[
+        Path | None,
+        typer.Option(help="Optional output path to write JSON transpiled result"),
+    ] = None,
+) -> None:
+    """Transpile a SQL query between supported engine dialects (DuckDB, PostgreSQL, ANSI)."""
+    try:
+        res = transpile_sql(sql, source_dialect=source, target_dialect=target)  # type: ignore[arg-type]
+        payload = res.model_dump(mode="json")
+        if output is not None:
+            write_json_new(output, payload)
+    except (OSError, ValueError) as exc:
+        typer.echo(f"SQL transpilation failed: {exc}", err=True)
+        raise typer.Exit(2) from exc
+    typer.echo(json_text(payload))
 
 
 if __name__ == "__main__":

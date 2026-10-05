@@ -41,6 +41,7 @@ PUBLIC_PERF_FIELDS = frozenset(
         "agent_id",
         "hardware",
         "versions",
+        "phase_stats",
     }
 )
 PUBLIC_PERF_FORBIDDEN = frozenset(
@@ -76,6 +77,24 @@ ROADMAP_TARGET_MS = {
 }
 
 
+class PerfPhaseBreakdown(Contract):
+    """Detailed phase latency breakdown for a single query."""
+
+    plan_ms: float = Field(default=0.0, ge=0.0)
+    guard_ms: float = Field(default=0.0, ge=0.0)
+    exec_ms: float = Field(default=0.0, ge=0.0)
+    e2e_ms: float = Field(default=0.0, ge=0.0)
+
+
+class PhasePercentileSummary(Contract):
+    """Percentile distribution for a latency phase."""
+
+    p50_ms: float | None = None
+    p90_ms: float | None = None
+    p95_ms: float | None = None
+    p99_ms: float | None = None
+
+
 class PerfQueryRecord(Contract):
     case_id: Text
     status: Literal["ok", "timeout", "input_limit", "execution_error", "rejected", "skipped"]
@@ -83,6 +102,7 @@ class PerfQueryRecord(Contract):
     elapsed_ms: float = Field(ge=0)
     truncated: bool = False
     row_count: int | None = Field(default=None, ge=0)
+    phases: PerfPhaseBreakdown | None = None
 
 
 class PerfEnvironment(Contract):
@@ -128,6 +148,7 @@ class PerfBaselineReport(Contract):
     p95_vs_complex_target: bool | None = None
     environment: PerfEnvironment
     limitations: tuple[Text, ...]
+    phase_stats: dict[str, PhasePercentileSummary] | None = None
     queries: tuple[PerfQueryRecord, ...] = ()
 
     @model_validator(mode="after")
@@ -172,6 +193,7 @@ class PublicPerfSummary(Contract):
     p95_vs_medium_target: bool | None = None
     p95_vs_complex_target: bool | None = None
     agent_id: Identifier | None = None
+    phase_stats: dict[str, PhasePercentileSummary] | None = None
     hardware: dict[str, Text | int | None]
     versions: dict[str, Text]
     limitations: tuple[Text, ...]

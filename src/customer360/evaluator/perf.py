@@ -24,7 +24,9 @@ from customer360.contracts.perf import (
     UNAVAILABLE,
     PerfBaselineReport,
     PerfEnvironment,
+    PerfPhaseBreakdown,
     PerfQueryRecord,
+    PhasePercentileSummary,
     PublicPerfSummary,
 )
 from customer360.contracts.public import AgentRequest
@@ -70,6 +72,18 @@ def _percentile(samples: tuple[float, ...], pct: float) -> float | None:
         return ordered[low]
     weight = rank - low
     return ordered[low] * (1.0 - weight) + ordered[high] * weight
+
+
+def _compute_phase_summary(samples: list[float]) -> PhasePercentileSummary:
+    if not samples:
+        return PhasePercentileSummary()
+    t = tuple(samples)
+    return PhasePercentileSummary(
+        p50_ms=_percentile(t, 50.0),
+        p90_ms=_percentile(t, 90.0),
+        p95_ms=_percentile(t, 95.0),
+        p99_ms=_percentile(t, 99.0),
+    )
 
 
 def _total_memory_mb() -> tuple[int | None, str]:
@@ -339,12 +353,27 @@ def collect_evaluate(
         )
         if truncated:
             status = "execution_error"
+
+        exec_ms = sum(
+            receipt.elapsed_ms
+            for round_audit in evaluation.rounds
+            for receipt in round_audit.receipts
+        )
+        e2e_ms = evaluation.elapsed_ms
+        plan_ms = max(0.0, e2e_ms - exec_ms)
+        phases = PerfPhaseBreakdown(
+            plan_ms=round(plan_ms, 2),
+            guard_ms=0.0,
+            exec_ms=round(exec_ms, 2),
+            e2e_ms=round(e2e_ms, 2),
+        )
         record = PerfQueryRecord(
             case_id=item.case_id,
             status=status,  # type: ignore[arg-type]
             reason_code=evaluation.reason_code,
             elapsed_ms=evaluation.elapsed_ms,
             truncated=truncated,
+            phases=phases,
         )
         queries.append(record)
         dumped = evaluation.model_dump(mode="json")
@@ -357,6 +386,14 @@ def collect_evaluate(
     success = sum(item.status == "ok" for item in queries)
     failure = len(queries) - success
     reasons = tuple(item.reason_code for item in queries if item.reason_code is not None)
+
+    phase_stats = {
+        "plan": _compute_phase_summary([q.phases.plan_ms for q in queries if q.phases]),
+        "guard": _compute_phase_summary([q.phases.guard_ms for q in queries if q.phases]),
+        "exec": _compute_phase_summary([q.phases.exec_ms for q in queries if q.phases]),
+        "e2e": _compute_phase_summary([q.phases.e2e_ms for q in queries if q.phases]),
+    }
+
     report = PerfBaselineReport(
         workload="evaluate",
         budget_profile=budget,
@@ -374,6 +411,7 @@ def collect_evaluate(
         reason_codes=reasons,
         environment=collect_environment(),
         limitations=LIMITATIONS,
+        phase_stats=phase_stats,
         queries=tuple(queries),
         **_targets(p95),
     )
@@ -401,6 +439,7 @@ def public_perf_summary(report: PerfBaselineReport) -> PublicPerfSummary:
         p95_vs_medium_target=report.p95_vs_medium_target,
         p95_vs_complex_target=report.p95_vs_complex_target,
         agent_id=report.agent_id,
+        phase_stats=report.phase_stats,
         hardware={
             "platform": env.platform,
             "machine": env.machine,
@@ -437,9 +476,29 @@ def _markdown(summary: PublicPerfSummary) -> str:
         f"- scan_count_status: `{summary.scan_count_status}`",
         f"- token_status: `{summary.token_status}`",
         "",
-        "## Limitations",
-        "",
     ]
+    if summary.phase_stats:
+        lines.extend(
+            [
+                "## Phase Latency Breakdown (ms)",
+                "",
+                "| Phase | P50 (ms) | P90 (ms) | P95 (ms) | P99 (ms) |",
+                "| --- | --- | --- | --- | --- |",
+            ]
+        )
+        for phase_name, stats in summary.phase_stats.items():
+            lines.append(
+                f"| {phase_name} | {stats.p50_ms or '-'} | {stats.p90_ms or '-'} | "
+                f"{stats.p95_ms or '-'} | {stats.p99_ms or '-'} |"
+            )
+        lines.append("")
+
+    lines.extend(
+        [
+            "## Limitations",
+            "",
+        ]
+    )
     lines.extend(f"- {item}" for item in summary.limitations)
     lines.append("")
     return "\n".join(lines)
