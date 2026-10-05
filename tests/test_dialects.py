@@ -72,3 +72,39 @@ def test_transpile_join_query_equivalence():
 
     pg_ast = sqlglot.parse_one(res.transpiled_sql, read="postgres")
     assert len(list(pg_ast.find_all(exp.Join))) == 1
+
+
+def test_transpile_hardening_invalid_inputs_and_unsupported_dialects():
+    import pytest
+
+    # 1. Empty SQL query must be rejected
+    with pytest.raises(ValueError, match="SQL query cannot be empty"):
+        transpile_sql("   ")
+
+    # 2. Unsupported source dialect
+    with pytest.raises(ValueError, match="unsupported source dialect"):
+        transpile_sql("SELECT 1", source_dialect="mysql")  # type: ignore[arg-type]
+
+    # 3. Unsupported target dialect
+    with pytest.raises(ValueError, match="unsupported target dialect"):
+        transpile_sql("SELECT 1", target_dialect="oracle")  # type: ignore[arg-type]
+
+    # 4. Parse error on malformed SQL
+    with pytest.raises(ValueError, match="SQL parsing failed"):
+        transpile_sql("SELECT FROM WHERE", source_dialect="duckdb")
+
+
+def test_postgresql_gateway_fail_closed_without_uri():
+    import pytest
+
+    from customer360.errors import QueryRejected
+    from customer360.runtime.gateway import PostgreSQLExecutionGateway
+    from customer360.tasks.variant import tiny_eval_policy
+
+    policy = tiny_eval_policy()
+    gateway = PostgreSQLExecutionGateway(connection_uri=None, policy=policy)
+    assert gateway.engine_name == "postgres"
+
+    with pytest.raises(QueryRejected) as exc_info:
+        gateway.execute("SELECT 1")
+    assert exc_info.value.code == "ENGINE_UNAVAILABLE"

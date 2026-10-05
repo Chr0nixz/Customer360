@@ -63,6 +63,10 @@ def transpile_sql(
     target_dialect: EngineDialect = "postgres",
 ) -> TranspiledQuery:
     """Transpile a query string from source dialect to target dialect using SQLGlot AST."""
+    stripped_sql = sql.strip()
+    if not stripped_sql:
+        raise ValueError("SQL query cannot be empty")
+
     source_key = str(source_dialect).lower()
     target_key = str(target_dialect).lower()
 
@@ -71,7 +75,11 @@ def transpile_sql(
     if target_key not in DIALECT_CAPABILITIES:
         raise ValueError(f"unsupported target dialect: {target_dialect}")
 
-    ast = sqlglot.parse_one(sql, read=source_key)
+    try:
+        ast = sqlglot.parse_one(stripped_sql, read=source_key)
+    except sqlglot.errors.ParseError as exc:
+        raise ValueError(f"SQL parsing failed for dialect '{source_key}': {exc}") from exc
+
     differences: list[str] = []
 
     # 1. Stabilize NULLs ordering on any Order expressions

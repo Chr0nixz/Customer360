@@ -75,9 +75,10 @@ def _percentile(samples: tuple[float, ...], pct: float) -> float | None:
 
 
 def _compute_phase_summary(samples: list[float]) -> PhasePercentileSummary:
-    if not samples:
+    valid_samples = [float(s) for s in samples if s is not None and math.isfinite(s) and s >= 0.0]
+    if not valid_samples:
         return PhasePercentileSummary()
-    t = tuple(samples)
+    t = tuple(valid_samples)
     return PhasePercentileSummary(
         p50_ms=_percentile(t, 50.0),
         p90_ms=_percentile(t, 90.0),
