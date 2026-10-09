@@ -15,7 +15,8 @@ from customer360.contracts.validation import (
     QueryPlanValidationRequest,
     QueryPlanValidationResponse,
 )
-from customer360.metadata.metrics import EXECUTABLE_JOIN_PATH, MetadataRepository
+from customer360.metadata.metrics import MetadataRepository
+from customer360.metadata.models import EXECUTABLE_JOIN_PATHS
 
 
 def _is_valid_date_str(val: Any) -> bool:
@@ -121,8 +122,9 @@ def validate_query_plan(
 
     # 4. Check join path
     join_target_def = None
+    right_table_name = None
     if request.join_path is not None:
-        if request.join_path != EXECUTABLE_JOIN_PATH:
+        if request.join_path not in EXECUTABLE_JOIN_PATHS:
             issues.append(
                 QueryPlanIssue(
                     code="UNSUPPORTED_JOIN_PATH",
@@ -132,32 +134,43 @@ def validate_query_plan(
             )
         else:
             try:
-                join_target_def = catalog.table("fact_transaction")
-                if granted_tables is not None and "fact_transaction" not in granted_tables:
+                join_path_def = next(
+                    (p for p in repository.join_paths.paths if p.path_name == request.join_path),
+                    None,
+                )
+                if join_path_def is None:
+                    raise KeyError(request.join_path)
+                right_table_name = join_path_def.right_table
+                join_target_def = catalog.table(right_table_name)
+                if granted_tables is not None and right_table_name not in granted_tables:
                     issues.append(
                         QueryPlanIssue(
                             code="UNSUPPORTED_JOIN_PATH",
-                            field="fact_transaction",
-                            message="Join target table 'fact_transaction' is not granted.",
+                            field=right_table_name,
+                            message=f"Join target table '{right_table_name}' is not granted.",
                         )
                     )
             except KeyError:
                 issues.append(
                     QueryPlanIssue(
                         code="UNSUPPORTED_JOIN_PATH",
-                        field="fact_transaction",
-                        message="Table 'fact_transaction' does not exist in catalog.",
+                        field=str(request.join_path),
+                        message=(
+                            f"Join target table for '{request.join_path}' "
+                            "does not exist in catalog."
+                        ),
                     )
                 )
 
     # 5. Check predicates (allowed columns, type compatibility)
     has_transaction_success_filter = False
+    has_cash_flow_success_filter = False
     for pred in request.predicates:
         target_table_def = table_def
         target_table_name = request.source_table
-        if pred.alias == "t" and join_target_def is not None:
+        if pred.alias in {"t", "cf", "h", "a", "sr"} and join_target_def is not None:
             target_table_def = join_target_def
-            target_table_name = "fact_transaction"
+            target_table_name = right_table_name or join_target_def.table_name
 
         # Check column existence & grant
         col_def = None
@@ -190,18 +203,33 @@ def validate_query_plan(
             and ("success",) in (pred.values,)
         ):
             has_transaction_success_filter = True
+        if (
+            target_table_name == "fact_cash_flow"
+            and pred.field == "status"
+            and pred.operator == "eq"
+            and ("success",) in (pred.values,)
+        ):
+            has_cash_flow_success_filter = True
 
         # Check predicate literals compatibility
         if col_def is not None:
             _check_predicate_literals(pred, col_def, issues)
 
     # 6. Check required join predicates
-    if request.join_path == EXECUTABLE_JOIN_PATH and not has_transaction_success_filter:
+    if request.join_path == "customer_transactions" and not has_transaction_success_filter:
         issues.append(
             QueryPlanIssue(
                 code="INVALID_JOIN_PREDICATES",
                 field="status",
                 message="Join with fact_transaction requires 'status = success' predicate.",
+            )
+        )
+    if request.join_path == "customer_cash_flows" and not has_cash_flow_success_filter:
+        issues.append(
+            QueryPlanIssue(
+                code="INVALID_JOIN_PREDICATES",
+                field="status",
+                message="Join with fact_cash_flow requires 'status = success' predicate.",
             )
         )
 

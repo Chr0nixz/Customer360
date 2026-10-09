@@ -1,5 +1,7 @@
 # Customer360 使用说明
 
+[English](en/user-guide.md) | [简体中文](user-guide.md)
+
 面向要**安装、生成数据、跑 Agent、看报告**的人。开发约定见 [AGENTS.md](../AGENTS.md)，架构边界见 [architecture.md](architecture.md)，正式发布关卡见 [formal-release.md](formal-release.md)。
 
 这是一套可复现、默认可安全执行的**本地离线** Agent benchmark，不是在线问数服务，也不是排行榜。
@@ -239,7 +241,7 @@ outputs/score-local/
 | `wrong` | 负对照，故意失败 |
 | `gpt` / `openai` / `anthropic` / `network` / `llm` | 立即失败。未许可外部模型 |
 
-自己写 Agent：实现 `Agent.respond(request, tools)`（见 `src/customer360/agent/protocol.py`）。工具包括 `execute_sql`、`search_tables`、`search_columns`、`search_metrics`、`get_table_schema`、`get_metric_definition`、`get_business_glossary`、`get_join_paths`。必须是本机可信 Python；CLI 不接收任意上传插件。检索结果已按授权表/列过滤。
+自己写 Agent：实现 `Agent.respond(request, tools)`（见 `src/customer360/agent/protocol.py` 与详细接入文档 [agent-integration-guide.md](agent-integration-guide.md)）。工具包括 `execute_sql`、`search_tables`、`search_columns`、`search_metrics`、`get_table_schema`、`get_metric_definition`、`get_business_glossary`、`get_join_paths`、`validate_query_plan`。必须是本机可信 Python；CLI 不接收任意上传插件。检索结果已按授权表/列过滤。
 
 成功回答需要：协议 `success`、真实执行回执、SQL 与回执一致、结果与参考一致。只写一句自然语言答案不得分。
 
@@ -336,6 +338,7 @@ docker run --rm --read-only --network=none --user 10001 c360:local smoke --outpu
 | 文档 | 内容 |
 |---|---|
 | [README.md](../README.md) | 项目入口和最短验证 |
+| [Agent 接入与使用指南](agent-integration-guide.md) | 自定义 Agent 接口实现、协议结构与评测范例 |
 | [AGENTS.md](../AGENTS.md) | 开发协作与安全默认 |
 | [HANDOFF.md](../HANDOFF.md) | 当前完成范围和下一步 |
 | [ROADMAP.md](../ROADMAP.md) | 里程碑和评分协议 |

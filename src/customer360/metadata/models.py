@@ -37,6 +37,17 @@ class JoinHop(Contract):
     right_column: Identifier
 
 
+EXECUTABLE_JOIN_PATHS = frozenset(
+    {
+        "customer_transactions",
+        "customer_cash_flows",
+        "customer_holdings",
+        "customer_asset_snapshots",
+        "customer_service_relations",
+    }
+)
+
+
 class JoinPath(Contract):
     path_name: Identifier
     left_table: Identifier
@@ -63,10 +74,10 @@ class JoinPath(Contract):
             ),
         )
         object.__setattr__(self, "hops", hops)
-        if self.compile_status == "executable" and self.path_name != "customer_transactions":
-            raise ValueError("only customer_transactions is executable")
-        if self.path_name == "customer_transactions" and self.compile_status != "executable":
-            raise ValueError("customer_transactions must be executable")
+        if self.compile_status == "executable" and self.path_name not in EXECUTABLE_JOIN_PATHS:
+            raise ValueError(f"only {sorted(EXECUTABLE_JOIN_PATHS)} can be executable")
+        if self.path_name in EXECUTABLE_JOIN_PATHS and self.compile_status != "executable":
+            raise ValueError(f"{self.path_name} must be executable")
         return self
 
     def tables(self) -> frozenset[str]:

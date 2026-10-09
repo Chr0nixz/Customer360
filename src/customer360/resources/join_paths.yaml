@@ -1,4 +1,4 @@
-join_paths_version: "0.1"
+join_paths_version: "0.2"
 paths:
   - path_name: customer_transactions
     left_table: dim_customer
@@ -20,6 +20,7 @@ paths:
     right_column: customer_id
     cardinality: one_to_many
     target_grain: customer
+    compile_status: executable
     time_validity: fact_cash_flow.flow_date rolling window required
     duplicate_count_risk: one customer has many flows; customer grain needs distinct customer_id
     pre_aggregation: aggregate flows before counting customers
@@ -32,6 +33,7 @@ paths:
     right_column: customer_id
     cardinality: one_to_many
     target_grain: customer
+    compile_status: executable
     time_validity: holding snapshot_date must be named or latest; not a rolling window
     duplicate_count_risk: multiple products per customer per date
     pre_aggregation: decide customer vs holding grain before counting
@@ -44,6 +46,7 @@ paths:
     right_column: customer_id
     cardinality: one_to_many
     target_grain: customer_snapshot
+    compile_status: executable
     time_validity: named snapshot_date equality; not latest-snapshot
     duplicate_count_risk: multiple valuation dates per customer
     pre_aggregation: filter one snapshot_date before SUM
@@ -56,6 +59,7 @@ paths:
     right_column: customer_id
     cardinality: one_to_many
     target_grain: service_relation
+    compile_status: executable
     time_validity: interval [start_date, end_date); NULL end means ongoing
     duplicate_count_risk: historical relations fan out; relation count is not distinct customers
     pre_aggregation: apply is_primary and end_date before counting

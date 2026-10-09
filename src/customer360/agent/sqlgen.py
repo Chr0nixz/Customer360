@@ -93,8 +93,17 @@ def _aggregate(plan: QueryPlan) -> str:
     raise ValueError(f"unsupported operation: {plan.operation}")
 
 
+JOIN_TABLE_SPECS: dict[str, tuple[str, str]] = {
+    "customer_transactions": ("fact_transaction", "t"),
+    "customer_cash_flows": ("fact_cash_flow", "cf"),
+    "customer_holdings": ("fact_holding", "h"),
+    "customer_asset_snapshots": ("fact_asset_snapshot", "a"),
+    "customer_service_relations": ("fact_service_relation", "sr"),
+}
+
+
 def render_sql(plan: QueryPlan) -> str:
-    if plan.join_path and plan.join_path != "customer_transactions":
+    if plan.join_path and plan.join_path not in JOIN_TABLE_SPECS:
         raise ValueError("join path is not executable")
     if plan.latest_anchor is not None:
         if plan.predicates or plan.group_by or plan.join_path or not plan.time_column:
@@ -115,12 +124,23 @@ def render_sql(plan: QueryPlan) -> str:
     where = ""
     if plan.predicates:
         where = " WHERE " + " AND ".join(_predicate(item) for item in plan.predicates)
-    if plan.join_path == "customer_transactions":
+    if plan.join_path:
+        right_table, alias = JOIN_TABLE_SPECS[plan.join_path]
         expression = f'COUNT(DISTINCT "c"."{plan.measure_column}")'
+        if plan.group_by:
+            keys = ", ".join(f'"c"."{name}" AS "{name}"' for name in plan.group_by)
+            grouped = " GROUP BY " + ", ".join(f'"c"."{name}"' for name in plan.group_by)
+            return (
+                f'SELECT {keys}, {expression} AS "{plan.output_column}" '
+                f'FROM "dim_customer" AS "c" '
+                f'JOIN "{right_table}" AS "{alias}" ON "c"."customer_id" = "{alias}"."customer_id"'
+                f"{where}{grouped}"
+            )
         return (
             f'SELECT {expression} AS "{plan.output_column}" '
-            'FROM "dim_customer" AS "c" '
-            'JOIN "fact_transaction" AS "t" ON "c"."customer_id" = "t"."customer_id"' + where
+            f'FROM "dim_customer" AS "c" '
+            f'JOIN "{right_table}" AS "{alias}" ON "c"."customer_id" = "{alias}"."customer_id"'
+            + where
         )
     expression = _aggregate(plan)
     if plan.group_by:

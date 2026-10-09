@@ -18,6 +18,8 @@ from customer360.tasks.independent import compute_independent
 from customer360.tasks.slices import load_table_slices
 from customer360.tasks.variant import _sql_result, build_variant_replay
 
+pytestmark = pytest.mark.slow
+
 ANCHOR = date(2025, 6, 30)
 runner = CliRunner()
 

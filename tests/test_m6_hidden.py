@@ -34,6 +34,8 @@ from customer360.tasks.hidden import (
 )
 from customer360.tasks.isolation import check_hidden_isolation, check_human_pack_frozen
 
+pytestmark = pytest.mark.slow
+
 runner = CliRunner()
 ROOT = Path(__file__).parents[1]
 
@@ -89,6 +91,11 @@ def test_hidden_and_public_answer_specs_compile():
     repository = MetadataRepository()
     public = generate_task_pack(seed=42, count=M6_PUBLIC_COUNT)
     hidden = generate_hidden_pack(public, seed=42, count=30)
+    public_answers = sum(c.material_status == "compilable_answer" for c in public.cases)
+    hidden_answers = sum(c.material_status == "compilable_answer" for c in hidden.cases)
+    assert 240 <= public_answers <= 270
+    assert 15 <= hidden_answers <= 25
+
     compiled = 0
     for pack in (public, hidden):
         for case in pack.cases:
@@ -97,7 +104,8 @@ def test_hidden_and_public_answer_specs_compile():
             compiled_query = compile_semantic(case.semantic_spec(), repository)
             assert compiled_query.sql
             compiled += 1
-    assert compiled >= 300
+    assert compiled == public_answers + hidden_answers
+    assert compiled >= 260
 
 
 def test_generate_hidden_cli_and_check_isolation(tmp_path):

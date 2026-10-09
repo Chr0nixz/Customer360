@@ -157,9 +157,9 @@ def _cell(value):
     raise ValueError("unsupported result cell")
 
 
-def run_worker(
-    pipe: Connection, database: str, query: GuardedQuery, policy: AccessPolicy, limits: SqlLimits
-) -> None:
+def execute_worker_query(
+    database: str, query: GuardedQuery, policy: AccessPolicy, limits: SqlLimits
+) -> dict:
     source = scoped = None
     try:
         settings = {
@@ -179,10 +179,7 @@ def run_worker(
                     database, table_names, grants, catalog, policy, limits, settings
                 )
             except _InputLimit:
-                pipe.send(
-                    {"error": "INPUT_LIMIT", "message": "fixture materialization limit exceeded"}
-                )
-                return
+                return {"error": "INPUT_LIMIT", "message": "fixture materialization limit exceeded"}
         else:
             source = duckdb.connect(database, read_only=True, config=settings)
             materialized: dict[str, tuple[tuple, ...]] = {}
@@ -197,13 +194,10 @@ def run_worker(
                     source, select_columns, table_name, policy.customer_ids, cap
                 )
                 if len(rows) > cap:
-                    pipe.send(
-                        {
-                            "error": "INPUT_LIMIT",
-                            "message": "fixture materialization limit exceeded",
-                        }
-                    )
-                    return
+                    return {
+                        "error": "INPUT_LIMIT",
+                        "message": "fixture materialization limit exceeded",
+                    }
                 materialized[table_name] = tuple(rows)
                 definitions[table_name] = ", ".join(
                     f'"{c.column_name}" {_SQL_TYPES[c.kind]}' for c in columns
@@ -223,6 +217,23 @@ def run_worker(
             contributors = scoped.execute(query.contributor_sql).fetchone()[0]
         elif query.tables:
             contributors = scoped.execute(query.sql).fetchone()[0]
+        elif tree.args.get("group"):
+            group_expr = tree.args["group"].expressions[0]
+            group_col_name = group_expr.name if hasattr(group_expr, "name") else str(group_expr)
+            where = tree.args.get("where")
+            where_sql = f" {where.sql(dialect='duckdb')}" if where is not None else ""
+            support_sql = (
+                f"SELECT COALESCE(MIN(cnt), 0) FROM ("
+                f'SELECT COUNT(DISTINCT customer_id) AS cnt FROM "{query.table}"'
+                f'{where_sql} GROUP BY "{group_col_name}")'
+            )
+            try:
+                contributors = scoped.execute(support_sql).fetchone()[0]
+            except Exception:
+                return {
+                    "rejected": "AGGREGATION_TOO_SMALL",
+                    "message": "cannot reliably verify minimum aggregation size for grouped query",
+                }
         else:
             where = tree.args.get("where")
             support_sql = f'SELECT COUNT(DISTINCT customer_id) FROM "{query.table}"'
@@ -230,13 +241,10 @@ def run_worker(
                 support_sql += " " + where.sql(dialect="duckdb")
             contributors = scoped.execute(support_sql).fetchone()[0]
         if contributors < policy.min_group_size:
-            pipe.send(
-                {
-                    "rejected": "AGGREGATION_TOO_SMALL",
-                    "message": "query does not meet minimum aggregation size",
-                }
-            )
-            return
+            return {
+                "rejected": "AGGREGATION_TOO_SMALL",
+                "message": "query does not meet minimum aggregation size",
+            }
         cursor = scoped.execute(query.sql)
         result_rows = cursor.fetchmany(limits.max_rows + 1)
         result = QueryResult(
@@ -247,13 +255,22 @@ def run_worker(
             rows=tuple(tuple(_cell(v) for v in row) for row in result_rows[: limits.max_rows]),
             truncated=len(result_rows) > limits.max_rows,
         )
-        pipe.send({"result": result.model_dump(mode="json")})
+        return {"result": result.model_dump(mode="json")}
     except Exception:
         # Never send raw DB error/paths/data back across the Agent boundary.
-        pipe.send({"error": "EXECUTION_ERROR", "message": "query worker failed"})
+        return {"error": "EXECUTION_ERROR", "message": "query worker failed"}
     finally:
         if source is not None:
             source.close()
         if scoped is not None:
             scoped.close()
+
+
+def run_worker(
+    pipe: Connection, database: str, query: GuardedQuery, policy: AccessPolicy, limits: SqlLimits
+) -> None:
+    try:
+        payload = execute_worker_query(database, query, policy, limits)
+        pipe.send(payload)
+    finally:
         pipe.close()

@@ -1,5 +1,7 @@
 # Customer360 协议与能力演化设计规范 (v1.1 – v1.3)
 
+[English](en/future-protocols-v1.1-v1.3.md) | [简体中文](future-protocols-v1.1-v1.3.md)
+
 文档版本：v1.3-implemented  
 实施状态：v1.1 诊断增强 (已落地)、v1.2 元数据演化 (已落地)、v1.3 引擎适配 (已落地)  
 约束条件：不改变 v1.0 评分权重、不改变 30 个指标业务口径、不泄漏隐藏集、不放宽 SQL Guard 与权限边界。

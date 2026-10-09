@@ -28,7 +28,7 @@ def test_bundled_catalog_is_self_consistent(repository):
         "columns": column_count,
         "metrics": 30,
         "join_paths": 20,
-        "executable_join_paths": 1,
+        "executable_join_paths": 5,
         "foreign_keys": 8,
         "glossary_entries": 9 + column_count + 30,
         "checks_passed": True,
@@ -104,7 +104,13 @@ def test_join_paths_are_reviewed_business_paths(repository):
     paths = repository.get_join_paths("")
     assert len(paths) == 20
     executable = [path.path_name for path in paths if path.compile_status == "executable"]
-    assert executable == ["customer_transactions"]
+    assert set(executable) == {
+        "customer_transactions",
+        "customer_cash_flows",
+        "customer_holdings",
+        "customer_asset_snapshots",
+        "customer_service_relations",
+    }
     names = [path.path_name for path in paths]
     assert len(set(names)) == 20
     assert "customer_managers" in names

@@ -109,7 +109,7 @@ def compute_independent(
     if spec.join is not None:
         if spec.group_by:
             raise C360Error("JOIN_ERROR", "joined queries cannot group")
-        return _compute_customer_transaction_join(spec, repository, slices, metric)
+        return _compute_customer_join(spec, repository, slices, metric)
     if spec.group_by:
         allowed_groups = set(metric.allowed_group_dimensions)
         if any(name not in allowed_groups for name in spec.group_by):
@@ -205,40 +205,110 @@ def compute_independent(
     )
 
 
-def _compute_customer_transaction_join(
+INDEPENDENT_JOIN_SPECS = {
+    "customer_transactions": {
+        "right_table": "fact_transaction",
+        "allowed_columns": {
+            "customer_id",
+            "product_id",
+            "transaction_type",
+            "channel",
+            "transaction_date",
+            "status",
+        },
+        "time_column": "transaction_date",
+        "window_kind": "rolling",
+    },
+    "customer_cash_flows": {
+        "right_table": "fact_cash_flow",
+        "allowed_columns": {
+            "customer_id",
+            "channel",
+            "flow_type",
+            "flow_date",
+            "status",
+        },
+        "time_column": "flow_date",
+        "window_kind": "rolling",
+    },
+    "customer_holdings": {
+        "right_table": "fact_holding",
+        "allowed_columns": {
+            "customer_id",
+            "product_id",
+            "holding_status",
+            "snapshot_date",
+        },
+        "time_column": "snapshot_date",
+        "window_kind": "pit",
+    },
+    "customer_asset_snapshots": {
+        "right_table": "fact_asset_snapshot",
+        "allowed_columns": {
+            "customer_id",
+            "snapshot_date",
+        },
+        "time_column": "snapshot_date",
+        "window_kind": "pit",
+    },
+    "customer_service_relations": {
+        "right_table": "fact_service_relation",
+        "allowed_columns": {
+            "customer_id",
+            "manager_id",
+            "is_primary",
+            "start_date",
+            "end_date",
+        },
+        "time_column": None,
+        "window_kind": None,
+    },
+}
+
+
+def _compute_customer_join(
     spec: SemanticSpec,
     repository: MetadataRepository,
     slices: dict[str, TableSlice],
     metric: MetricDef,
 ) -> QueryResult:
-    if spec.join.path != "customer_transactions" or metric.metric_name != "distinct_customer_count":
-        raise C360Error("JOIN_ERROR", "only customer transaction count join is supported")
+    supported = (
+        spec.join.path in INDEPENDENT_JOIN_SPECS and metric.metric_name == "distinct_customer_count"
+    )
+    if not supported:
+        raise C360Error("JOIN_ERROR", "only distinct customer count join is supported")
+    path_def = INDEPENDENT_JOIN_SPECS[spec.join.path]
+    right_table_name = path_def["right_table"]
     customer = slices["dim_customer"]
-    transaction = slices["fact_transaction"]
+    right_slice = slices[right_table_name]
     customer_table = repository.catalog.table("dim_customer")
-    transaction_table = repository.catalog.table("fact_transaction")
+    right_table = repository.catalog.table(right_table_name)
+
     for item in spec.filters:
         if item.field not in metric.allowed_filter_columns:
             raise C360Error("JOIN_ERROR", f"customer filter is not allowed: {item.field}")
         kind = customer_table.column(item.field).kind
         for value in item.values:
             _coerce(kind, value)
+
+    allowed_right_fields = path_def["allowed_columns"]
     for item in spec.join.filters:
-        if item.field not in {
-            "product_id",
-            "transaction_type",
-            "channel",
-            "transaction_date",
-            "status",
-        }:
-            raise C360Error("JOIN_ERROR", f"transaction filter is not allowed: {item.field}")
-        kind = transaction_table.column(item.field).kind
+        if item.field not in allowed_right_fields:
+            raise C360Error("JOIN_ERROR", f"join filter is not allowed: {item.field}")
+        kind = right_table.column(item.field).kind
         for value in item.values:
             _coerce(kind, value)
-    if spec.join.time_window is None:
-        raise C360Error("TIME_RANGE_ERROR", "joined transaction query requires a rolling window")
+
+    if path_def["window_kind"] == "rolling":
+        if spec.join.time_window is None or not isinstance(spec.join.time_window, RollingWindow):
+            msg = f"joined {spec.join.path} query requires a rolling window"
+            raise C360Error("TIME_RANGE_ERROR", msg)
+
     customer_id = customer.index("customer_id")
-    transaction_customer_id = transaction.index("customer_id")
+    right_customer_id = right_slice.index("customer_id")
+    time_col = path_def["time_column"]
+    time_idx = right_slice.index(time_col) if time_col else -1
+
     matched_ids = set()
     for customer_row in customer.rows:
         if any(
@@ -248,27 +318,42 @@ def _compute_customer_transaction_join(
             for item in spec.filters
         ):
             continue
-        for transaction_row in transaction.rows:
-            if transaction_row[transaction_customer_id] != customer_row[customer_id]:
+
+        for right_row in right_slice.rows:
+            if right_row[right_customer_id] != customer_row[customer_id]:
                 continue
-            transaction_date = transaction_row[transaction.index("transaction_date")]
-            if (
-                not spec.join.time_window.start_date
-                <= transaction_date
-                <= spec.join.time_window.anchor_date
-            ):
-                continue
+
+            if path_def["window_kind"] == "rolling":
+                row_date = right_row[time_idx]
+                in_window = (
+                    spec.join.time_window.start_date
+                    <= row_date
+                    <= spec.join.time_window.anchor_date
+                )
+                if not in_window:
+                    continue
+            elif path_def["window_kind"] == "pit" and spec.join.time_window is not None:
+                row_date = right_row[time_idx]
+                if isinstance(spec.join.time_window, PointInTime):
+                    if row_date != spec.join.time_window.snapshot_date:
+                        continue
+                elif isinstance(spec.join.time_window, LatestSnapshot):
+                    if row_date > spec.join.time_window.anchor_date:
+                        continue
+
             if any(
                 not _matches_filter(
-                    transaction_row[transaction.index(item.field)],
+                    right_row[right_slice.index(item.field)],
                     item,
-                    transaction.kind(item.field),
+                    right_slice.kind(item.field),
                 )
                 for item in spec.join.filters
             ):
                 continue
+
             matched_ids.add(customer_row[customer_id])
             break
+
     return QueryResult(
         columns=(Column(name=metric.output_column, kind="integer"),),
         rows=((len(matched_ids),),),

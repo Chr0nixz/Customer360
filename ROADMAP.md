@@ -1,5 +1,7 @@
 # Customer360 Agent Benchmark Roadmap
 
+[English](ROADMAP_EN.md) | [简体中文](ROADMAP.md)
+
 > 文档版本：v0.2；编写日期：2026-09-16；审阅更新：2026-09-18（基于 `Customer360-Agent-Benchmark-Implementation-Plan.md`）  
 > 状态：M0–M7、正式评分协议 1.0、evaluator 0.6、四个私有隐藏变体 provenance/same-SQL replay、Apache-2.0、Docker、SHA256/SBOM 和 formal release 工具链已实现；GitHub 社区文件、公开树忽略规则和发布清单已就绪。RC evidence gates 尚未在本地全部签署，因此暂不打 v1.0.0 标签。public_dev/private_hidden 分开报告且不排名。在线服务、在线排行榜、外部模型 API、PostgreSQL 和不可信 Python OS 沙箱仍明确不在范围内。本文版本不代表软件或评测协议版本。Linux/Windows 工作流已入库，远程运行结果以平台记录为准。  
 > 目标：把方案落成一个可复现、可审计、可扩展的 Customer360 Agent 评测基准。CLI 用法见 [使用说明](docs/user-guide.md)。

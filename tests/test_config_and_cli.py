@@ -102,7 +102,7 @@ def test_doctor_runs_from_another_cwd(monkeypatch, tmp_path):
     assert payload["tables"] == 9
     assert payload["metrics"] == 30
     assert payload["join_paths"] == 20
-    assert payload["executable_join_paths"] == 1
+    assert payload["executable_join_paths"] == 5
     assert payload["foreign_keys"] == 8
     assert payload["checks_passed"] is True
     assert (

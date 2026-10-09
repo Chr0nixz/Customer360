@@ -84,11 +84,69 @@ def generate_hidden_pack(
     fill_needed = count - REQUIRED_COUNT
     if len(fill_pool) < fill_needed:
         raise ValueError("not enough independent families for the hidden pack")
-    rng = Random(seed)
-    fill_ids = [family_id for family_id, _draft in fill_pool]
-    rng.shuffle(fill_ids)
     fill_map = dict(fill_pool)
-    chosen = required + [fill_map[family_id] for family_id in fill_ids[:fill_needed]]
+
+    by_category: dict[str, list[str]] = {}
+    for fid, draft in fill_pool:
+        by_category.setdefault(draft.category, []).append(fid)
+
+    rng = Random(seed)
+    for cat_list in by_category.values():
+        rng.shuffle(cat_list)
+
+    if count >= 60:
+        quotas = {
+            "join": 6,
+            "grouping": 6,
+            "time_window": 4,
+            "point_in_time": 4,
+            "null_handling": 8,
+            "clarification": 14,
+            "refuse": 10,
+        }
+    else:
+        ratio = count / 60.0
+        quotas = {
+            "join": max(2, round(6 * ratio)),
+            "grouping": max(2, round(6 * ratio)),
+            "time_window": max(1, round(4 * ratio)),
+            "point_in_time": max(1, round(4 * ratio)),
+            "null_handling": max(2, round(8 * ratio)),
+            "clarification": max(3, round(14 * ratio)),
+            "refuse": max(2, round(10 * ratio)),
+        }
+
+    chosen_ids: list[str] = []
+    chosen_set: set[str] = set()
+    seen_metrics = {draft.metric for draft in required if draft.metric}
+    for cat, quota in quotas.items():
+        available = by_category.get(cat, [])
+        available_sorted = sorted(
+            available,
+            key=lambda fid: (
+                0 if fill_map[fid].metric and fill_map[fid].metric not in seen_metrics else 1
+            ),
+        )
+        picked = available_sorted[:quota]
+        chosen_ids.extend(picked)
+        chosen_set.update(picked)
+        seen_metrics.update(fill_map[fid].metric for fid in picked if fill_map[fid].metric)
+
+    remaining = [
+        fid
+        for fid, _ in fill_pool
+        if fid not in chosen_set and fill_map[fid].expected_action == "answer"
+    ]
+    needed_more = fill_needed - len(chosen_ids)
+    if len(remaining) < needed_more:
+        fallback = [fid for fid, _ in fill_pool if fid not in chosen_set and fid not in remaining]
+        rng.shuffle(fallback)
+        remaining.extend(fallback)
+    rng.shuffle(remaining)
+    if needed_more > 0:
+        chosen_ids.extend(remaining[:needed_more])
+
+    chosen = required + [fill_map[family_id] for family_id in chosen_ids[:fill_needed]]
     cases: list[HiddenCaseBlueprint] = []
     questions: set[str] = set()
     public_questions = {item.question for item in public.cases}

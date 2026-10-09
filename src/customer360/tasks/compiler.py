@@ -74,43 +74,131 @@ def _time_filters(metric: MetricDef, spec: SemanticSpec) -> list[Filter]:
     return []
 
 
-def _validate_join_filters(join: JoinSpec, repository: MetadataRepository) -> list[str]:
-    if join.path != "customer_transactions":
+JOIN_PATH_SPECS = {
+    "customer_transactions": {
+        "right_table": "fact_transaction",
+        "alias": "t",
+        "allowed_columns": {
+            "customer_id",
+            "product_id",
+            "transaction_type",
+            "channel",
+            "transaction_date",
+            "status",
+        },
+        "time_column": "transaction_date",
+        "window_kind": "rolling",
+    },
+    "customer_cash_flows": {
+        "right_table": "fact_cash_flow",
+        "alias": "cf",
+        "allowed_columns": {
+            "customer_id",
+            "channel",
+            "flow_type",
+            "flow_date",
+            "status",
+        },
+        "time_column": "flow_date",
+        "window_kind": "rolling",
+    },
+    "customer_holdings": {
+        "right_table": "fact_holding",
+        "alias": "h",
+        "allowed_columns": {
+            "customer_id",
+            "product_id",
+            "holding_status",
+            "snapshot_date",
+        },
+        "time_column": "snapshot_date",
+        "window_kind": "pit",
+    },
+    "customer_asset_snapshots": {
+        "right_table": "fact_asset_snapshot",
+        "alias": "a",
+        "allowed_columns": {
+            "customer_id",
+            "snapshot_date",
+        },
+        "time_column": "snapshot_date",
+        "window_kind": "pit",
+    },
+    "customer_service_relations": {
+        "right_table": "fact_service_relation",
+        "alias": "sr",
+        "allowed_columns": {
+            "customer_id",
+            "manager_id",
+            "is_primary",
+            "start_date",
+            "end_date",
+        },
+        "time_column": None,
+        "window_kind": None,
+    },
+}
+
+
+def _validate_join_filters(
+    join: JoinSpec, repository: MetadataRepository
+) -> tuple[list[str], str, str]:
+    if join.path not in JOIN_PATH_SPECS:
         raise C360Error("JOIN_ERROR", "join path is not supported")
-    if join.time_window is None:
-        raise C360Error("TIME_RANGE_ERROR", "joined transaction query requires a rolling window")
-    table = repository.catalog.table("fact_transaction")
-    allowed = {
-        "customer_id",
-        "product_id",
-        "transaction_type",
-        "channel",
-        "transaction_date",
-        "status",
-    }
+    path_def = JOIN_PATH_SPECS[join.path]
+    table = repository.catalog.table(path_def["right_table"])
+    allowed = path_def["allowed_columns"]
+    alias = path_def["alias"]
     predicates = []
     filters = list(join.filters)
-    if join.time_window is not None:
+
+    if path_def["window_kind"] == "rolling":
+        if join.time_window is None or not isinstance(join.time_window, RollingWindow):
+            msg = f"joined {join.path} query requires a rolling window"
+            raise C360Error("TIME_RANGE_ERROR", msg)
+        time_col = path_def["time_column"]
         filters.extend(
             [
                 Filter(
-                    field="transaction_date",
+                    field=time_col,
                     operator="gte",
                     values=(join.time_window.start_date.isoformat(),),
                 ),
                 Filter(
-                    field="transaction_date",
+                    field=time_col,
                     operator="lte",
                     values=(join.time_window.anchor_date.isoformat(),),
                 ),
             ]
         )
+    elif path_def["window_kind"] == "pit":
+        if join.time_window is not None:
+            time_col = path_def["time_column"]
+            if isinstance(join.time_window, PointInTime):
+                filters.append(
+                    Filter(
+                        field=time_col,
+                        operator="eq",
+                        values=(join.time_window.snapshot_date.isoformat(),),
+                    )
+                )
+            elif isinstance(join.time_window, LatestSnapshot):
+                filters.append(
+                    Filter(
+                        field=time_col,
+                        operator="lte",
+                        values=(join.time_window.anchor_date.isoformat(),),
+                    )
+                )
+
     for item in filters:
         if item.field not in allowed or item.field == "customer_id":
-            raise C360Error("JOIN_ERROR", f"transaction filter is not allowed: {item.field}")
+            raise C360Error("JOIN_ERROR", f"join filter is not allowed: {item.field}")
         kind = table.column(item.field).kind
         for value in item.values:
             if kind == "string" and type(value) is not str:
+                raise C360Error("JOIN_ERROR", "join filter value does not match column type")
+            if kind == "boolean" and type(value) is not bool:
                 raise C360Error("JOIN_ERROR", "join filter value does not match column type")
             if kind == "date":
                 try:
@@ -118,8 +206,8 @@ def _validate_join_filters(join: JoinSpec, repository: MetadataRepository) -> li
                         raise ValueError
                 except ValueError as exc:
                     raise C360Error("JOIN_ERROR", "join date is not canonical") from exc
-        predicates.append(_predicate(item, prefix="t"))
-    return predicates
+        predicates.append(_predicate(item, prefix=alias))
+    return predicates, path_def["right_table"], alias
 
 
 def _predicate(item: Filter, prefix: str | None = None) -> str:
@@ -198,14 +286,17 @@ def compile_semantic(spec: SemanticSpec, repository: MetadataRepository) -> Comp
     else:
         expression, alias, kind = f'SUM("{metric.measure_column}")', metric.output_column, "decimal"
     if spec.join is not None:
-        join_predicates = _validate_join_filters(spec.join, repository)
+        join_predicates, right_table, right_alias = _validate_join_filters(spec.join, repository)
         customer_predicates = [_predicate(item, prefix="c") for item in filters]
         joined_where = customer_predicates + join_predicates
         where = " WHERE " + " AND ".join(joined_where) if joined_where else ""
+        join_clause = (
+            f'JOIN "{right_table}" AS "{right_alias}" '
+            f'ON "c"."customer_id" = "{right_alias}"."customer_id"'
+        )
         sql = (
             f'SELECT COUNT(DISTINCT "c"."customer_id") AS "{alias}" '
-            'FROM "dim_customer" AS "c" '
-            'JOIN "fact_transaction" AS "t" ON "c"."customer_id" = "t"."customer_id"' + where
+            f'FROM "dim_customer" AS "c" {join_clause}{where}'
         )
         return CompiledQuery(sql, (Column(name=alias, kind=kind),))
     if metric.time_semantics == "latest_snapshot_required":

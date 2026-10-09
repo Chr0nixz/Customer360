@@ -6,15 +6,18 @@ and dual-level timeout containment.
 
 import multiprocessing
 from abc import ABC, abstractmethod
+from datetime import date, datetime
+from decimal import Decimal
 from pathlib import Path
 from time import perf_counter
 from uuid import uuid4
 
 from customer360.contracts.execution import AccessPolicy, SqlLimits
-from customer360.contracts.public import QueryReceipt, QueryResult
+from customer360.contracts.public import Column, QueryReceipt, QueryResult
 from customer360.errors import ExecutionFailure, QueryRejected
 from customer360.metadata.metrics import load_catalog
-from customer360.runtime.worker import run_worker
+from customer360.runtime.dialects import transpile_sql
+from customer360.runtime.worker import execute_worker_query, run_worker
 from customer360.safety.result_guard import validate_result
 from customer360.safety.sql_guard import validate_sql
 
@@ -106,18 +109,89 @@ class DuckDBExecutionGateway(BaseExecutionGateway):
                 elapsed_ms=(perf_counter() - started) * 1000,
             )
         finally:
-            receive.close()
-            send.close()
+            try:
+                receive.close()
+            except OSError:
+                pass
+            try:
+                send.close()
+            except OSError:
+                pass
             if process.pid is not None:
                 _stop(process)
-                process.close()
+                try:
+                    process.close()
+                except OSError:
+                    pass
+
+    def execute_direct(self, sql: str) -> QueryReceipt:
+        """Internal trusted-side direct execution without worker spawn.
+
+        WARNING: Strictly restricted to trusted offline dataset verification.
+        Never expose this method to benchmarked agents or untrusted callers.
+        External/eval calls must strictly invoke `execute()` to maintain OS-level
+        process isolation, wall-clock timeout killing, and resource fencing.
+        """
+        guarded = validate_sql(sql, self.catalog, self.policy, self.limits)
+        started = perf_counter()
+        payload = execute_worker_query(str(self.database), guarded, self.policy, self.limits)
+        if "rejected" in payload:
+            raise QueryRejected(payload["rejected"], payload["message"])
+        if "error" in payload:
+            raise ExecutionFailure(payload["error"], payload["message"])
+        result = QueryResult.model_validate(payload["result"])
+        validate_result(result, guarded, self.limits)
+        return QueryReceipt(
+            query_id=uuid4().hex,
+            result=result,
+            elapsed_ms=(perf_counter() - started) * 1000,
+        )
+
+    # Explicit trusted alias for verify scripts
+    execute_trusted_direct = execute_direct
+
+
+def _get_pg_driver():
+    try:
+        import psycopg
+
+        return psycopg
+    except ImportError:
+        try:
+            import psycopg2
+
+            return psycopg2
+        except ImportError:
+            return None
+
+
+def _pg_cell(value):
+    if isinstance(value, Decimal):
+        return str(value)
+    if isinstance(value, (date, datetime)):
+        return value.isoformat()
+    if value is None or type(value) in {int, str, bool}:
+        return value
+    if isinstance(value, float):
+        return str(Decimal(str(value)))
+    return str(value)
+
+
+def _infer_pg_kind(val: object) -> str:
+    if isinstance(val, (int, bool)) and not isinstance(val, bool):
+        return "integer"
+    if isinstance(val, (Decimal, float)):
+        return "decimal"
+    if isinstance(val, (date, datetime)):
+        return "date"
+    return "string"
 
 
 class PostgreSQLExecutionGateway(BaseExecutionGateway):
     """PostgreSQL execution gateway adapter.
 
-    Enforces connection-level statement_timeout and fail-closed behavior
-    when no live database instance is configured.
+    Enforces connection-level statement_timeout, transaction read-only fences,
+    and automatic SQL transpilation from DuckDB to PostgreSQL.
     """
 
     def __init__(
@@ -140,8 +214,63 @@ class PostgreSQLExecutionGateway(BaseExecutionGateway):
                 "PostgreSQL live execution engine is not configured; "
                 "dialect transpilation and AST checks remain active.",
             )
-        # Placeholder for live PG driver connection if configured
-        raise ExecutionFailure("NOT_IMPLEMENTED", "Live PG driver execution is reserved for v2.0.")
+        pg = _get_pg_driver()
+        if pg is None:
+            raise QueryRejected(
+                "ENGINE_UNAVAILABLE",
+                "PostgreSQL driver (psycopg or psycopg2) is not installed in the environment.",
+            )
+
+        transpile_res = transpile_sql(sql, source_dialect="duckdb", target_dialect="postgres")
+        if not transpile_res.ast_valid:
+            raise QueryRejected(
+                "UNSUPPORTED_QUERY",
+                f"SQL transpilation failed: {transpile_res.differences}",
+            )
+        pg_sql = transpile_res.transpiled_sql
+
+        started = perf_counter()
+        timeout_ms = int(self.limits.timeout_seconds * 1000)
+        try:
+            with pg.connect(self.connection_uri) as conn:
+                with conn.cursor() as cur:
+                    cur.execute("SET SESSION CHARACTERISTICS AS TRANSACTION READ ONLY;")
+                    cur.execute(f"SET statement_timeout = {timeout_ms};")
+                    cur.execute(pg_sql)
+                    raw_rows = cur.fetchmany(self.limits.max_rows + 1)
+                    truncated = len(raw_rows) > self.limits.max_rows
+                    rows = raw_rows[: self.limits.max_rows]
+                    desc = cur.description or []
+                    sample_row = rows[0] if rows else ()
+                    columns = tuple(
+                        Column(
+                            name=col[0],
+                            kind=_infer_pg_kind(sample_row[idx])
+                            if idx < len(sample_row)
+                            else "string",
+                        )
+                        for idx, col in enumerate(desc)
+                    )
+                    receipt_rows = tuple(tuple(_pg_cell(v) for v in row) for row in rows)
+                    result = QueryResult(
+                        columns=columns,
+                        rows=receipt_rows,
+                        truncated=truncated,
+                    )
+                    return QueryReceipt(
+                        query_id=uuid4().hex,
+                        result=result,
+                        elapsed_ms=(perf_counter() - started) * 1000,
+                    )
+        except Exception as exc:
+            err_str = str(exc)
+            if "statement_timeout" in err_str.lower() or "timeout" in err_str.lower():
+                raise ExecutionFailure(
+                    "TIMEOUT", "query exceeded statement_timeout budget"
+                ) from exc
+            raise ExecutionFailure(
+                "EXECUTION_ERROR", f"PostgreSQL live query failed: {err_str}"
+            ) from exc
 
 
 # Backward compatibility alias

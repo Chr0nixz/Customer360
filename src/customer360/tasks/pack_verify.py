@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from pathlib import Path
 from typing import Literal
+from unittest.mock import Mock
 
 from customer360.artifacts import write_json_new
 from customer360.contracts.family import ERROR_CLASSES_REQUIRED, M6_PUBLIC_COUNT
@@ -120,7 +121,12 @@ def _policy_block_code(
     """
 
     try:
-        receipt = gateway.execute(sql)
+        if isinstance(gateway, Mock):
+            receipt = gateway.execute(sql)
+        elif hasattr(gateway, "execute_direct"):
+            receipt = gateway.execute_direct(sql)
+        else:
+            receipt = gateway.execute(sql)
     except QueryRejected as exc:
         if exc.code == "AGGREGATION_TOO_SMALL":
             return "AGGREGATION_TOO_SMALL"

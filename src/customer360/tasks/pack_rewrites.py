@@ -18,6 +18,16 @@ REGIONS = ("华东", "华北", "华南", "西南")
 NULL_OCCUPATION = ("空", "缺失", "没有填写", "未填写")
 LATEST = ("最新快照", "最新资产快照", "最近一次快照", "最新总资产")
 GROUPING = ("按地区", "分地区", "各地区", "按客户地区")
+GROUPING_DIMENSIONS = {
+    "region": ("地区", "分地区", "各地区", "按客户地区"),
+    "customer_level": ("等级", "客户等级"),
+    "risk_level": ("风险等级", "风险"),
+    "gender": ("性别",),
+    "channel": ("渠道",),
+    "transaction_type": ("交易类型", "交易类别"),
+    "flow_type": ("流向", "资金流向"),
+}
+GROUPING_WORDS = ("各", "按", "分", "组", "拆开")
 AMBIGUOUS_TIME = ("最近", "近期")
 FORBIDDEN_CALENDAR = ("三个月", "3个月", "本季度", "近一个月", "最近一个月")
 METRIC_ALIASES = {
@@ -170,24 +180,57 @@ def check_generated_rewrite(
                     _issue(case_id, text, "FILTER_ERROR", "rewrite drops occupation IS NULL")
                 )
         if case.join is not None:
-            if "客户" not in text or "交易" not in text:
+            if "客户" not in text:
+                issues.append(_issue(case_id, text, "JOIN_ERROR", "join rewrite must keep 客户"))
+            if case.join.path == "customer_transactions" and "交易" not in text:
                 issues.append(
-                    _issue(case_id, text, "JOIN_ERROR", "join rewrite must keep 客户 and 交易")
+                    _issue(case_id, text, "JOIN_ERROR", "transaction join rewrite must keep 交易")
                 )
-            if "成功" not in text:
+            elif case.join.path == "customer_cash_flows" and "资金" not in text:
                 issues.append(
-                    _issue(case_id, text, "JOIN_ERROR", "join rewrite drops status=success")
+                    _issue(case_id, text, "JOIN_ERROR", "cash flow join rewrite must keep 资金")
                 )
-            if NEGATED_SUCCESS.search(text):
+            elif case.join.path == "customer_holdings" and "持仓" not in text:
                 issues.append(
-                    _issue(case_id, text, "JOIN_ERROR", "join rewrite negates status=success")
+                    _issue(case_id, text, "JOIN_ERROR", "holding join rewrite must keep 持仓")
                 )
-        if case.group_by == ("region",) and not any(token in text for token in GROUPING):
-            issues.append(
-                _issue(
-                    case_id, text, "AGGREGATION_ERROR", "grouping rewrite drops the region split"
+            elif (
+                case.join.path == "customer_asset_snapshots"
+                and "快照" not in text
+                and "资产" not in text
+            ):
+                issues.append(
+                    _issue(
+                        case_id,
+                        text,
+                        "JOIN_ERROR",
+                        "asset snapshot join rewrite must keep 快照/资产",
+                    )
                 )
-            )
+            elif case.join.path == "customer_service_relations" and "服务" not in text:
+                issues.append(
+                    _issue(
+                        case_id,
+                        text,
+                        "JOIN_ERROR",
+                        "service relation join rewrite must keep 服务",
+                    )
+                )
+            if case.join.path in {"customer_transactions", "customer_cash_flows"}:
+                if "成功" not in text:
+                    issues.append(
+                        _issue(case_id, text, "JOIN_ERROR", "join rewrite drops status=success")
+                    )
+                if NEGATED_SUCCESS.search(text):
+                    issues.append(
+                        _issue(case_id, text, "JOIN_ERROR", "join rewrite negates status=success")
+                    )
+        if case.group_by:
+            dim = case.group_by[0]
+            dim_tokens = GROUPING_DIMENSIONS.get(dim, (dim,))
+            if not any(token in text for token in dim_tokens):
+                msg = f"grouping rewrite drops the {dim} split"
+                issues.append(_issue(case_id, text, "AGGREGATION_ERROR", msg))
     return tuple(issues)
 
 

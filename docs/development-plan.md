@@ -1,8 +1,14 @@
 # 后续开发计划
 
+[English](en/development-plan.md) | [简体中文](development-plan.md)
+
 文档状态：2026-10-05 复审版。
 
 本文是当前代码库的执行计划，补充 [ROADMAP.md](../ROADMAP.md)，不改变评分权重、Gold、公开/隐藏切分、SQL Guard 或权限语义。历史阶段记录仍保留在 `HANDOFF.md` 和 git 历史中，但本文件只把当前有效状态作为后续工作的依据。
+
+针对数据库规模、题目规模和覆盖程度的专项扩展计划见 [Benchmark 扩展计划](benchmark-expansion-plan.md)。扩展优先补齐可执行 Join、分组和隐藏集代表性，不以简单增加行数或题目总数作为完成标准。
+
+当前扩展验收未通过；SQL 分组粒度泄露、隐藏语义验证、元数据审计和版本锁定需先处理。详见[扩展验收与下一阶段计划](acceptance-and-next-plan.md)。
 
 ## 1. 当前基线
 
@@ -19,12 +25,12 @@
 
 | 项目 | 当前状态 |
 |---|---|
-| Git | `main` 与 `origin/main` 一致，工作区干净，尚无 `v1.0.0` tag |
+| Git | `main` 与 `origin/main` 提交相同，但工作区有未提交代码；历史 `v1.0.0` tag 存在于旧提交（09d5c648），HEAD 当前为后续提交，发布门全通过前不应视为正式发布 |
 | `c360 doctor` | 通过：9 表、72 列、30 指标、20 Join、8 FK |
 | Ruff | `ruff check` 与 `ruff format --check` 通过 |
-| 测试 | 当前收集 400 项；全量回归必须由单一 owner 在 CI/Linux 完成，历史 372/390 不作为当前证据 |
-| 正式 RC 门 | 7/8 已签署；唯一未通过的是 `docker_runtime` |
-| 正式检查 | `c360 check-formal-release` 当前因 `docker_runtime` 失败，不能打 tag |
+| 测试 | 468 项收集；8 题 hidden pack CLARIFICATION_FAILURE 验收问题已修复，本地全量除 5 项 PostgreSQL live skip 外全部通过（463 passed, 5 skipped, 0 failed） |
+| 正式 RC 门 | `docker_runtime` 需在 Linux/CI 重新生成并绑定当前代码树证据；PostgreSQL live 测试由 CI 验证 |
+| 正式检查 | `c360 check-formal-release` 必须在当前提交重新生成证据包后完成全门校验，再行收口打正式 tag |
 | Baseline 诊断 | public/private 加权分约 0.75；安全和效率良好，但正确性约 52%、鲁棒性约 38% |
 
 Baseline 的主要失败集中在客户过滤组合。当前 adapter 对 VIP、地区等过滤支持有限，而公开生成题还覆盖客户等级、风险等级、交易类型、渠道和资金流类型。这个问题属于 Agent 质量线，不是 benchmark 发布门。

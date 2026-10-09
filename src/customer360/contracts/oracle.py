@@ -84,4 +84,11 @@ CaseOracle = Annotated[
 class PrivateCase(Contract):
     request: AgentRequest
     oracle: CaseOracle
-    task_version: Literal["fixture-0.1", "human-0.1", "generated-0.1", "hidden-0.1"] = "fixture-0.1"
+    task_version: Literal[
+        "fixture-0.1",
+        "human-0.1",
+        "generated-0.1",
+        "generated-0.2",
+        "hidden-0.1",
+        "hidden-0.2",
+    ] = "fixture-0.1"

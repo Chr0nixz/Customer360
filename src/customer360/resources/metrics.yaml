@@ -1,4 +1,4 @@
-metrics_version: "0.3"
+metrics_version: "0.4"
 metrics:
   - metric_name: distinct_customer_count
     business_name: 客户数
@@ -12,6 +12,7 @@ metrics:
     measure_column: customer_id
     time_semantics: none
     allowed_filter_columns: [customer_level, gender, risk_level, region, status, occupation]
+    allowed_group_dimensions: [region, customer_level, risk_level, gender]
     sensitivity: internal
     forbidden_contexts: [把该指标当作历史快照客户数, 未显式筛选时默认排除注销客户]
     example_questions: [统计VIP客户数。]
@@ -30,6 +31,7 @@ metrics:
     time_column: transaction_date
     fixed_filters: {status: success}
     allowed_filter_columns: [customer_id, product_id, transaction_type, channel, transaction_date]
+    allowed_group_dimensions: [channel, transaction_type]
     sensitivity: financial
     forbidden_contexts: [缺少时间窗口, 将近90天替换为三个月]
     example_questions: [统计截至2025年6月30日近90天成功交易笔数。]
@@ -48,6 +50,7 @@ metrics:
     time_column: transaction_date
     fixed_filters: {status: success}
     allowed_filter_columns: [customer_id, product_id, transaction_type, channel, transaction_date]
+    allowed_group_dimensions: [channel, transaction_type]
     sensitivity: financial
     forbidden_contexts: [跨币种直接汇总, 将交易金额解释为净流入或收益, 缺少时间窗口]
     example_questions: [统计截至2025年6月30日近90天成功交易金额。]
@@ -84,6 +87,7 @@ metrics:
     time_column: transaction_date
     fixed_filters: {status: failed}
     allowed_filter_columns: [customer_id, product_id, transaction_type, channel, transaction_date]
+    allowed_group_dimensions: [channel, transaction_type]
     sensitivity: financial
     forbidden_contexts: [把失败交易计入成功交易, 缺少时间窗口, 将近90天替换为三个月]
     example_questions: [统计截至2025年6月30日近90天失败交易笔数。]
@@ -206,6 +210,7 @@ metrics:
     time_semantics: none
     fixed_filters: {status: closed}
     allowed_filter_columns: [customer_level, gender, risk_level, region, occupation]
+    allowed_group_dimensions: [region, customer_level]
     sensitivity: internal
     forbidden_contexts: [把已注销客户计入活跃客户, 把该指标当作历史快照客户数]
     example_questions: [统计已注销客户人数。]
@@ -223,6 +228,7 @@ metrics:
     time_semantics: none
     fixed_filters: {status: dormant}
     allowed_filter_columns: [customer_level, gender, risk_level, region, occupation]
+    allowed_group_dimensions: [region, customer_level]
     sensitivity: internal
     forbidden_contexts: [把休眠客户计入活跃客户, 把该指标当作历史快照客户数]
     example_questions: [统计休眠客户人数。]
@@ -240,6 +246,7 @@ metrics:
     time_semantics: none
     fixed_filters: {risk_level: high}
     allowed_filter_columns: [customer_level, gender, region, status, occupation]
+    allowed_group_dimensions: [region, customer_level]
     sensitivity: internal
     forbidden_contexts: [把高风险客户解释为失败交易, 缺少显式risk_level却默认高风险]
     example_questions: [统计高风险客户人数。]

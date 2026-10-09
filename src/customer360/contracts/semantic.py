@@ -48,11 +48,17 @@ class Filter(Contract):
 
 
 class JoinSpec(Contract):
-    """The only v0.1 join path: customer attributes to transaction facts."""
+    """Supported join paths connecting customer attributes to fact tables."""
 
-    path: Literal["customer_transactions"]
+    path: Literal[
+        "customer_transactions",
+        "customer_holdings",
+        "customer_asset_snapshots",
+        "customer_cash_flows",
+        "customer_service_relations",
+    ]
     filters: tuple[Filter, ...] = ()
-    time_window: RollingWindow | None = None
+    time_window: RollingWindow | PointInTime | LatestSnapshot | None = None
 
 
 class SemanticSpec(Contract):

@@ -15,7 +15,49 @@ from customer360.errors import QueryRejected
 
 UNKNOWN_FIELD_TOKENS = ("手机号", "手机号码", "身份证", "身份证号")
 LATEST_TOKENS = ("最新快照", "最新资产快照", "最近一次快照", "各自最新快照")
-GROUP_REGION_TOKENS = ("按地区", "分地区", "各地区", "按客户地区")
+GROUP_DIM_TOKENS: dict[str, tuple[str, ...]] = {
+    "region": ("按地区", "分地区", "各地区", "按客户地区", "地区拆开", "按地区分组"),
+    "customer_level": (
+        "按客户等级",
+        "分客户等级",
+        "各客户等级",
+        "客户等级拆开",
+        "按客户等级分组",
+        "按等级",
+        "分等级",
+        "各等级",
+        "按等级分组",
+    ),
+    "risk_level": (
+        "按风险等级",
+        "分风险等级",
+        "各风险等级",
+        "风险等级拆开",
+        "按风险等级分组",
+        "按风险",
+        "分风险",
+        "各风险",
+    ),
+    "gender": ("按性别", "分性别", "各性别", "按客户性别", "性别拆开", "按性别分组"),
+    "channel": (
+        "按渠道",
+        "分渠道",
+        "各渠道",
+        "渠道拆开",
+        "按渠道分组",
+        "按交易渠道",
+        "按资金渠道",
+    ),
+    "transaction_type": (
+        "按交易类型",
+        "分交易类型",
+        "各交易类型",
+        "交易类型拆开",
+        "按交易类型分组",
+    ),
+    "flow_type": ("按流向", "分流向", "各流向", "流向拆开", "按流向分组", "按资金流向"),
+}
+GROUP_REGION_TOKENS = GROUP_DIM_TOKENS["region"]
 JOIN_TOKENS = (
     "有成功交易",
     "发生过成功交易",
@@ -163,9 +205,21 @@ def _has_unsupported_negation(text: str) -> bool:
 
 
 def _is_join_query(question: str) -> bool:
-    if "交易" not in question or "客户" not in question:
+    if "客户" not in question and "人数" not in question:
         return False
-    if any(token in question for token in ("交易笔数", "交易次数", "交易金额", "交易量")):
+    if any(
+        token in question
+        for token in (
+            "交易笔数",
+            "交易次数",
+            "交易金额",
+            "交易量",
+            "资金流笔数",
+            "资金流金额",
+            "持仓笔数",
+            "持仓数量",
+        )
+    ):
         return False
     has_join_predicate = any(
         token in question
@@ -175,6 +229,15 @@ def _is_join_query(question: str) -> bool:
             "发生过",
             "有成功",
             "成功交易",
+            "分配有",
+            "存在服务关系",
+            "有服务关系",
+            "有资金流",
+            "发生过资金流",
+            "有持仓",
+            "存在持仓",
+            "有资产快照",
+            "存在资产快照",
         )
     )
     is_customer_agg = any(
@@ -192,13 +255,40 @@ def _is_join_query(question: str) -> bool:
     return has_join_predicate and is_customer_agg
 
 
-def _executable_join(packet: AdapterPacket) -> str | None:
-    for item in packet.joins:
-        if item.get("path_name") == "customer_transactions" and item.get("compile_status") == (
-            "executable"
-        ):
-            return "customer_transactions"
-    return None
+def _executable_join(packet: AdapterPacket, question: str = "") -> str | None:
+    executable_paths = {
+        item.get("path_name") for item in packet.joins if item.get("compile_status") == "executable"
+    }
+    if not executable_paths:
+        return None
+    if (
+        any(k in question for k in ("资金流", "现金流", "流向", "流入", "流出"))
+        and "customer_cash_flows" in executable_paths
+    ):
+        return "customer_cash_flows"
+    if (
+        any(k in question for k in ("持仓", "资产持有", "投资持仓"))
+        and "customer_holdings" in executable_paths
+    ):
+        return "customer_holdings"
+    if (
+        any(k in question for k in ("资产快照", "快照净资产", "总资产快照"))
+        and "customer_asset_snapshots" in executable_paths
+    ):
+        return "customer_asset_snapshots"
+    if (
+        any(k in question for k in ("服务关系", "分配有", "主管经理", "经理关系", "服务经理"))
+        and "customer_service_relations" in executable_paths
+    ):
+        return "customer_service_relations"
+    if (
+        any(k in question for k in ("交易", "买入", "卖出", "申购", "赎回", "发生过"))
+        and "customer_transactions" in executable_paths
+    ):
+        return "customer_transactions"
+    if "customer_transactions" in executable_paths:
+        return "customer_transactions"
+    return next(iter(sorted(executable_paths)), None)
 
 
 class NetworkModelAdapter:
@@ -293,7 +383,7 @@ class LocalDeterministicAdapter:
             )
         join_path = None
         if _is_join_query(question):
-            join_path = _executable_join(packet)
+            join_path = _executable_join(packet, question)
             if join_path is None:
                 return Intent(
                     action="refuse",
@@ -303,7 +393,7 @@ class LocalDeterministicAdapter:
                     evidence=("join_not_executable",),
                 )
         time_kind, days, time_date, missing = self._time_for(
-            metric, packet, text, latest, join_path is not None
+            metric, packet, text, latest, join_path
         )
         if missing:
             return Intent(
@@ -316,8 +406,10 @@ class LocalDeterministicAdapter:
         filters = self._filters(question, metric, time_kind, days, time_date, join_path)
         group_by: tuple[str, ...] = ()
         allowed_groups = tuple(metric.get("allowed_group_dimensions") or ())
-        if any(token in question for token in GROUP_REGION_TOKENS) and "region" in allowed_groups:
-            group_by = ("region",)
+        for dim, tokens in GROUP_DIM_TOKENS.items():
+            if dim in allowed_groups and any(token in question for token in tokens):
+                group_by = (dim,)
+                break
         return Intent(
             action="answer",
             metric_name=metric["metric_name"],
@@ -501,7 +593,7 @@ class LocalDeterministicAdapter:
         packet: AdapterPacket,
         text: str,
         latest: bool,
-        joined: bool,
+        join_path: str | None,
     ) -> tuple[
         Literal["rolling", "point_in_time", "latest_snapshot"] | None,
         int | None,
@@ -511,10 +603,16 @@ class LocalDeterministicAdapter:
         semantics = str(metric.get("time_semantics") or "none")
         parsed_date = _parse_date(text) or packet.anchor_date
         days = _parse_days(text)
-        if joined:
-            if days is None:
-                return None, None, None, ("time_window",)
-            return "rolling", days, parsed_date, ()
+        if join_path:
+            if join_path in {"customer_transactions", "customer_cash_flows"}:
+                if days is None:
+                    return None, None, None, ("time_window",)
+                return "rolling", days, parsed_date, ()
+            if join_path in {"customer_holdings", "customer_asset_snapshots"}:
+                explicit = _parse_date(text)
+                return "point_in_time", None, explicit or packet.anchor_date, ()
+            if join_path == "customer_service_relations":
+                return None, None, None, ()
         if semantics == "latest_snapshot_required" or latest:
             return "latest_snapshot", None, parsed_date, ()
         if semantics == "point_in_time_required":
@@ -736,32 +834,80 @@ class LocalDeterministicAdapter:
 
         # 9. join-side filters
         if join_path:
-            found.append(
-                IntentFilter(
-                    field="status",
-                    operator="eq",
-                    values=("success",),
-                    side="join",
-                )
-            )
-            if "App" in question:
-                found.append(
-                    IntentFilter(field="channel", operator="eq", values=("app",), side="join")
-                )
-            elif "网点" in question:
-                found.append(
-                    IntentFilter(field="channel", operator="eq", values=("branch",), side="join")
-                )
-            if "买入" in question:
+            if join_path == "customer_transactions":
                 found.append(
                     IntentFilter(
-                        field="transaction_type", operator="eq", values=("buy",), side="join"
+                        field="status",
+                        operator="eq",
+                        values=("success",),
+                        side="join",
                     )
                 )
-            elif "卖出" in question:
+                if "App" in question:
+                    found.append(
+                        IntentFilter(field="channel", operator="eq", values=("app",), side="join")
+                    )
+                elif "网点" in question:
+                    found.append(
+                        IntentFilter(
+                            field="channel", operator="eq", values=("branch",), side="join"
+                        )
+                    )
+                if "买入" in question:
+                    found.append(
+                        IntentFilter(
+                            field="transaction_type", operator="eq", values=("buy",), side="join"
+                        )
+                    )
+                elif "卖出" in question:
+                    found.append(
+                        IntentFilter(
+                            field="transaction_type", operator="eq", values=("sell",), side="join"
+                        )
+                    )
+            elif join_path == "customer_cash_flows":
                 found.append(
                     IntentFilter(
-                        field="transaction_type", operator="eq", values=("sell",), side="join"
+                        field="status",
+                        operator="eq",
+                        values=("success",),
+                        side="join",
+                    )
+                )
+                if "流入" in question and "净流入" not in question:
+                    found.append(
+                        IntentFilter(field="flow_type", operator="eq", values=("in",), side="join")
+                    )
+                elif "流出" in question and "净流入" not in question:
+                    found.append(
+                        IntentFilter(field="flow_type", operator="eq", values=("out",), side="join")
+                    )
+                if "App" in question:
+                    found.append(
+                        IntentFilter(field="channel", operator="eq", values=("app",), side="join")
+                    )
+                elif "网点" in question:
+                    found.append(
+                        IntentFilter(
+                            field="channel", operator="eq", values=("branch",), side="join"
+                        )
+                    )
+            elif join_path == "customer_holdings":
+                found.append(
+                    IntentFilter(
+                        field="holding_status",
+                        operator="eq",
+                        values=("active",),
+                        side="join",
+                    )
+                )
+            elif join_path == "customer_service_relations":
+                found.append(
+                    IntentFilter(
+                        field="is_primary",
+                        operator="eq",
+                        values=(True,),
+                        side="join",
                     )
                 )
 

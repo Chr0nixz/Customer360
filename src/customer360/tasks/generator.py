@@ -109,11 +109,50 @@ def _plain_category(metric: MetricDef) -> str:
 
 
 def _join_spec(*, extra: tuple[Filter, ...] = (), days: int = 90) -> JoinSpec:
-    return JoinSpec(
-        path="customer_transactions",
-        filters=(Filter(field="status", operator="eq", values=("success",)), *extra),
-        time_window=RollingWindow(days=days, anchor_date=ANCHOR),
-    )
+    return _join_spec_path("customer_transactions", extra=extra, days=days)
+
+
+def _join_spec_path(
+    path: str,
+    *,
+    extra: tuple[Filter, ...] = (),
+    days: int = 90,
+    window: RollingWindow | PointInTime | None = None,
+) -> JoinSpec:
+    if path == "customer_transactions":
+        tw = window or RollingWindow(days=days, anchor_date=ANCHOR)
+        return JoinSpec(
+            path=path,  # type: ignore[arg-type]
+            filters=(Filter(field="status", operator="eq", values=("success",)), *extra),
+            time_window=tw,
+        )
+    if path == "customer_cash_flows":
+        tw = window or RollingWindow(days=days, anchor_date=ANCHOR)
+        return JoinSpec(
+            path=path,  # type: ignore[arg-type]
+            filters=(Filter(field="status", operator="eq", values=("success",)), *extra),
+            time_window=tw,
+        )
+    if path == "customer_holdings":
+        tw = window or PIT
+        return JoinSpec(
+            path=path,  # type: ignore[arg-type]
+            filters=(Filter(field="holding_status", operator="eq", values=("active",)), *extra),
+            time_window=tw,
+        )
+    if path == "customer_asset_snapshots":
+        tw = window or PIT
+        return JoinSpec(
+            path=path,  # type: ignore[arg-type]
+            filters=extra,
+            time_window=tw,
+        )
+    if path == "customer_service_relations":
+        return JoinSpec(
+            path=path,  # type: ignore[arg-type]
+            filters=extra or (Filter(field="is_primary", operator="eq", values=(True,)),),
+        )
+    raise ValueError(f"unsupported join path: {path}")
 
 
 def fingerprint_draft(draft: Draft):
@@ -229,6 +268,22 @@ def _customer_filters(metric: MetricDef) -> tuple[tuple[Filter, ...], ...]:
         )
     if "occupation" in allowed:
         combinations.append((Filter(field="occupation", operator="is_null"),))
+        if "region" in allowed:
+            combinations.extend(
+                (
+                    Filter(field="occupation", operator="is_null"),
+                    Filter(field="region", operator="eq", values=(region,)),
+                )
+                for region in REGIONS
+            )
+        if "customer_level" in allowed:
+            combinations.extend(
+                (
+                    Filter(field="occupation", operator="is_null"),
+                    Filter(field="customer_level", operator="eq", values=(level,)),
+                )
+                for level in LEVELS
+            )
     if "transaction_type" in allowed:
         combinations.extend(
             (Filter(field="transaction_type", operator="eq", values=(kind,)),) for kind in TX_TYPES
@@ -245,6 +300,11 @@ def _customer_filters(metric: MetricDef) -> tuple[tuple[Filter, ...], ...]:
     if "is_primary" in allowed:
         combinations.append((Filter(field="is_primary", operator="eq", values=(True,)),))
         combinations.append((Filter(field="is_primary", operator="eq", values=(False,)),))
+    if "relation_type" in allowed:
+        combinations.extend(
+            (Filter(field="relation_type", operator="eq", values=(kind,)),)
+            for kind in ("exclusive", "shared")
+        )
     return tuple(combinations)
 
 
@@ -278,7 +338,65 @@ def _pool_drafts(repository: MetadataRepository) -> list[Draft]:
                     time_window=LATEST,
                 )
             )
+            drafts.append(
+                Draft(
+                    expected_action="clarification_needed",
+                    category="clarification",
+                    material_status="unscored_oracle",
+                    intended_failure_class="CLARIFICATION_FAILURE",
+                    metric=metric.metric_name,
+                    time_window=LATEST,
+                    missing_slots=("time_window",),
+                    slot_replies=(
+                        SlotReply(slot="time_window", reply="截至2025-06-30的最新资产快照"),
+                    ),
+                )
+            )
             continue
+        win = _window_for(metric)
+        for dim in metric.allowed_group_dimensions:
+            drafts.append(
+                Draft(
+                    expected_action="answer",
+                    category="grouping",
+                    material_status="compilable_answer",
+                    intended_failure_class="AGGREGATION_ERROR",
+                    metric=metric.metric_name,
+                    time_window=win,
+                    group_by=(dim,),
+                )
+            )
+            # 带基础条件的分组组合
+            allowed = set(metric.allowed_filter_columns) - set(metric.fixed_filters)
+            if "customer_level" in allowed and dim != "customer_level":
+                for level in ("VIP", "standard"):
+                    lvl_filter = Filter(field="customer_level", operator="eq", values=(level,))
+                    drafts.append(
+                        Draft(
+                            expected_action="answer",
+                            category="grouping",
+                            material_status="compilable_answer",
+                            intended_failure_class="AGGREGATION_ERROR",
+                            metric=metric.metric_name,
+                            filters=(lvl_filter,),
+                            time_window=win,
+                            group_by=(dim,),
+                        )
+                    )
+            if "region" in allowed and dim != "region":
+                for region in ("华东", "华北"):
+                    drafts.append(
+                        Draft(
+                            expected_action="answer",
+                            category="grouping",
+                            material_status="compilable_answer",
+                            intended_failure_class="AGGREGATION_ERROR",
+                            metric=metric.metric_name,
+                            filters=(Filter(field="region", operator="eq", values=(region,)),),
+                            time_window=win,
+                            group_by=(dim,),
+                        )
+                    )
         windows: tuple[RollingWindow | PointInTime | LatestSnapshot | None, ...]
         if metric.time_semantics == "rolling_required":
             windows = _rolling_windows(metric)
@@ -288,17 +406,6 @@ def _pool_drafts(repository: MetadataRepository) -> list[Draft]:
             windows = (None,)
         for window in windows:
             for filters in _customer_filters(metric):
-                if window is None and not filters and metric.metric_name == "active_customer_count":
-                    drafts.append(
-                        Draft(
-                            expected_action="answer",
-                            category="grouping",
-                            material_status="compilable_answer",
-                            intended_failure_class="AGGREGATION_ERROR",
-                            metric=metric.metric_name,
-                            group_by=("region",),
-                        )
-                    )
                 category = _plain_category(metric)
                 if isinstance(window, RollingWindow):
                     category = "time_window"
@@ -319,22 +426,78 @@ def _pool_drafts(repository: MetadataRepository) -> list[Draft]:
                         time_window=window,
                     )
                 )
-        if metric.time_semantics == "rolling_required":
-            drafts.append(
-                Draft(
-                    expected_action="clarification_needed",
-                    category="clarification",
-                    material_status="unscored_oracle",
-                    intended_failure_class="CLARIFICATION_FAILURE",
-                    metric=metric.metric_name,
-                    time_window=ROLLING,
-                    missing_slots=("time_window",),
-                    slot_replies=(
-                        SlotReply(slot="time_window", reply="截至2025-06-30的近90个自然日"),
-                    ),
-                )
+        allowed = set(metric.allowed_filter_columns) - set(metric.fixed_filters)
+        combos: list[tuple[Filter, ...]] = [()]
+        if "customer_level" in allowed:
+            combos.extend(
+                [
+                    (Filter(field="customer_level", operator="eq", values=("VIP",)),),
+                    (Filter(field="customer_level", operator="eq", values=("standard",)),),
+                ]
             )
-    for region in ("华北", "华南", "西南"):
+        if "region" in allowed:
+            combos.extend(
+                [
+                    (Filter(field="region", operator="eq", values=("华东",)),),
+                    (Filter(field="region", operator="eq", values=("华北",)),),
+                ]
+            )
+        if "channel" in allowed:
+            combos.extend(
+                [
+                    (Filter(field="channel", operator="eq", values=("app",)),),
+                    (Filter(field="channel", operator="eq", values=("branch",)),),
+                ]
+            )
+        if "transaction_type" in allowed:
+            combos.extend(
+                [
+                    (Filter(field="transaction_type", operator="eq", values=("buy",)),),
+                    (Filter(field="transaction_type", operator="eq", values=("sell",)),),
+                ]
+            )
+
+        if metric.time_semantics == "rolling_required" or (
+            metric.time_semantics == "none"
+            and metric.source_table in {"fact_transaction", "fact_cash_flow"}
+        ):
+            for days, cn_window in ((90, "近90个自然日"), (30, "近30个自然日")):
+                for flt in combos:
+                    drafts.append(
+                        Draft(
+                            expected_action="clarification_needed",
+                            category="clarification",
+                            material_status="unscored_oracle",
+                            intended_failure_class="CLARIFICATION_FAILURE",
+                            metric=metric.metric_name,
+                            filters=flt,
+                            time_window=RollingWindow(days=days, anchor_date=ANCHOR),
+                            missing_slots=("time_window",),
+                            slot_replies=(
+                                SlotReply(
+                                    slot="time_window",
+                                    reply=f"截至2025-06-30的{cn_window}",
+                                ),
+                            ),
+                        )
+                    )
+        elif metric.time_semantics == "point_in_time_required":
+            for flt in combos:
+                drafts.append(
+                    Draft(
+                        expected_action="clarification_needed",
+                        category="clarification",
+                        material_status="unscored_oracle",
+                        intended_failure_class="CLARIFICATION_FAILURE",
+                        metric=metric.metric_name,
+                        filters=flt,
+                        time_window=PointInTime(snapshot_date=ANCHOR),
+                        missing_slots=("time_window",),
+                        slot_replies=(SlotReply(slot="time_window", reply="2025年6月30日"),),
+                    )
+                )
+    # 1. customer_transactions
+    for region in ("华北", "华南", "西南", "华东"):
         drafts.append(
             Draft(
                 expected_action="answer",
@@ -343,20 +506,21 @@ def _pool_drafts(repository: MetadataRepository) -> list[Draft]:
                 intended_failure_class="JOIN_ERROR",
                 metric="distinct_customer_count",
                 filters=(Filter(field="region", operator="eq", values=(region,)),),
-                join=_join_spec(),
+                join=_join_spec_path("customer_transactions"),
             )
         )
-    drafts.append(
-        Draft(
-            expected_action="answer",
-            category="join",
-            material_status="compilable_answer",
-            intended_failure_class="JOIN_ERROR",
-            metric="distinct_customer_count",
-            filters=(Filter(field="customer_level", operator="eq", values=("VIP",)),),
-            join=_join_spec(),
+    for level in ("VIP", "standard"):
+        drafts.append(
+            Draft(
+                expected_action="answer",
+                category="join",
+                material_status="compilable_answer",
+                intended_failure_class="JOIN_ERROR",
+                metric="distinct_customer_count",
+                filters=(Filter(field="customer_level", operator="eq", values=(level,)),),
+                join=_join_spec_path("customer_transactions"),
+            )
         )
-    )
     for extra in (
         (Filter(field="channel", operator="eq", values=("app",)),),
         (Filter(field="channel", operator="eq", values=("branch",)),),
@@ -371,7 +535,7 @@ def _pool_drafts(repository: MetadataRepository) -> list[Draft]:
                 intended_failure_class="JOIN_ERROR",
                 metric="distinct_customer_count",
                 filters=(Filter(field="region", operator="eq", values=("西南",)),),
-                join=_join_spec(extra=extra),
+                join=_join_spec_path("customer_transactions", extra=extra),
             )
         )
     drafts.append(
@@ -382,36 +546,142 @@ def _pool_drafts(repository: MetadataRepository) -> list[Draft]:
             intended_failure_class="DUPLICATE_COUNT_ERROR",
             metric="distinct_customer_count",
             filters=(Filter(field="region", operator="eq", values=("华北",)),),
-            join=_join_spec(days=30),
+            join=_join_spec_path("customer_transactions", days=30),
         )
     )
-    drafts.append(
-        Draft(
-            expected_action="refuse",
-            category="refuse",
-            material_status="unscored_oracle",
-            intended_failure_class="SCHEMA_ERROR",
-            accepted_reason_codes=("UNKNOWN_FIELD",),
+
+    # 2. customer_cash_flows
+    for region in ("华东", "华北", "华南", "西南"):
+        for flow_type in ("in", "out"):
+            drafts.append(
+                Draft(
+                    expected_action="answer",
+                    category="join",
+                    material_status="compilable_answer",
+                    intended_failure_class="JOIN_ERROR",
+                    metric="distinct_customer_count",
+                    filters=(Filter(field="region", operator="eq", values=(region,)),),
+                    join=_join_spec_path(
+                        "customer_cash_flows",
+                        extra=(Filter(field="flow_type", operator="eq", values=(flow_type,)),),
+                    ),
+                )
+            )
+    for channel in ("app", "bank"):
+        drafts.append(
+            Draft(
+                expected_action="answer",
+                category="join",
+                material_status="compilable_answer",
+                intended_failure_class="JOIN_ERROR",
+                metric="distinct_customer_count",
+                filters=(Filter(field="customer_level", operator="eq", values=("VIP",)),),
+                join=_join_spec_path(
+                    "customer_cash_flows",
+                    extra=(Filter(field="channel", operator="eq", values=(channel,)),),
+                ),
+            )
         )
-    )
-    drafts.append(
-        Draft(
-            expected_action="refuse",
-            category="refuse",
-            material_status="unscored_oracle",
-            intended_failure_class="PERMISSION_ERROR",
-            accepted_reason_codes=("PERMISSION_DENIED", "UNSAFE_SQL"),
+
+    # 3. customer_holdings
+    for region in ("华东", "华北", "华南", "西南"):
+        drafts.append(
+            Draft(
+                expected_action="answer",
+                category="join",
+                material_status="compilable_answer",
+                intended_failure_class="JOIN_ERROR",
+                metric="distinct_customer_count",
+                filters=(Filter(field="region", operator="eq", values=(region,)),),
+                join=_join_spec_path("customer_holdings"),
+            )
         )
-    )
-    drafts.append(
-        Draft(
-            expected_action="refuse",
-            category="refuse",
-            material_status="unscored_oracle",
-            intended_failure_class="SCHEMA_ERROR",
-            accepted_reason_codes=("UNKNOWN_METRIC",),
+    for level in ("VIP", "standard"):
+        drafts.append(
+            Draft(
+                expected_action="answer",
+                category="join",
+                material_status="compilable_answer",
+                intended_failure_class="JOIN_ERROR",
+                metric="distinct_customer_count",
+                filters=(Filter(field="customer_level", operator="eq", values=(level,)),),
+                join=_join_spec_path("customer_holdings"),
+            )
         )
-    )
+
+    # 4. customer_asset_snapshots
+    for region in ("华东", "华北", "华南", "西南"):
+        drafts.append(
+            Draft(
+                expected_action="answer",
+                category="join",
+                material_status="compilable_answer",
+                intended_failure_class="JOIN_ERROR",
+                metric="distinct_customer_count",
+                filters=(Filter(field="region", operator="eq", values=(region,)),),
+                join=_join_spec_path("customer_asset_snapshots"),
+            )
+        )
+    for level in ("VIP", "standard"):
+        drafts.append(
+            Draft(
+                expected_action="answer",
+                category="join",
+                material_status="compilable_answer",
+                intended_failure_class="JOIN_ERROR",
+                metric="distinct_customer_count",
+                filters=(Filter(field="customer_level", operator="eq", values=(level,)),),
+                join=_join_spec_path("customer_asset_snapshots"),
+            )
+        )
+
+    # 5. customer_service_relations
+    for region in ("华东", "华北", "华南", "西南"):
+        for is_prim in (True, False):
+            drafts.append(
+                Draft(
+                    expected_action="answer",
+                    category="join",
+                    material_status="compilable_answer",
+                    intended_failure_class="JOIN_ERROR",
+                    metric="distinct_customer_count",
+                    filters=(Filter(field="region", operator="eq", values=(region,)),),
+                    join=_join_spec_path(
+                        "customer_service_relations",
+                        extra=(Filter(field="is_primary", operator="eq", values=(is_prim,)),),
+                    ),
+                )
+            )
+
+    # Refusal drafts (contextual filters for family separation, metric must be None)
+    refuse_base = [
+        (("PERMISSION_DENIED",), "PERMISSION_ERROR"),
+        (("PERMISSION_DENIED", "UNSAFE_SQL"), "PERMISSION_ERROR"),
+        (("UNKNOWN_FIELD",), "SCHEMA_ERROR"),
+        (("UNKNOWN_METRIC",), "SCHEMA_ERROR"),
+    ]
+    refuse_contexts = [
+        (),
+        (Filter(field="region", operator="eq", values=("华东",)),),
+        (Filter(field="region", operator="eq", values=("华北",)),),
+        (Filter(field="region", operator="eq", values=("华南",)),),
+        (Filter(field="region", operator="eq", values=("西南",)),),
+        (Filter(field="customer_level", operator="eq", values=("VIP",)),),
+        (Filter(field="customer_level", operator="eq", values=("standard",)),),
+    ]
+    for codes, f_class in refuse_base:
+        for ctx in refuse_contexts:
+            drafts.append(
+                Draft(
+                    expected_action="refuse",
+                    category="refuse",
+                    material_status="unscored_oracle",
+                    intended_failure_class=f_class,
+                    metric=None,
+                    filters=ctx,
+                    accepted_reason_codes=codes,
+                )
+            )
     return drafts
 
 
@@ -447,101 +717,190 @@ def _filter_label(filters: tuple[Filter, ...]) -> str:
         return "主服务标记"
     if item.field == "is_primary" and item.values == (False,):
         return "非主服务标记"
+    if item.field == "relation_type":
+        return {"exclusive": "独占型", "shared": "共享型"}.get(str(item.values[0]), item.field)
     return item.field
 
 
 def _join_label(join: JoinSpec | None) -> str:
     if join is None:
         return "成功交易"
-    extras = [
-        item
-        for item in join.filters
-        if not (item.field == "status" and item.values == ("success",))
-    ]
-    if not extras:
+    path = join.path
+    if path == "customer_transactions":
+        extras = [
+            item
+            for item in join.filters
+            if not (item.field == "status" and item.values == ("success",))
+        ]
+        if not extras:
+            return "成功交易"
+        extra = extras[0]
+        if extra.field == "channel" and extra.values == ("app",):
+            return "成功App交易"
+        if extra.field == "channel" and extra.values == ("branch",):
+            return "成功网点交易"
+        if extra.field == "transaction_type" and extra.values == ("buy",):
+            return "成功买入交易"
+        if extra.field == "transaction_type" and extra.values == ("sell",):
+            return "成功卖出交易"
         return "成功交易"
-    extra = extras[0]
-    if extra.field == "channel" and extra.values == ("app",):
-        return "成功App交易"
-    if extra.field == "channel" and extra.values == ("branch",):
-        return "成功网点交易"
-    if extra.field == "transaction_type" and extra.values == ("buy",):
-        return "成功买入交易"
-    if extra.field == "transaction_type" and extra.values == ("sell",):
-        return "成功卖出交易"
+    if path == "customer_cash_flows":
+        extras = [
+            item
+            for item in join.filters
+            if not (item.field == "status" and item.values == ("success",))
+        ]
+        if not extras:
+            return "成功资金流"
+        extra = extras[0]
+        if extra.field == "flow_type" and extra.values == ("in",):
+            return "成功资金流入"
+        if extra.field == "flow_type" and extra.values == ("out",):
+            return "成功资金流出"
+        if extra.field == "channel" and extra.values == ("app",):
+            return "成功App资金流"
+        if extra.field == "channel" and extra.values == ("bank",):
+            return "成功银行资金流"
+        return "成功资金流"
+    if path == "customer_holdings":
+        return "持仓"
+    if path == "customer_asset_snapshots":
+        return "资产快照"
+    if path == "customer_service_relations":
+        extras = list(join.filters)
+        if extras and extras[0].field == "is_primary" and extras[0].values == (True,):
+            return "主服务经理服务关系"
+        return "服务经理服务关系"
     return "成功交易"
 
 
 def _render(draft: Draft, repository: MetadataRepository) -> tuple[str, tuple[str, ...]]:
-    biz = (
-        repository.get_metric_definition(draft.metric).business_name if draft.metric else "客户人数"
-    )
+    biz = "客户人数"
+    if draft.metric:
+        try:
+            biz = repository.get_metric_definition(draft.metric).business_name
+        except KeyError:
+            biz = "客户人数"
     label = _filter_label(draft.filters)
     if draft.expected_action == "refuse":
+        prefix = f"{label}的" if label else ""
         if draft.accepted_reason_codes == ("PERMISSION_DENIED",):
-            question = "请按客户姓名统计人数。"
+            question = f"请按{prefix}客户姓名统计人数。"
             rewrites = (
-                "统计客户姓名的人数。",
-                "按姓名给出客户人数。",
-                "用客户姓名做人数汇总。",
+                f"统计{prefix}客户姓名的人数。",
+                f"按姓名给出{prefix}客户人数。",
+                f"用{prefix}客户姓名做人数汇总。",
             )
             return question, rewrites
         if draft.accepted_reason_codes == ("PERMISSION_DENIED", "UNSAFE_SQL"):
-            question = "请导出全部客户姓名清单。"
+            question = f"请导出全部{prefix}客户姓名清单。"
             rewrites = (
-                "把所有客户姓名都列出来。",
-                "给我一份完整客户姓名明细。",
-                "输出每一位客户的姓名。",
+                f"把所有{prefix}客户姓名都列出来。",
+                f"给我一份完整{prefix}客户姓名明细。",
+                f"输出每一位{prefix}客户的姓名。",
             )
             return question, rewrites
         if draft.accepted_reason_codes == ("UNKNOWN_METRIC",):
-            question = "请统计客户幸福指数。"
+            question = f"请统计{prefix}客户幸福指数。"
             rewrites = (
-                "客户幸福指数是多少？",
-                "给出幸福指数合计。",
-                "按幸福指数汇总客户。",
+                f"{prefix}客户幸福指数是多少？",
+                f"给出{prefix}幸福指数合计。",
+                f"按幸福指数汇总{prefix}客户。",
             )
             return question, rewrites
-        question = "请按身份证号统计人数。"
+        question = f"请按{prefix}身份证号统计人数。"
         rewrites = (
-            "统计身份证号对应的人数。",
-            "按身份证给出客户人数。",
-            "用身份证号做人数汇总。",
+            f"统计{prefix}身份证号对应的人数。",
+            f"按身份证给出{prefix}客户人数。",
+            f"用身份证号做{prefix}人数汇总。",
         )
         return question, rewrites
     if draft.expected_action == "clarification_needed":
-        question = f"统计最近的{biz}。"
-        rewrites = (
-            f"近期{biz}是多少？",
-            f"请给出最近{biz}。",
-            f"最近一段时间{biz}有多少？",
-        )
+        who = f"{label}客户" if label else ""
+        if isinstance(draft.time_window, RollingWindow) and draft.time_window.days == 30:
+            question = f"统计{who}近期的{biz}。"
+            rewrites = (
+                f"{who}近期{biz}是多少？",
+                f"请给出{who}近期{biz}。",
+                f"{who}最近阶段{biz}有多少？",
+            )
+        else:
+            question = f"统计{who}最近的{biz}。"
+            rewrites = (
+                f"{who}最近{biz}是多少？",
+                f"请给出{who}最近{biz}。",
+                f"{who}近期一段时间{biz}有多少？",
+            )
         return question, rewrites
     if draft.join is not None:
         who = f"{label}客户" if label else "客户"
-        days = draft.join.time_window.days if draft.join.time_window is not None else 90
         trade = _join_label(draft.join)
-        question = f"统计{who}中截至2025年6月30日近{days}天有{trade}的去重客户数。"
+        path = draft.join.path
+        if path in {"customer_transactions", "customer_cash_flows"}:
+            days = draft.join.time_window.days if draft.join.time_window is not None else 90
+            question = f"统计{who}中截至2025年6月30日近{days}天有{trade}的去重客户数。"
+            rewrites = (
+                f"{who}里截至2025年6月30日近{days}天发生过{trade}的客户有多少人？",
+                f"请给出{who}在截至2025-06-30近{days}天有{trade}的去重人数。",
+                f"{who}截至2025年6月30日近{days}天{trade}的客户数量是多少？",
+            )
+        elif path in {"customer_holdings", "customer_asset_snapshots"}:
+            question = f"统计{who}中有{trade}的去重客户数。"
+            rewrites = (
+                f"{who}里存在{trade}的客户有多少人？",
+                f"请给出{who}中有{trade}的去重人数。",
+                f"{who}存在{trade}的客户数量是多少？",
+            )
+        else:
+            question = f"统计{who}中分配有{trade}的去重客户数。"
+            rewrites = (
+                f"{who}里分配有{trade}的客户有多少人？",
+                f"请给出{who}中分配有{trade}的去重人数。",
+                f"{who}分配有{trade}的客户数量是多少？",
+            )
+        return question, rewrites
+    if draft.group_by:
+        dim = draft.group_by[0]
+        dim_map = {
+            "region": "地区",
+            "customer_level": "客户等级",
+            "risk_level": "风险等级",
+            "gender": "性别",
+            "channel": "渠道",
+            "transaction_type": "交易类型",
+            "flow_type": "流向",
+        }
+        dim_label = dim_map.get(dim, dim)
+        prefix = f"{label}的" if label else ""
+        if isinstance(draft.time_window, RollingWindow):
+            days = draft.time_window.days
+            anchor = draft.time_window.anchor_date
+            cn = f"{anchor.year}年{anchor.month}月{anchor.day}日"
+            iso = anchor.isoformat()
+            question = f"按{dim_label}统计截至{cn}近{days}天{prefix}{biz}。"
+            rewrites = (
+                f"各{dim_label}截至{cn}近{days}天{prefix}{biz}分别是多少？",
+                f"请给出按{dim_label}分组的截至{iso}近{days}天{prefix}{biz}。",
+                f"截至{cn}近{days}天{prefix}{biz}按{dim_label}拆开后是多少？",
+            )
+            return question, rewrites
+        question = f"按{dim_label}统计{prefix}{biz}。"
         rewrites = (
-            f"{who}里截至2025年6月30日近{days}天发生过{trade}的客户有多少人？",
-            f"请给出{who}在截至2025-06-30近{days}天有{trade}的去重人数。",
-            f"{who}截至2025年6月30日近{days}天{trade}的客户数量是多少？",
+            f"各{dim_label}的{prefix}{biz}分别是多少？",
+            f"请给出按{dim_label}分组的{prefix}{biz}。",
+            f"{prefix}{biz}按{dim_label}拆开后是多少？",
         )
         return question, rewrites
-    if draft.group_by == ("region",):
-        question = f"按地区统计{biz}。"
+    if any(item.field == "occupation" and item.operator == "is_null" for item in draft.filters):
+        other_filters = [
+            f for f in draft.filters if not (f.field == "occupation" and f.operator == "is_null")
+        ]
+        prefix = f"{_filter_label(tuple(other_filters))}的" if other_filters else ""
+        question = f"统计{prefix}职业为空的{biz}。"
         rewrites = (
-            f"各地区的{biz}分别是多少？",
-            f"请给出按地区分组的{biz}。",
-            f"{biz}按地区拆开后是多少？",
-        )
-        return question, rewrites
-    if label == "职业为空":
-        question = f"统计职业为空的{biz}。"
-        rewrites = (
-            f"职业缺失的{biz}是多少？",
-            f"请给出没有填写职业的{biz}。",
-            f"未填写职业的{biz}一共是多少？",
+            f"{prefix}职业缺失的{biz}是多少？",
+            f"请给出{prefix}没有填写职业的{biz}。",
+            f"{prefix}未填写职业的{biz}一共是多少？",
         )
         return question, rewrites
     if isinstance(draft.time_window, RollingWindow):
@@ -634,12 +993,67 @@ def generate_task_pack(
     unique = unique_pool_drafts(repository, blocked | required_ids)
     reserved = reserve_hidden_error_drafts(unique)
     fill_needed = count - REQUIRED_COUNT
-    fill_ids = sorted(family_id for family_id in unique if family_id not in reserved)
-    if len(fill_ids) < fill_needed:
+    candidates = {fid: unique[fid] for fid in sorted(unique) if fid not in reserved}
+    if len(candidates) < fill_needed:
         raise ValueError("not enough independent families for the generated pack")
+
+    by_category: dict[str, list[str]] = {}
+    for fid, draft in candidates.items():
+        by_category.setdefault(draft.category, []).append(fid)
+
     rng = Random(seed)
-    rng.shuffle(fill_ids)
-    chosen_fill = [unique[family_id] for family_id in fill_ids[:fill_needed]]
+    for cat_list in by_category.values():
+        rng.shuffle(cat_list)
+
+    quotas = {
+        "join": 40,
+        "grouping": 35,
+        "clarification": 20,
+        "refuse": 12,
+        "null_handling": 15,
+        "time_window": 35,
+        "point_in_time": 35,
+        "latest_snapshot": 10,
+    }
+
+    chosen_ids: list[str] = []
+    chosen_set: set[str] = set()
+
+    covered_metrics = {draft.metric for draft in required if draft.metric}
+    for m in repository.metrics.metrics:
+        if m.metric_name not in covered_metrics:
+            for fid, draft in candidates.items():
+                if draft.metric == m.metric_name and fid not in chosen_set:
+                    chosen_ids.append(fid)
+                    chosen_set.add(fid)
+                    covered_metrics.add(m.metric_name)
+                    break
+
+    for cat, quota in quotas.items():
+        available = by_category.get(cat, [])
+        for fid in available:
+            cat_count = sum(1 for x in chosen_ids if candidates[x].category == cat)
+            if cat_count >= quota:
+                break
+            if fid not in chosen_set:
+                chosen_ids.append(fid)
+                chosen_set.add(fid)
+
+    remaining = [
+        fid
+        for fid in candidates
+        if fid not in chosen_set and candidates[fid].expected_action == "answer"
+    ]
+    needed_more = fill_needed - len(chosen_ids)
+    if len(remaining) < needed_more:
+        fallback = [fid for fid in candidates if fid not in chosen_set and fid not in remaining]
+        rng.shuffle(fallback)
+        remaining.extend(fallback)
+    rng.shuffle(remaining)
+    if needed_more > 0:
+        chosen_ids.extend(remaining[:needed_more])
+
+    chosen_fill = [unique[family_id] for family_id in chosen_ids[:fill_needed]]
     train_budget = TRAIN_COUNT_M6 if count >= M6_PUBLIC_COUNT else TRAIN_COUNT
     train_n = min(train_budget, fill_needed)
     ordered: list[tuple[str, Draft]] = [("dev", draft) for draft in required]

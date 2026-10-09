@@ -20,6 +20,8 @@ from customer360.runtime.tools import ToolSession
 from customer360.tasks.catalog import load_human_cases
 from customer360.tasks.variant import tiny_eval_policy
 
+pytestmark = pytest.mark.slow
+
 ROOT = Path(__file__).parents[1]
 ANCHOR = date(2025, 6, 30)
 runner = CliRunner()
@@ -488,3 +490,110 @@ def test_baseline_hardening_negation_join_distinction_and_conflict(baseline, rep
     )
     assert resp.status == "refused"
     assert resp.reason_code == "UNSUPPORTED_QUERY"
+
+
+def test_baseline_multidimensional_grouping_and_multipath_joins(baseline, repository):
+    """Verify multi-dimensional grouping and multi-path joins in BaselineAgent."""
+    gateway = ExecutionGateway(baseline / "dataset.duckdb", tiny_eval_policy())
+    agent = BaselineAgent()
+    tools = ToolSession(gateway, repository)
+
+    # 1. Group by customer_level
+    resp = agent.respond(
+        AgentRequest(
+            case_id="probe_grp_level",
+            question="按客户等级统计客户数。",
+            anchor_date=ANCHOR,
+            metadata_version=repository.metrics.metrics_version,
+        ),
+        tools,
+    )
+    assert resp.status == "success"
+    assert '"customer_level" AS "customer_level"' in resp.sql
+    assert 'GROUP BY "customer_level"' in resp.sql
+
+    # 2. Group by channel
+    resp = agent.respond(
+        AgentRequest(
+            case_id="probe_grp_channel",
+            question="按渠道统计截至2025年6月30日近90天成功交易笔数。",
+            anchor_date=ANCHOR,
+            metadata_version=repository.metrics.metrics_version,
+        ),
+        tools,
+    )
+    assert resp.status == "success"
+    assert '"channel" AS "channel"' in resp.sql
+    assert 'GROUP BY "channel"' in resp.sql
+
+    # 3. Group by gender
+    resp = agent.respond(
+        AgentRequest(
+            case_id="probe_grp_gender",
+            question="按性别统计客户数。",
+            anchor_date=ANCHOR,
+            metadata_version=repository.metrics.metrics_version,
+        ),
+        tools,
+    )
+    assert resp.status == "success"
+    assert '"gender" AS "gender"' in resp.sql
+    assert 'GROUP BY "gender"' in resp.sql
+
+    # 4. Group by risk_level
+    resp = agent.respond(
+        AgentRequest(
+            case_id="probe_grp_risk",
+            question="按风险等级统计客户数。",
+            anchor_date=ANCHOR,
+            metadata_version=repository.metrics.metrics_version,
+        ),
+        tools,
+    )
+    assert resp.status == "success"
+    assert '"risk_level" AS "risk_level"' in resp.sql
+    assert 'GROUP BY "risk_level"' in resp.sql
+
+    # 5. Join: customer_cash_flows
+    resp = agent.respond(
+        AgentRequest(
+            case_id="probe_join_cash_flows",
+            question="统计华东客户中截至2025年6月30日近90天发生过资金流的去重客户数。",
+            anchor_date=ANCHOR,
+            metadata_version=repository.metrics.metrics_version,
+        ),
+        tools,
+    )
+    assert resp.status == "success"
+    assert 'JOIN "fact_cash_flow" AS "cf"' in resp.sql
+    assert '"c"."region" = \'华东\'' in resp.sql
+    assert '"cf"."status" = \'success\'' in resp.sql
+
+    # 6. Join: customer_service_relations
+    resp = agent.respond(
+        AgentRequest(
+            case_id="probe_join_service_relations",
+            question="统计VIP客户中分配有主服务经理的去重客户数。",
+            anchor_date=ANCHOR,
+            metadata_version=repository.metrics.metrics_version,
+        ),
+        tools,
+    )
+    assert resp.status == "success"
+    assert 'JOIN "fact_service_relation" AS "sr"' in resp.sql
+    assert '"c"."customer_level" = \'VIP\'' in resp.sql
+    assert '"sr"."is_primary" = TRUE' in resp.sql
+
+    # 7. Join: customer_asset_snapshots
+    resp = agent.respond(
+        AgentRequest(
+            case_id="probe_join_asset_snapshots",
+            question="统计低风险客户中有资产快照的去重客户数。",
+            anchor_date=ANCHOR,
+            metadata_version=repository.metrics.metrics_version,
+        ),
+        tools,
+    )
+    assert resp.status == "success"
+    assert 'JOIN "fact_asset_snapshot" AS "a"' in resp.sql
+    assert '"c"."risk_level" = \'low\'' in resp.sql

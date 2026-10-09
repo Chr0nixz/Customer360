@@ -79,6 +79,36 @@ def _join_column(node: exp.Expression, aliases: dict[str, str]) -> tuple[str, st
     return aliases[node.table], node.name
 
 
+VALID_JOIN_TABLE_PAIRS = frozenset(
+    {
+        frozenset({"dim_customer", "fact_transaction"}),
+        frozenset({"dim_customer", "fact_cash_flow"}),
+        frozenset({"dim_customer", "fact_holding"}),
+        frozenset({"dim_customer", "fact_asset_snapshot"}),
+        frozenset({"dim_customer", "fact_service_relation"}),
+    }
+)
+
+VALID_RIGHT_TABLES = {
+    "fact_transaction": "t",
+    "fact_cash_flow": "cf",
+    "fact_holding": "h",
+    "fact_asset_snapshot": "a",
+    "fact_service_relation": "sr",
+}
+
+SAFE_GROUP_DIMENSIONS: frozenset[str] = frozenset(
+    {
+        "region",
+        "customer_level",
+        "risk_level",
+        "gender",
+        "channel",
+        "transaction_type",
+    }
+)
+
+
 def _join_condition(
     node: exp.Expression, aliases: dict[str, str], catalog: Catalog, grants
 ) -> set[str]:
@@ -93,11 +123,11 @@ def _join_condition(
         ltable, lcol = _join_column(left, aliases)
         rtable, rcol = _join_column(right, aliases)
         if (
-            {ltable, rtable} != {"dim_customer", "fact_transaction"}
+            frozenset({ltable, rtable}) not in VALID_JOIN_TABLE_PAIRS
             or lcol != "customer_id"
             or rcol != "customer_id"
         ):
-            _fail("JOIN_ERROR", "only customer_id customer-to-transaction join is supported")
+            _fail("JOIN_ERROR", "unsupported join path or key")
         return {f"{ltable}.{lcol}", f"{rtable}.{rcol}"}
     _fail("JOIN_ERROR", "join condition must compare the two customer_id columns")
 
@@ -249,14 +279,15 @@ def _validate_join_query(
         or join.args.get("kind") not in (None, "", "INNER")
     ):
         _fail("UNSUPPORTED_QUERY", "only an inner join is supported")
-    tables = (from_clause.this.name, right.name)
-    if tables != ("dim_customer", "fact_transaction"):
+    if from_clause.this.name != "dim_customer" or right.name not in VALID_RIGHT_TABLES:
         _fail("JOIN_ERROR", "join direction is not supported")
+    tables = (from_clause.this.name, right.name)
+    expected_right_alias = VALID_RIGHT_TABLES[right.name]
     aliases = {}
-    for item, expected in ((from_clause.this, "c"), (right, "t")):
+    for item, expected in ((from_clause.this, "c"), (right, expected_right_alias)):
         alias = item.args.get("alias")
         if not alias or alias.name != expected:
-            _fail("UNSUPPORTED_QUERY", "join aliases must be c and t")
+            _fail("UNSUPPORTED_QUERY", f"join aliases must be c and {expected_right_alias}")
         aliases[expected] = item.name
     grants = {grant.table: set(grant.columns) for grant in policy.grants}
     for table in tables:
@@ -314,38 +345,71 @@ def _validate_grouped_query(
         or group is None
     ):
         _fail("UNSUPPORTED_QUERY", "grouped query requires one unaliased table")
-    if table.name != "dim_customer":
-        _fail("UNSUPPORTED_QUERY", "only region grouping on dim_customer is supported")
+    try:
+        table_def = catalog.table(table.name)
+    except KeyError:
+        _fail("UNKNOWN_FIELD", f"unknown table {table.name}")
+
     group_exprs = list(group.expressions)
     if len(group_exprs) != 1 or not isinstance(group_exprs[0], exp.Column):
         _fail("UNSUPPORTED_QUERY", "exactly one grouping column is supported")
     group_name = _column(group_exprs[0])
-    if group_name != "region":
-        _fail("UNSUPPORTED_QUERY", "only region grouping on dim_customer is supported")
+    try:
+        group_col = table_def.column(group_name)
+    except KeyError:
+        _fail("UNKNOWN_FIELD", f"unknown grouping column {group_name}")
+    if group_col.kind not in {"string", "date", "boolean"}:
+        _fail("UNSUPPORTED_QUERY", "grouping column must be string, date or boolean")
+    norm_group_name = group_name.lower()
+    if norm_group_name in {"customer_id", "account_id"} or norm_group_name.endswith("_id"):
+        _fail("UNSAFE_SQL", f"grouping on identifier column '{group_name}' violates privacy policy")
+    if norm_group_name not in SAFE_GROUP_DIMENSIONS:
+        _fail("UNSAFE_SQL", f"grouping on column '{group_name}' is not in safe group dimensions")
+
     grant = next((item for item in policy.grants if item.table == table.name), None)
     if grant is None:
         _fail("PERMISSION_DENIED", "table is not granted")
     granted = set(grant.columns)
-    table_def = catalog.table(table.name)
+
     projections = tree.expressions
     if len(projections) != 2:
         _fail("UNSUPPORTED_QUERY", "grouped query needs the group key and one aggregate")
     key_name, key_alias = _aliased_column(projections[0])
     if key_name != group_name or key_alias != group_name:
         _fail("UNSUPPORTED_QUERY", "select list must start with the grouping column")
+
     aggregate_proj = projections[1]
     if not isinstance(aggregate_proj, exp.Alias):
         _fail("UNSUPPORTED_QUERY", "one aliased aggregate is required")
     alias = aggregate_proj.alias
     if not re.fullmatch(r"[a-z][a-z0-9_]*", alias):
         _fail("UNSAFE_SQL", "unsafe output alias")
+
     aggregate = aggregate_proj.this
-    if not isinstance(aggregate, exp.Count) or not isinstance(aggregate.this, exp.Distinct):
-        _fail("UNSUPPORTED_QUERY", "grouped query must count distinct customers")
-    values = aggregate.this.expressions
-    if len(values) != 1 or _column(values[0]) != "customer_id":
-        _fail("UNSUPPORTED_QUERY", "grouped query must count customer_id")
-    referenced = {group_name, "customer_id"}
+    if isinstance(aggregate, exp.Count) and isinstance(aggregate.this, exp.Distinct):
+        values = aggregate.this.expressions
+        if len(values) != 1:
+            _fail("UNSUPPORTED_QUERY", "distinct count requires one column")
+        measure_name = _column(values[0])
+        output_kind = "integer"
+    elif isinstance(aggregate, exp.Count):
+        measure_name = _column(aggregate.this)
+        output_kind = "integer"
+    elif isinstance(aggregate, exp.Sum):
+        measure_name = _column(aggregate.this)
+        output_kind = "decimal"
+    else:
+        _fail("UNSUPPORTED_QUERY", "only COUNT, COUNT DISTINCT, and SUM are supported")
+
+    try:
+        measure_col = table_def.column(measure_name)
+    except KeyError:
+        _fail("UNKNOWN_FIELD", f"unknown measure column {measure_name}")
+
+    if output_kind == "decimal" and measure_col.kind not in {"decimal", "integer"}:
+        _fail("UNSUPPORTED_QUERY", "sum requires decimal or integer column")
+
+    referenced = {group_name, measure_name}
     where = tree.args.get("where")
     if where:
         referenced |= _validate_condition(where.this, catalog, table.name)
@@ -358,7 +422,7 @@ def _validate_grouped_query(
         sql=sql,
         table=table.name,
         output_names=(key_alias, alias),
-        output_kinds=("string", "integer"),
+        output_kinds=(group_col.kind, output_kind),
         referenced_columns=tuple(sorted(referenced)),
     )
 

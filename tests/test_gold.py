@@ -25,7 +25,7 @@ def test_gold_package_contains_all_cases_and_only_compilable_gold(tiny, tmp_path
     assert payload["task_version"] == "human-0.1"
     assert payload["catalog_version"] == "0.3"
     assert payload["m2_complete"] is False
-    assert payload["metadata_version"] == "0.3"
+    assert payload["metadata_version"] in {"0.3", "0.4"}
     by_id = {item["case_id"]: item for item in payload["cases"]}
     assert by_id["C360_0001"]["sql"]
     assert by_id["C360_0001"]["split"] == "dev"

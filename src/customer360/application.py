@@ -145,7 +145,7 @@ def run_smoke(output: Path, seed: int = 42, limits: SqlLimits | None = None) -> 
                 case_id=case_id,
                 question=question,
                 anchor_date=FIXTURE_ANCHOR,
-                metadata_version="0.3",
+                metadata_version=repository.metrics.metrics_version,
             ),
             oracle=AnswerOracle(semantic_spec=spec),
         )

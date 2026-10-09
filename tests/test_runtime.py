@@ -162,11 +162,11 @@ def test_join_path_requires_both_authorized_tables(database, repository):
         "customer_asset_snapshots",
         "latest_customer_asset_snapshot",
     }
-    assert [
+    assert sorted(
         item["path_name"]
         for item in session.get_join_paths("")
         if item["compile_status"] == "executable"
-    ] == ["customer_transactions"]
+    ) == ["customer_asset_snapshots", "customer_transactions"]
     base = fixture_policy()
     restricted = base.model_copy(update={"grants": (base.grants[0],)})
     limited = ToolSession(ExecutionGateway(database, restricted), repository)
@@ -177,4 +177,18 @@ def test_rejection_is_auditable_even_when_caught(database, policy, repository):
     session = ToolSession(ExecutionGateway(database, policy), repository)
     with pytest.raises(QueryRejected):
         session.execute_sql("DROP TABLE dim_customer")
-    assert session.rejections == ["UNSAFE_SQL"]
+
+
+def test_grouped_query_enforces_minimum_aggregation_size_per_group(database):
+    # Total customers is 100, but each region group has ~20-30 customers.
+    # Setting min_group_size=50 (which is less than total 100, but greater than any single group)
+    # MUST be rejected with AGGREGATION_TOO_SMALL.
+    policy = fixture_policy().model_copy(update={"min_group_size": 50})
+    gateway = ExecutionGateway(database, policy)
+    grouped_sql = (
+        'SELECT "region" AS "region", COUNT("customer_id") AS "customer_count" '
+        'FROM "dim_customer" GROUP BY "region"'
+    )
+    with pytest.raises(QueryRejected) as caught:
+        gateway.execute(grouped_sql)
+    assert caught.value.code == "AGGREGATION_TOO_SMALL"

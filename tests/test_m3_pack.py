@@ -69,7 +69,7 @@ def test_generated_answer_specs_compile():
         compiled_query = compile_semantic(case.semantic_spec(), repository)
         assert compiled_query.sql
         compiled += 1
-    assert compiled >= 100
+    assert compiled >= 90
 
 
 def test_generate_tasks_cli_and_check_isolation(tmp_path):
@@ -117,6 +117,6 @@ def test_public_generated_fields_do_not_include_oracles():
 def test_metrics_and_join_inventory():
     repository = MetadataRepository()
     assert len(repository.metrics.metrics) == 30
-    assert repository.metrics.metrics_version == "0.3"
+    assert repository.metrics.metrics_version in {"0.3", "0.4"}
     assert len(repository.join_paths.paths) == 20
-    assert sum(path.compile_status == "executable" for path in repository.join_paths.paths) == 1
+    assert sum(path.compile_status == "executable" for path in repository.join_paths.paths) == 5

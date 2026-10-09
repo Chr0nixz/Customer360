@@ -1,5 +1,7 @@
 # GitHub 公开发布清单
 
+[English](en/github-publish.md) | [简体中文](github-publish.md)
+
 面向要把本仓库推到 **公开 GitHub** 的维护者。日常使用见 [user-guide.md](user-guide.md)。打 `v1.0.0` 仍须满足 [formal-release.md](formal-release.md) 的八个 RC 门。
 
 本机可以先把文件准备好。不要伪造 Docker digest，也不要在未签署 `docker_runtime` 时打 `v1.0.0`。

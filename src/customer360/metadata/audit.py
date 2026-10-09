@@ -6,7 +6,7 @@ deprecation topologies, and join path closures.
 
 from customer360.contracts.audit import MetadataAuditIssue, MetadataAuditReport
 from customer360.metadata.metrics import (
-    EXECUTABLE_JOIN_PATH,
+    EXECUTABLE_JOIN_PATHS,
     UNDECLARED_ENTITY_FIELDS,
     MetadataRepository,
 )
@@ -153,12 +153,15 @@ def audit_metadata(repository: MetadataRepository) -> MetadataAuditReport:
     for jp in join_paths.paths:
         if jp.compile_status == "executable":
             executable_count += 1
-            if jp.path_name != EXECUTABLE_JOIN_PATH:
+            if jp.path_name not in EXECUTABLE_JOIN_PATHS:
                 issues.append(
                     MetadataAuditIssue(
                         code="INVALID_EXECUTABLE_JOIN_PATH",
                         target=jp.path_name,
-                        message=f"Expected '{EXECUTABLE_JOIN_PATH}', got '{jp.path_name}'.",
+                        message=(
+                            f"Executable path '{jp.path_name}' not in supported executable "
+                            "join paths."
+                        ),
                     )
                 )
 
@@ -184,12 +187,15 @@ def audit_metadata(repository: MetadataRepository) -> MetadataAuditReport:
                         )
                     )
 
-    if executable_count != 1:
+    if executable_count != len(EXECUTABLE_JOIN_PATHS):
         issues.append(
             MetadataAuditIssue(
                 code="EXECUTABLE_JOIN_COUNT_INVALID",
                 target="join_paths",
-                message=f"Expected exactly 1 executable join path, found {executable_count}.",
+                message=(
+                    f"Expected exactly {len(EXECUTABLE_JOIN_PATHS)} executable join paths, "
+                    f"found {executable_count}."
+                ),
             )
         )
 

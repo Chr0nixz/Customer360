@@ -24,6 +24,8 @@ from customer360.tasks.independent import compute_independent
 from customer360.tasks.slices import load_table_slices
 from customer360.tasks.variant import tiny_eval_policy
 
+pytestmark = pytest.mark.slow
+
 ROOT = Path(__file__).parents[1]
 runner = CliRunner()
 

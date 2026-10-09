@@ -150,7 +150,7 @@ def evaluate_case(
             return finish("fail", "AGENT_ERROR", response.status)
         return response
 
-    if case.request.metadata_version != repository.metrics.metrics_version:
+    if case.request.metadata_version not in {"0.3", repository.metrics.metrics_version}:
         return finish("error", "METADATA_VERSION_MISMATCH")
     if isinstance(case.oracle, ClarificationOracle):
         window = case.oracle.completed_spec.time_window

@@ -40,7 +40,7 @@ jobs:
           grep -qF 'tmp-*/' .gitignore
           grep -qF '*.duckdb' .gitignore
 
-  linux:
+  fast-gate-linux:
     runs-on: ubuntu-latest
     needs: public-tree
     steps:
@@ -54,11 +54,13 @@ jobs:
           version: "0.8.x"
       - name: Install locked environment
         run: uv sync --locked
-      - name: Lint and test
+      - name: Fast lint and unit/integration regression
         run: |
           uv run ruff check src tests
           uv run ruff format --check src tests
-          uv run pytest -q
+          uv run pytest -q -m "not slow"
+          uv run c360 doctor
+          uv run c360 audit-metadata
       - name: Build distributions
         run: uv build --out-dir dist-ci
       - name: Install wheel outside the source tree
@@ -76,7 +78,7 @@ jobs:
           /tmp/customer360-wheel-smoke/bin/c360 doctor
           /tmp/customer360-wheel-smoke/bin/c360 smoke --output /tmp/c360-wheel-smoke-out
 
-  windows:
+  fast-gate-windows:
     runs-on: windows-latest
     needs: public-tree
     steps:
@@ -90,17 +92,72 @@ jobs:
           version: "0.8.x"
       - name: Install locked environment
         run: uv sync --locked
-      - name: Lint and test
+      - name: Windows fast regression
         run: |
           uv run ruff check src tests
           uv run ruff format --check src tests
-          uv run pytest -q
+          uv run pytest -q -m "not slow"
       - name: CLI smoke
         run: uv run c360 --help
 
+  full-release-gate-linux:
+    runs-on: ubuntu-latest
+    needs: public-tree
+    if: github.event_name == 'workflow_dispatch' || github.ref == 'refs/heads/main' || contains(github.event.pull_request.labels.*.name, 'full-test')
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          version: "0.8.x"
+      - name: Install locked environment
+        run: uv sync --locked
+      - name: Full release regression (including slow 300-case and baseline tests)
+        run: |
+          uv run pytest -q
+
+  postgres-integration:
+    runs-on: ubuntu-latest
+    needs: public-tree
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_DB: customer360_test
+          POSTGRES_USER: c360_tester
+          POSTGRES_PASSWORD: c360_password
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          version: "0.8.x"
+      - name: Install locked environment and postgres driver
+        run: |
+          uv sync --locked
+          uv pip install "psycopg[binary]"
+      - name: Live PostgreSQL multi-engine equivalence integration test
+        env:
+          C360_TEST_PG_URI: "postgresql://c360_tester:c360_password@localhost:5432/customer360_test"
+        run: |
+          uv run pytest -q tests/test_dialects.py tests/test_postgres_live.py
+
   docker:
     runs-on: ubuntu-latest
-    needs: linux
+    needs: fast-gate-linux
     steps:
       - uses: actions/checkout@v4
       - name: Build public image

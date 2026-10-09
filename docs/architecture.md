@@ -1,5 +1,7 @@
 # 架构与正式发布边界 1.0.0
 
+[English](en/architecture.md) | [简体中文](architecture.md)
+
 命令怎么跑见 [使用说明](user-guide.md)。本文只讲信任边界和模块职责。
 
 ## 1. 装配与职责

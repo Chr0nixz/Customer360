@@ -25,8 +25,8 @@ from customer360.contracts.semantic import (
     SemanticSpec,
 )
 
-HIDDEN_PACK_ID = "hidden-m6-0.1"
-HIDDEN_TASK_VERSION = "hidden-0.1"
+HIDDEN_PACK_ID = "hidden-m6-0.2"
+HIDDEN_TASK_VERSION = "hidden-0.2"
 PUBLIC_HIDDEN_FIELDS = frozenset(
     {"case_id", "pack_id", "task_version", "split", "question", "rewrites"}
 )
@@ -66,8 +66,8 @@ def _hidden_case_id(case_id: str) -> bool:
 
 class PublicHiddenCase(Contract):
     case_id: Text
-    pack_id: Literal["hidden-m6-0.1"] = HIDDEN_PACK_ID
-    task_version: Literal["hidden-0.1"] = HIDDEN_TASK_VERSION
+    pack_id: Literal["hidden-m6-0.1", "hidden-m6-0.2"] = HIDDEN_PACK_ID
+    task_version: Literal["hidden-0.1", "hidden-0.2"] = HIDDEN_TASK_VERSION
     split: Literal["private"] = "private"
     question: Text
     rewrites: tuple[Text, ...] = Field(min_length=3, max_length=5)
@@ -86,7 +86,7 @@ class PublicHiddenCase(Contract):
 class PublicHiddenCatalog(Contract):
     catalog_version: Literal["0.5"] = "0.5"
     artifact_kind: Literal["agent_hidden_cases"] = "agent_hidden_cases"
-    pack_id: Literal["hidden-m6-0.1"] = HIDDEN_PACK_ID
+    pack_id: Literal["hidden-m6-0.1", "hidden-m6-0.2"] = HIDDEN_PACK_ID
     cases: tuple[PublicHiddenCase, ...] = Field(min_length=1)
 
     @model_validator(mode="after")
@@ -99,8 +99,8 @@ class PublicHiddenCatalog(Contract):
 
 class TrustedHiddenOracle(Contract):
     case_id: Text
-    pack_id: Literal["hidden-m6-0.1"] = HIDDEN_PACK_ID
-    task_version: Literal["hidden-0.1"] = HIDDEN_TASK_VERSION
+    pack_id: Literal["hidden-m6-0.1", "hidden-m6-0.2"] = HIDDEN_PACK_ID
+    task_version: Literal["hidden-0.1", "hidden-0.2"] = HIDDEN_TASK_VERSION
     split: Literal["private"] = "private"
     family: FamilyFingerprint
     expected_action: Literal["answer", "clarification_needed", "refuse"]
@@ -156,8 +156,8 @@ class TrustedHiddenOracle(Contract):
 
 class HiddenCaseBlueprint(Contract):
     case_id: Text
-    pack_id: Literal["hidden-m6-0.1"] = HIDDEN_PACK_ID
-    task_version: Literal["hidden-0.1"] = HIDDEN_TASK_VERSION
+    pack_id: Literal["hidden-m6-0.1", "hidden-m6-0.2"] = HIDDEN_PACK_ID
+    task_version: Literal["hidden-0.1", "hidden-0.2"] = HIDDEN_TASK_VERSION
     split: Literal["private"] = "private"
     family: FamilyFingerprint
     expected_action: Literal["answer", "clarification_needed", "refuse"]
@@ -212,15 +212,15 @@ class HiddenCaseBlueprint(Contract):
 
 
 class HiddenTaskPack(Contract):
-    pack_id: Literal["hidden-m6-0.1"] = HIDDEN_PACK_ID
+    pack_id: Literal["hidden-m6-0.1", "hidden-m6-0.2"] = HIDDEN_PACK_ID
     pack_kind: Literal["hidden_task_pack"] = "hidden_task_pack"
-    task_version: Literal["hidden-0.1"] = HIDDEN_TASK_VERSION
+    task_version: Literal["hidden-0.1", "hidden-0.2"] = HIDDEN_TASK_VERSION
     catalog_version: Literal["0.5"] = "0.5"
     seed: int = Field(ge=0)
     case_count: int = Field(ge=1)
     scoring_applied: Literal[False] = False
     hidden: Literal[True] = True
-    public_pack_id: Literal["generated-m3-0.1"] = "generated-m3-0.1"
+    public_pack_id: Literal["generated-m3-0.1", "generated-m3-0.2"] = "generated-m3-0.2"
     metrics_version: Text
     join_paths_version: Text
     cases: tuple[HiddenCaseBlueprint, ...] = Field(min_length=1)
@@ -311,7 +311,7 @@ class HiddenEvalReport(Contract):
     scoring_applied: Literal[False] = False
     hidden: Literal[True] = True
     agent_id: Identifier
-    pack_id: Literal["hidden-m6-0.1"] = HIDDEN_PACK_ID
+    pack_id: Literal["hidden-m6-0.1", "hidden-m6-0.2"] = HIDDEN_PACK_ID
     case_count: int = Field(ge=1)
     compilable_answers: int = Field(ge=0)
     integrity_passed: bool

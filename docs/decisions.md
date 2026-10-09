@@ -1,5 +1,7 @@
 # 工程决策记录
 
+[English](en/decisions.md) | [简体中文](decisions.md)
+
 状态：以下为本次架构实现采用的工程默认值；v1.0 产品默认见 D057，其余未决项仍以 ROADMAP 第10节为准。怎么跑命令见 [使用说明](user-guide.md)。
 
 | 编号 | 决策 | 原因 / 后续影响 |
@@ -65,6 +67,6 @@
 
 当前未实现 OS 级任意代码隔离，不支持运行不可信 Python Agent 或公开接收提交。v1.0 的运行位置是本地 CLI，外加可选非 root、`--read-only --network=none` 的 Docker；本机未安装 Docker 时 `docker_runtime` 保持未签署。
 
-D056 补充：300 题不能通过把 `m6_structure` 改成 false 绕过四变体门；验证前校验变体 ID 唯一性、catalog/date-dimension 一致性，矩阵与验收共用冻结 ID 常量。`policy_block_code` 仅保存在私有逐题/变体记录，权限拒绝不会变成已授权成功。Gold 与独立 oracle 在所有已提供快照上都必须匹配，包括 `AGGREGATION_TOO_SMALL` 的快照；不适用 Agent 计分不等于免验 Gold。0.1 报告只作历史证据，升级需重新验收而非改写版本号；evaluator 0.5、任务/数据版本和官方评分权重不变。隐藏 baseline-only 仅为现状说明，不代表满足正式的隐藏多变体发布门。验证命令与结果见 [复审记录](review-s-g.md)。
+D056 补充：300 题不能通过把 `m6_structure` 改成 false 绕过四变体门；验证前校验变体 ID 唯一性、catalog/date-dimension 一致性，矩阵与验收共用冻结 ID 常量。`policy_block_code` 仅保存在私有逐题/变体记录，权限拒绝不会变成已授权成功。Gold 与独立 oracle 在所有已提供快照上都必须匹配，包括 `AGGREGATION_TOO_SMALL` 的快照；不适用 Agent 计分不等于免验 Gold。0.1 报告只作历史证据，升级需重新验收而非改写版本号；evaluator 0.5、任务/数据版本和官方评分权重不变。隐藏 baseline-only 仅为现状说明，不代表满足正式的隐藏多变体发布门。验证命令与结果见 [正式发布记录](formal-release.md)。
 
 更改这些默认值前，先记录受影响的契约、版本、测试和迁移方式。特别是 D002/D005/D006 不应由后续轻量 agent 在扩充数据时改动。

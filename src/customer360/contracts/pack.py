@@ -23,8 +23,8 @@ from customer360.contracts.semantic import (
     SemanticSpec,
 )
 
-GENERATED_PACK_ID = "generated-m3-0.1"
-GENERATED_TASK_VERSION = "generated-0.1"
+GENERATED_PACK_ID = "generated-m3-0.2"
+GENERATED_TASK_VERSION = "generated-0.2"
 PUBLIC_GENERATED_FIELDS = frozenset(
     {"case_id", "pack_id", "task_version", "split", "question", "rewrites"}
 )
@@ -41,8 +41,8 @@ def _generated_case_id(case_id: str) -> bool:
 
 class PublicGeneratedCase(Contract):
     case_id: Text
-    pack_id: Literal["generated-m3-0.1"] = GENERATED_PACK_ID
-    task_version: Literal["generated-0.1"] = GENERATED_TASK_VERSION
+    pack_id: Literal["generated-m3-0.1", "generated-m3-0.2"] = GENERATED_PACK_ID
+    task_version: Literal["generated-0.1", "generated-0.2"] = GENERATED_TASK_VERSION
     split: Literal["train", "dev"]
     question: Text
     rewrites: tuple[Text, ...] = Field(min_length=3, max_length=5)
@@ -61,7 +61,7 @@ class PublicGeneratedCase(Contract):
 class PublicGeneratedCatalog(Contract):
     catalog_version: Literal["0.4"] = "0.4"
     artifact_kind: Literal["public_generated_cases"] = "public_generated_cases"
-    pack_id: Literal["generated-m3-0.1"] = GENERATED_PACK_ID
+    pack_id: Literal["generated-m3-0.1", "generated-m3-0.2"] = GENERATED_PACK_ID
     cases: tuple[PublicGeneratedCase, ...] = Field(min_length=1)
 
     @model_validator(mode="after")
@@ -77,8 +77,8 @@ class PublicGeneratedCatalog(Contract):
 
 class TrustedGeneratedOracle(Contract):
     case_id: Text
-    pack_id: Literal["generated-m3-0.1"] = GENERATED_PACK_ID
-    task_version: Literal["generated-0.1"] = GENERATED_TASK_VERSION
+    pack_id: Literal["generated-m3-0.1", "generated-m3-0.2"] = GENERATED_PACK_ID
+    task_version: Literal["generated-0.1", "generated-0.2"] = GENERATED_TASK_VERSION
     split: Literal["train", "dev"]
     family: FamilyFingerprint
     expected_action: Literal["answer", "clarification_needed", "refuse"]
@@ -133,7 +133,7 @@ class TrustedGeneratedOracle(Contract):
 class TrustedGeneratedCatalog(Contract):
     catalog_version: Literal["0.4"] = "0.4"
     artifact_kind: Literal["trusted_generated_oracles"] = "trusted_generated_oracles"
-    pack_id: Literal["generated-m3-0.1"] = GENERATED_PACK_ID
+    pack_id: Literal["generated-m3-0.1", "generated-m3-0.2"] = GENERATED_PACK_ID
     cases: tuple[TrustedGeneratedOracle, ...] = Field(min_length=1)
 
     @model_validator(mode="after")
@@ -149,8 +149,8 @@ class TrustedGeneratedCatalog(Contract):
 
 class GeneratedCaseBlueprint(Contract):
     case_id: Text
-    pack_id: Literal["generated-m3-0.1"] = GENERATED_PACK_ID
-    task_version: Literal["generated-0.1"] = GENERATED_TASK_VERSION
+    pack_id: Literal["generated-m3-0.1", "generated-m3-0.2"] = GENERATED_PACK_ID
+    task_version: Literal["generated-0.1", "generated-0.2"] = GENERATED_TASK_VERSION
     split: Literal["train", "dev"]
     family: FamilyFingerprint
     expected_action: Literal["answer", "clarification_needed", "refuse"]
@@ -205,9 +205,9 @@ class GeneratedCaseBlueprint(Contract):
 
 
 class GeneratedTaskPack(Contract):
-    pack_id: Literal["generated-m3-0.1"] = GENERATED_PACK_ID
+    pack_id: Literal["generated-m3-0.1", "generated-m3-0.2"] = GENERATED_PACK_ID
     pack_kind: Literal["generated_task_pack"] = "generated_task_pack"
-    task_version: Literal["generated-0.1"] = GENERATED_TASK_VERSION
+    task_version: Literal["generated-0.1", "generated-0.2"] = GENERATED_TASK_VERSION
     catalog_version: Literal["0.4"] = "0.4"
     seed: int = Field(ge=0)
     case_count: int = Field(ge=1)

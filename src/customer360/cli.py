@@ -6,11 +6,14 @@ from typing import Annotated
 import typer
 
 from customer360 import __version__
+from customer360.agent.starter import generate_agent_starter
 from customer360.application import FIXTURE_ANCHOR, run_single_case, run_smoke
 from customer360.artifacts import json_text, write_json_new
 from customer360.config import resolve_settings
 from customer360.contracts.hidden import HiddenTaskPack
 from customer360.contracts.pack import GeneratedTaskPack
+from customer360.evaluator.agent_tester import load_agent_from_path, verify_agent_conformance
+from customer360.evaluator.debug import debug_single_case, render_debug_view
 from customer360.evaluator.diagnostics import diagnose_matrix_run, write_diagnostics_report
 from customer360.evaluator.formal import evaluate_formal, write_formal_input
 from customer360.evaluator.hidden import evaluate_hidden_pack, write_hidden_run
@@ -35,6 +38,7 @@ from customer360.release import (
     prepare_release,
 )
 from customer360.runtime.dialects import transpile_sql
+from customer360.synth.env import setup_benchmark_env
 from customer360.synth.fixture import build_public_fixture
 from customer360.synth.generator import generate_dataset, load_generation_config
 from customer360.synth.schema import render_ddl
@@ -192,6 +196,28 @@ def generate_variant(
         manifest = generate_named_variant(variant_id, output)  # type: ignore[arg-type]
     except (OSError, ValueError, TypeError) as exc:
         typer.echo(f"Variant generation failed: {exc}", err=True)
+        raise typer.Exit(2) from exc
+    typer.echo(json_text(manifest))
+
+
+@app.command("setup-env")
+def setup_env_cmd(
+    output: Annotated[
+        Path,
+        typer.Option(
+            help="Directory to create benchmark environment (baseline + 4 variants)",
+        ),
+    ] = Path("outputs/benchmark_env"),
+    force: Annotated[
+        bool,
+        typer.Option(help="Overwrite existing directory if present"),
+    ] = False,
+) -> None:
+    """Setup a complete local benchmark environment with baseline and all variants."""
+    try:
+        manifest = setup_benchmark_env(output, force=force)
+    except (OSError, ValueError, TypeError, FileExistsError) as exc:
+        typer.echo(f"Setup environment failed: {exc}", err=True)
         raise typer.Exit(2) from exc
     typer.echo(json_text(manifest))
 
@@ -487,6 +513,40 @@ def run_case(
         raise typer.Exit(2) from exc
     typer.echo(json_text(summary))
     if summary["outcome"] != "pass":
+        raise typer.Exit(1)
+
+
+@app.command("debug-case")
+def debug_case_cmd(
+    case_id: Annotated[str, typer.Option(help="Human pack case id such as C360_0001")],
+    dataset: Annotated[Path, typer.Option(help="Canonical Tiny dataset directory (seed 42)")],
+    agent: Annotated[str, typer.Option(help="Local driver: baseline or template")] = "baseline",
+    oracles: Annotated[
+        Path, typer.Option(help="Trusted human oracles; not shipped in the wheel")
+    ] = DEFAULT_TRUSTED_ORACLES,
+    format: Annotated[str, typer.Option(help="Output format: text or json")] = "text",
+) -> None:
+    """Interactively debug a single case with execution trajectory and diff analysis."""
+    try:
+        if format not in {"text", "json"}:
+            raise ValueError(f"format must be 'text' or 'json', got: '{format}'")
+        if not dataset.exists():
+            raise FileNotFoundError(f"Dataset directory not found: {dataset}")
+        resolved = resolve_eval_agent(agent)
+        info = debug_single_case(
+            case_id,
+            resolved,
+            dataset,
+            oracles=oracles,
+        )
+    except (OSError, ValueError, TypeError) as exc:
+        typer.echo(f"debug-case failed: {exc}", err=True)
+        raise typer.Exit(2) from exc
+    if format == "json":
+        typer.echo(json_text(info))
+    else:
+        typer.echo(render_debug_view(info))
+    if info["outcome"] != "pass":
         raise typer.Exit(1)
 
 
@@ -1044,6 +1104,52 @@ def transpile_sql_cmd(
         typer.echo(f"SQL transpilation failed: {exc}", err=True)
         raise typer.Exit(2) from exc
     typer.echo(json_text(payload))
+
+
+@app.command("init-agent")
+def init_agent_cmd(
+    output: Annotated[
+        Path,
+        typer.Option(help="Path to generate starter agent python file"),
+    ] = Path("agents/custom_agent.py"),
+    name: Annotated[str, typer.Option(help="Agent class name")] = "CustomAgent",
+    force: Annotated[bool, typer.Option(help="Overwrite existing file")] = False,
+) -> None:
+    """Generate a starter agent python template adhering to Customer360 protocol."""
+    try:
+        path = generate_agent_starter(output, agent_name=name, force=force)
+    except (OSError, ValueError, FileExistsError) as exc:
+        typer.echo(f"Init agent failed: {exc}", err=True)
+        raise typer.Exit(2) from exc
+    typer.echo(json_text({"status": "created", "path": str(path), "agent_name": name}))
+
+
+@app.command("test-agent")
+def test_agent_cmd(
+    agent: Annotated[Path, typer.Option(help="Path to external agent python file")],
+    class_name: Annotated[
+        str | None,
+        typer.Option(help="Agent class name; auto-detects if omitted"),
+    ] = None,
+    database: Annotated[
+        Path | None,
+        typer.Option(help="Optional DuckDB database path; creates ephemeral fixture if omitted"),
+    ] = None,
+) -> None:
+    """Run fast protocol conformance smoke test (3 probes) on an external agent."""
+    try:
+        if not agent.exists():
+            raise FileNotFoundError(f"Agent file not found: {agent}")
+        if database is not None and not database.exists():
+            raise FileNotFoundError(f"Database file not found: {database}")
+        loaded_agent = load_agent_from_path(agent, class_name=class_name)
+        report = verify_agent_conformance(loaded_agent, database_path=database)
+    except (OSError, ValueError, TypeError, ImportError, AttributeError, RuntimeError) as exc:
+        typer.echo(f"Test agent failed: {exc}", err=True)
+        raise typer.Exit(2) from exc
+    typer.echo(json_text(report))
+    if not report.get("conformance_passed"):
+        raise typer.Exit(1)
 
 
 if __name__ == "__main__":

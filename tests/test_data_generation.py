@@ -27,6 +27,8 @@ from customer360.synth.generator import generate_dataset, load_generation_config
 from customer360.tasks.compiler import compile_semantic
 from customer360.tasks.trusted_data import load_verified_dataset
 
+pytestmark = pytest.mark.slow
+
 ROOT = Path(__file__).parents[1]
 ANCHOR = date(2025, 6, 30)
 WINDOW_START = ANCHOR - timedelta(days=89)

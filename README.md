@@ -1,11 +1,14 @@
 # Customer360 Agent Benchmark
 
+[English](README_EN.md) | [简体中文](README.md)
+
 [![CI](https://github.com/Chr0nixz/Customer360/actions/workflows/ci.yml/badge.svg)](https://github.com/Chr0nixz/Customer360/actions/workflows/ci.yml)
 [![License](https://img.shields.io/badge/license-Apache%202.0-blue.svg)](LICENSE)
 
 本地、离线、默认可安全执行的 Agent benchmark：合成九表客户数据、结构化任务、受控 SQL 网关、官方 Baseline，以及分开的 public_dev / private_hidden 分数。不是在线问数服务，也不是排行榜。
 
 **怎么用：** 请读 [使用说明](docs/user-guide.md)。  
+**怎么接入自定义 Agent：** 请读 [Agent 接入与使用指南](docs/agent-integration-guide.md)。  
 **怎么改代码：** 请读 [AGENTS.md](AGENTS.md)、[CONTRIBUTING.md](CONTRIBUTING.md) 和 [HANDOFF.md](HANDOFF.md)。  
 **怎么公开到 GitHub：** 请读 [GitHub 发布清单](docs/github-publish.md)。
 
@@ -65,6 +68,7 @@ wheel 只含运行代码和公开资源。sdist 用白名单，排除 `outputs`�
 | 文档 | 内容 |
 |---|---|
 | [使用说明](docs/user-guide.md) | 安装、命令、评测路径、常见错误 |
+| [Agent 接入与使用指南](docs/agent-integration-guide.md) | 自定义 Agent 接口实现、协议结构与评测范例 |
 | [开发协作约定](AGENTS.md) | 安全默认、模块边界 |
 | [贡献指南](CONTRIBUTING.md) | PR 与公开树范围 |
 | [安全披露](SECURITY.md) | 漏洞私下报告 |
@@ -77,5 +81,7 @@ wheel 只含运行代码和公开资源。sdist 用白名单，排除 `outputs`�
 | [决策记录](docs/decisions.md) | 工程默认值 |
 | [正式发布](docs/formal-release.md) | v1.0 RC 八个门 |
 | [后续开发计划](docs/development-plan.md) | 阶段计划 |
+| [Benchmark 扩展计划](docs/benchmark-expansion-plan.md) | 数据、题量、Join 和覆盖扩展顺序 |
+| [扩展验收与下一阶段计划](docs/acceptance-and-next-plan.md) | 验收结论、阻塞项和后续开发顺序 |
 
 许可证：[Apache-2.0](LICENSE)。行为准则：[CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md)。隐藏 pack 和生成库不是 GitHub 公开制品；源码树中的 `data/trusted` 只覆盖 C360_0001–0020。

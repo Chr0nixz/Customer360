@@ -26,6 +26,8 @@ from customer360.tasks.hidden import (
 )
 from customer360.tasks.pack_verify import verify_task_pack, write_pack_verify
 
+pytestmark = pytest.mark.slow
+
 runner = CliRunner()
 ROOT = Path(__file__).parents[1]
 
@@ -319,3 +321,20 @@ def test_write_pack_verify_refuses_overwrite(baseline, tmp_path):
     write_pack_verify(baseline, pack_dir, output)
     with pytest.raises(FileExistsError):
         write_pack_verify(baseline, pack_dir, output)
+
+
+def test_clarification_pool_drafts_respect_metric_allowed_filters():
+    from customer360.metadata.repository import MetadataRepository
+    from customer360.tasks.generator import _pool_drafts
+
+    repository = MetadataRepository()
+    metrics_by_name = {m.metric_name: m for m in repository.metrics.metrics}
+    for draft in _pool_drafts(repository):
+        if draft.metric and draft.filters:
+            metric = metrics_by_name[draft.metric]
+            allowed = set(metric.allowed_filter_columns) - set(metric.fixed_filters)
+            for flt in draft.filters:
+                assert flt.field in allowed, (
+                    f"Draft for metric '{draft.metric}' uses illegal filter field '{flt.field}'. "
+                    f"Allowed fields: {allowed}"
+                )

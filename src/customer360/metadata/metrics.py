@@ -8,6 +8,7 @@ from pydantic import Field, model_validator
 from customer360.contracts.base import Contract, Identifier, Text
 from customer360.errors import QueryRejected
 from customer360.metadata.models import (
+    EXECUTABLE_JOIN_PATHS,
     Catalog,
     CatalogForeignKey,
     ColumnHit,
@@ -84,7 +85,7 @@ class MetricDef(Contract):
 
 
 class MetricCatalog(Contract):
-    metrics_version: Literal["0.3"] = "0.3"
+    metrics_version: Literal["0.3", "0.4"] = "0.4"
     metrics: tuple[MetricDef, ...] = Field(min_length=1)
 
     @model_validator(mode="after")
@@ -107,7 +108,7 @@ def load_catalog(path: Path | None = None) -> Catalog:
 
 
 class JoinPathCatalog(Contract):
-    join_paths_version: Literal["0.1"] = "0.1"
+    join_paths_version: Literal["0.1", "0.2"] = "0.2"
     paths: tuple[JoinPath, ...] = Field(min_length=20, max_length=20)
 
     @model_validator(mode="after")
@@ -116,8 +117,11 @@ class JoinPathCatalog(Contract):
         if len(set(names)) != len(names):
             raise ValueError("duplicate join path_name")
         executable = [item for item in self.paths if item.compile_status == "executable"]
-        if [item.path_name for item in executable] != [EXECUTABLE_JOIN_PATH]:
-            raise ValueError("exactly one executable join path is allowed")
+        executable_names = {item.path_name for item in executable}
+        if not executable_names.issubset(EXECUTABLE_JOIN_PATHS):
+            raise ValueError(f"executable join paths must be in {sorted(EXECUTABLE_JOIN_PATHS)}")
+        if EXECUTABLE_JOIN_PATH not in executable_names:
+            raise ValueError(f"{EXECUTABLE_JOIN_PATH} must be executable")
         seen: set[tuple[tuple[str, str, str, str], ...]] = set()
         reversed_seen: set[tuple[tuple[str, str, str, str], ...]] = set()
         for item in self.paths:

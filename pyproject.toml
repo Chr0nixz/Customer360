@@ -89,7 +89,10 @@ exclude = [
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 addopts = "-ra"
-markers = ["integration: subprocess and DuckDB integration tests"]
+markers = [
+  "integration: subprocess and DuckDB integration tests",
+  "slow: marks tests as slow (full dataset generation, 300-case matrix replay, and stress tests)",
+]
 
 [tool.ruff]
 target-version = "py311"

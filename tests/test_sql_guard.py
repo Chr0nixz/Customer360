@@ -59,8 +59,7 @@ def test_supported_subset(sql, repository, policy):
         "WHERE customer_id IN (SELECT customer_id FROM dim_customer)",
         "SELECT COUNT(*) AS n FROM dim_customer GROUP BY region",
         "SELECT region AS region, COUNT(*) AS n FROM dim_customer GROUP BY region",
-        "SELECT customer_level AS customer_level, COUNT(DISTINCT customer_id) AS n "
-        "FROM dim_customer GROUP BY customer_level",
+        "SELECT region AS region, SUM(region) AS n FROM dim_customer GROUP BY region",
         "SELECT region AS region, COUNT(DISTINCT customer_id) AS n FROM dim_customer "
         "JOIN fact_transaction AS t ON dim_customer.customer_id=t.customer_id GROUP BY region",
         "SELECT SUM(total_asset) AS latest_total_asset FROM fact_asset_snapshot "
@@ -140,3 +139,31 @@ def test_join_kind_is_checked_in_both_supported_shapes(repository, policy, lates
     else:
         with pytest.raises(QueryRejected):
             validate_sql(sql, repository.catalog, policy, SqlLimits())
+
+
+def test_group_by_customer_id_or_unwhitelisted_column_is_rejected(repository, policy):
+    limits = SqlLimits()
+    # PII leak attempt using customer_id
+    leak_sql = (
+        "SELECT customer_id AS customer_id, COUNT(customer_id) AS customer_count "
+        "FROM dim_customer GROUP BY customer_id"
+    )
+    with pytest.raises(QueryRejected) as caught:
+        validate_sql(leak_sql, repository.catalog, policy, limits)
+    assert caught.value.code == "UNSAFE_SQL"
+
+    # High cardinality column not in safe allowlist
+    city_sql = (
+        "SELECT city AS city, COUNT(customer_id) AS customer_count FROM dim_customer GROUP BY city"
+    )
+    with pytest.raises(QueryRejected) as caught:
+        validate_sql(city_sql, repository.catalog, policy, limits)
+    assert caught.value.code == "UNSAFE_SQL"
+
+    # Whitelisted dimension succeeds
+    safe_sql = (
+        "SELECT region AS region, COUNT(customer_id) AS customer_count "
+        "FROM dim_customer GROUP BY region"
+    )
+    guarded = validate_sql(safe_sql, repository.catalog, policy, limits)
+    assert guarded.output_names == ("region", "customer_count")

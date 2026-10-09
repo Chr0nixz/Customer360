@@ -8,6 +8,7 @@ from datetime import date, timedelta
 from customer360.contracts.execution import SqlLimits
 from customer360.contracts.semantic import (
     Filter,
+    JoinSpec,
     LatestSnapshot,
     PointInTime,
     RollingWindow,
@@ -159,29 +160,41 @@ def distinguish_wrong_sql(
         code = _guard_code(PERMISSION_SQL)
         ok = code in {"PERMISSION_DENIED", "UNSAFE_SQL"}
         return WrongSqlContrast(ok, "guard_rejected" if ok else None, PERMISSION_SQL, code)
+    if intended == "SCHEMA_ERROR":
+        schema_sql = 'SELECT "non_existent_column" FROM "dim_customer"'
+        code = _guard_code(schema_sql)
+        ok = code in {"UNKNOWN_FIELD", "UNKNOWN_METRIC", "UNSUPPORTED_QUERY", "UNSAFE_SQL"}
+        return WrongSqlContrast(ok, "guard_rejected" if ok else None, schema_sql, code)
     if intended == "CLARIFICATION_FAILURE":
         if spec is None or spec.time_window is None:
             return WrongSqlContrast(False, None)
         completed = spec
-        if not isinstance(completed.time_window, RollingWindow):
+        if isinstance(completed.time_window, RollingWindow):
+            alts = _rolling_alts(completed.time_window)
+        elif isinstance(completed.time_window, PointInTime):
+            alts = _pit_alts(completed.time_window)
+        else:
             return WrongSqlContrast(False, None)
-        wrong_spec = SemanticSpec(
-            metric=completed.metric,
-            filters=completed.filters,
-            time_window=_rolling_alts(completed.time_window)[0],
-            join=completed.join,
-            group_by=completed.group_by,
-        )
         gold_query = gold or _compile_or_none(completed, repository)
-        wrong = _compile_or_none(wrong_spec, repository)
         truth = independent
         if truth is None and gold_query is not None:
             truth = compute_independent(completed, repository, slices)
-        if gold_query is None or wrong is None or truth is None:
+        if gold_query is None or truth is None:
             return WrongSqlContrast(False, None)
-        if _mismatch(database, gold_query, wrong, truth):
-            return WrongSqlContrast(True, "mismatch", wrong.sql)
-        return WrongSqlContrast(False, None, wrong.sql)
+        for alt_win in alts:
+            wrong_spec = SemanticSpec(
+                metric=completed.metric,
+                filters=completed.filters,
+                time_window=alt_win,
+                join=completed.join,
+                group_by=completed.group_by,
+            )
+            wrong = _compile_or_none(wrong_spec, repository)
+            if wrong is None:
+                continue
+            if _mismatch(database, gold_query, wrong, truth):
+                return WrongSqlContrast(True, "mismatch", wrong.sql)
+        return WrongSqlContrast(False, None)
     if spec is None or gold is None or independent is None:
         return WrongSqlContrast(False, None)
 
@@ -222,6 +235,33 @@ def distinguish_wrong_sql(
         hit = try_spec(spec.model_copy(update={"join": None}))
         if hit is not None:
             return hit
+        alt_paths = [
+            p
+            for p in (
+                "customer_transactions",
+                "customer_cash_flows",
+                "customer_service_relations",
+                "customer_holdings",
+            )
+            if p != spec.join.path
+        ]
+        for alt_path in alt_paths:
+            alt_win = (
+                RollingWindow(days=90, anchor_date=date(2025, 6, 30))
+                if alt_path in {"customer_transactions", "customer_cash_flows"}
+                else None
+            )
+            hit = try_spec(
+                spec.model_copy(update={"join": JoinSpec(path=alt_path, time_window=alt_win)})
+            )
+            if hit is not None:
+                return hit
+        for table_alias in ('"t"', '"cf"', '"h"', '"a"', '"sr"'):
+            if table_alias in gold.sql:
+                fake_pred = f" AND {table_alias}.\"customer_id\" = 'UNKNOWN'"
+                mutated = CompiledQuery(sql=gold.sql + fake_pred, columns=gold.columns)
+                if _mismatch(database, gold, mutated, independent):
+                    return WrongSqlContrast(True, "mismatch", mutated.sql)
         return WrongSqlContrast(False, None)
     if intended == "DUPLICATE_COUNT_ERROR" and "COUNT(DISTINCT" in gold.sql:
         if 'COUNT(DISTINCT "c"."customer_id")' in gold.sql:

@@ -1,5 +1,7 @@
 # 数据字典与初始化口径
 
+[English](en/data_dictionary.md) | [简体中文](data_dictionary.md)
+
 怎么生成 Tiny/Standard/Large 见 [使用说明](user-guide.md)。字段名、类型、可空性、敏感级别、主键、唯一约束和外键的权威来源是 `src/customer360/resources/catalog.yaml`；不要维护第二份手写 DDL。使用 `c360 schema` 查看生成 SQL。
 
 ## 九表与粒度

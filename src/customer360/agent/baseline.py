@@ -67,7 +67,14 @@ class BaselineAgent:
             metric = tools.get_metric_definition(intent.metric_name or "")
             tools.get_table_schema(str(metric["source_table"]))
             if intent.join_path:
-                tools.get_table_schema("fact_transaction")
+                right_table = {
+                    "customer_transactions": "fact_transaction",
+                    "customer_cash_flows": "fact_cash_flow",
+                    "customer_holdings": "fact_holding",
+                    "customer_asset_snapshots": "fact_asset_snapshot",
+                    "customer_service_relations": "fact_service_relation",
+                }.get(intent.join_path, "fact_transaction")
+                tools.get_table_schema(right_table)
             plan = self._plan(intent, metric, request.anchor_date)
             # Pre-execution validation check
             plan_payload = {
@@ -163,16 +170,38 @@ class BaselineAgent:
         time_column = metric.get("time_column")
         latest_anchor = None
         join_path = intent.join_path
+        join_alias = "t"
+        if join_path:
+            join_alias = {
+                "customer_transactions": "t",
+                "customer_cash_flows": "cf",
+                "customer_holdings": "h",
+                "customer_asset_snapshots": "a",
+                "customer_service_relations": "sr",
+            }.get(join_path, "t")
         if intent.time_kind == "latest_snapshot":
             latest_anchor = intent.time_date or fallback_anchor
             predicates = []
-        elif intent.time_kind == "point_in_time" and time_column:
+        elif intent.time_kind == "point_in_time" and (
+            time_column or join_path in {"customer_holdings", "customer_asset_snapshots"}
+        ):
             snapshot = intent.time_date or fallback_anchor
+            pit_col = str(time_column or "snapshot_date")
             predicates.append(
-                PlanFilter(field=str(time_column), operator="eq", values=(snapshot.isoformat(),))
+                PlanFilter(
+                    field=pit_col,
+                    operator="eq",
+                    values=(snapshot.isoformat(),),
+                    alias=join_alias if join_path else None,
+                )
             )
         elif intent.time_kind == "rolling" and intent.days and intent.time_date:
-            rolling_column = "transaction_date" if join_path else time_column
+            rolling_column = time_column
+            if join_path:
+                if join_path == "customer_transactions":
+                    rolling_column = "transaction_date"
+                elif join_path == "customer_cash_flows":
+                    rolling_column = "flow_date"
             if not rolling_column:
                 raise ValueError("rolling query needs a time column")
             start = intent.time_date - timedelta(days=intent.days - 1)
@@ -181,20 +210,20 @@ class BaselineAgent:
                 field=str(rolling_column),
                 operator="gte",
                 values=(start.isoformat(),),
-                alias="t" if join_path else None,
+                alias=join_alias if join_path else None,
             )
             end_filter = PlanFilter(
                 field=str(rolling_column),
                 operator="lte",
                 values=(end.isoformat(),),
-                alias="t" if join_path else None,
+                alias=join_alias if join_path else None,
             )
             predicates.extend((start_filter, end_filter))
         allowed = set(metric.get("allowed_filter_columns") or ())
         for item in intent.filters:
             alias = None
             if join_path:
-                alias = "t" if item.side == "join" else "c"
+                alias = join_alias if item.side == "join" else "c"
             if (
                 item.side == "metric"
                 and item.field not in allowed

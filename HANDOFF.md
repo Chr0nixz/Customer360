@@ -1,5 +1,7 @@
 # Customer360 架构交接
 
+[English](HANDOFF_EN.md) | [简体中文](HANDOFF.md)
+
 ## 1. 从这里接手
 
 怎么跑命令见 [使用说明](docs/user-guide.md)。本轮 v1.0 交接见 [正式发布记录](docs/formal-release.md)。语义验收报告协议保持 **0.2**，正式评分协议为 **1.0**，formal evaluator 为 **0.6**；旧 0.5/no-score 报告保留为历史证据，不能改写成正式分数。隐藏四变体 provenance 与 same-SQL replay、`score`/`build-score-inputs`、Apache-2.0、Docker、SHA256/SBOM 和 `prepare-formal-release/check-formal-release` 已落地。
@@ -23,6 +25,33 @@
 - **v1.2**：落地受控逻辑计划校验引擎 `validate_query_plan`（8 类稳定拒绝码）、指标生命周期管理（`active` / `deprecated` / `retired`）、Baseline 前置规划自检拦截、`c360 audit-metadata` 静态拓扑闭包审计；
 - **v1.3**：落地 SQLGlot 跨方言转译器（DuckDB <-> PostgreSQL）、多引擎网关抽象（`BaseExecutionGateway`、`DuckDBExecutionGateway`、`PostgreSQLExecutionGateway`）、双重超时物理回收守护、阶段拆分性能采样模型（`plan_ms`/`guard_ms`/`exec_ms`/`e2e_ms` 及 P50/P90/P95/P99 分位数）、`c360 transpile-sql` 命令行。
 全量 65 项自动化测试、Ruff 规范与 `c360 doctor` 诊断全部通过。
+
+**2026-10-06 验收缺陷闭环工程 (N0–N2)**：
+- 依据 `docs/acceptance-and-next-plan.md` 解决验收阶段识别出的全部 P0、P1、P2 阻塞缺陷；
+- **N0 分组泄露封堵与网关组粒度防御**：
+  1. SQL Guard 引入 `SAFE_GROUP_DIMENSIONS` 安全白名单，严禁 `customer_id` 等单客标识键作为分组列（违规抛出 `UNSAFE_SQL`）；
+  2. 执行网关 worker contributor 探针升级为组粒度强制防御，计算 `COALESCE(MIN(cnt), 0) < min_group_size` 即拦截（抛出 `AGGREGATION_TOO_SMALL`），杜绝单客行或微小群体数据泄露；
+  3. `ExecutionGateway` 加固 `execute_direct` 受信边界（`execute_trusted_direct` 别名与安全 docstring），确保 Agent 运行时与外部评测严格只能经由多进程沙箱的 `execute` 路径；
+- **N1 语义验收与真实网关隔离执行**：
+  1. 统一 5 条可执行 Join 路径的单一声明源（`EXECUTABLE_JOIN_PATHS`），消除 metadata/compiler/guard 漂移；
+  2. 修复 `wrong_sql.py`：支持 `SCHEMA_ERROR`（Guard 拦截判定）与 `JOIN_ERROR`（备选路径与条件变异判定），澄清题支持 `PointInTime` 日期变异；
+  3. 隐藏 60 题在独立隐藏数据上运行 `verify_task_pack`，达成 `semantic_passed=True`，8 类必需错误类型 100% 区分覆盖，改写 0 issue，隔离性审计 100% 通过；
+  4. `test_expansion_e2.py` 重构为使用真实 `ExecutionGateway` 多进程沙箱端到端运行 5 条 Join 路径，Oracle 100% 匹配，并证明授权范围在聚合前物化生效；
+  5. 修复旧回归测试断言（`test_m6_hidden.py`、`test_pack_verify.py`），按冻结后的动作配额契约（Answer 占比、澄清与拒答配额、Oracle 匹配率 100%）替代旧断言；
+- **N2 协议版本链锁定**：
+  1. 元数据与任务协议版本升级锁定：`metrics_version: "0.4"`、`join_paths_version: "0.2"`、`generated-0.2`、`hidden-0.2`；
+  2. 新增版本边界与隔离回归测试 `tests/test_version_boundary.py`，防止新老题包混批与版本漂移；
+- **全量质量与规范**：Ruff check 与 format 150 个文件 100% 通过（0 error / 0 warning）；89 项核心回归测试 100% 通过。
+
+**2026-10-06 CI分层流水线与多引擎真实集成 (T1–T2)**：
+- **T1 CI 自动化分层流水线**：
+  1. 重构 `.github/workflows/ci.yml`，划分为 `public-tree`（防泄漏）、`fast-gate-linux`/`fast-gate-windows`（日常提交快速门，2分钟跑完 `ruff` + `pytest -m "not slow"` + `doctor` + `audit-metadata`）、`full-release-gate-linux`（Main分支/发布打标/手动触发，跑全量 462 项测试含所有 slow 变体）、`docker`（沙箱证据签署）；
+  2. 彻底解决日常 PR 周期被 slow 测试拖慢与 release 盲区问题；
+- **T2 容器化真实 PostgreSQL 多引擎集成**：
+  1. 在 `PostgreSQLExecutionGateway`（`src/customer360/runtime/gateway.py`）中实装真实 DBAPI 驱动连接（`psycopg`/`psycopg2`）、只读事务控制（`SET TRANSACTION READ ONLY`）、连接级 `statement_timeout` 守护与自动方言转译；
+  2. 新增跨引擎语义等价性集成测试 `tests/test_postgres_live.py`：覆盖单表过滤聚合、时间窗口、多表 Join、分组统计、快照 CTE 5 大典型业务场景，比对 DuckDB 与 PostgreSQL 结果多重集 100% 一致；
+  3. 在 `.github/workflows/ci.yml` 中配置 `postgres:16-alpine` 容器服务及驱动自动安装，实现 CI 流水线中的常态化跨引擎真实实例回归；
+- **规范与测试**：全量 151 个 Python 文件 Ruff 规范与格式化 100% 通过；98 项跨引擎与核心回归测试全绿通过。
 
 阅读顺序：要跑命令先读 [使用说明](docs/user-guide.md)；改代码读 AGENTS.md → 本文件 → docs/architecture.md → docs/data_dictionary.md → ROADMAP.md；公开到 GitHub 读 [docs/github-publish.md](docs/github-publish.md) 与 [CONTRIBUTING.md](CONTRIBUTING.md)。原方案继续保留，矛盾处理见 ROADMAP。
 

@@ -1,5 +1,7 @@
 # v1.0 本地正式发布
 
+[English](en/formal-release.md) | [简体中文](formal-release.md)
+
 日常安装、评测和打分见 [使用说明](user-guide.md)。把源码公开到 GitHub 见 [GitHub 发布清单](github-publish.md)。本文只列出维护者签署八个 RC 门、准备 v1.0.0 的命令。
 
 ## 冻结边界

@@ -1,5 +1,7 @@
 # 协议与任务格式 0.1
 
+[English](en/task_format.md) | [简体中文](task_format.md)
+
 命令怎么跑见 [使用说明](user-guide.md)。本文描述公开/私有契约和当前 DSL。Python 类型定义是权威来源，Pydantic 拒绝未知字段与无效状态组合。正式本地分数走 `c360 score`（协议 1.0），不是在线竞赛提交。
 
 ## 公开输入与私有 oracle

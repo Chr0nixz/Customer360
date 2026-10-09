@@ -1,5 +1,7 @@
 # AGENTS.md
 
+[English](AGENTS_EN.md) | [简体中文](AGENTS.md)
+
 本文件是 Customer360 Agent Benchmark 的开发协作约定，适用于在本仓库中工作的所有 Agent、开发者和自动化任务。
 
 ## 1. 项目目标
