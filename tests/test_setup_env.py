@@ -1,4 +1,5 @@
 import json
+import re
 from unittest.mock import patch
 
 import pytest
@@ -13,8 +14,9 @@ runner = CliRunner()
 def test_setup_env_cli_help():
     result = runner.invoke(app, ["setup-env", "--help"])
     assert result.exit_code == 0
-    assert "--output" in result.output
-    assert "--force" in result.output
+    clean_output = re.sub(r"\x1b\[[0-9;?]*[a-zA-Z]", "", result.output)
+    assert "--output" in clean_output
+    assert "--force" in clean_output
 
 
 def test_setup_env_refuses_overwrite(tmp_path):

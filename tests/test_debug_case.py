@@ -1,3 +1,4 @@
+import re
 from pathlib import Path
 
 import pytest
@@ -15,9 +16,10 @@ runner = CliRunner()
 def test_debug_case_cli_help():
     result = runner.invoke(app, ["debug-case", "--help"])
     assert result.exit_code == 0
-    assert "--case-id" in result.output
-    assert "--dataset" in result.output
-    assert "--format" in result.output
+    clean_output = re.sub(r"\x1b\[[0-9;?]*[a-zA-Z]", "", result.output)
+    assert "--case-id" in clean_output
+    assert "--dataset" in clean_output
+    assert "--format" in clean_output
 
 
 def test_render_debug_view():
