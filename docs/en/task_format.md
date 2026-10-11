@@ -20,7 +20,7 @@ The packaged `resources/human_cases.yaml` provides the public question prompts f
 
 Generated task packs (M3) are separated from the 20-case baseline pack: `c360 generate-tasks --count 120 --seed 42` produces a development pack (`case_id` starting at `C360_1001`). `--count 300` generates the M6 public structure (180 train / 120 generated-dev). A `family_id` is derived from the template, metric, join, temporal semantics, filter signatures, grouping, and expected action; paraphrases share family IDs and do not count as new tasks. Train and dev splits never share family IDs.
 
-The hidden benchmark set is an independent pack generated via `c360 generate-hidden --public-pack <public_pack> --count 30` (writing `case_id` starting at `C360_4001`, `split=private`). Its family IDs must never overlap with human cases or public train/dev cases. Public question prompts are written to `agent_cases.yaml`, while oracles reside in `hidden_oracles.yaml`. Hidden datasets are Tiny datasets carrying a `hidden_profile.json` (default seed 1042, seeds 42 and 43 prohibited).
+The hidden benchmark set is an independent pack generated via `c360 generate-hidden --public-pack <public_pack> --count 60` (writing `case_id` starting at `C360_4001`, `split=private`). Its family IDs must never overlap with human cases or public train/dev cases. Public question prompts are written to `agent_cases.yaml`, while oracles reside in `hidden_oracles.yaml`. Hidden datasets are Tiny datasets carrying a `hidden_profile.json` (default seed 1042, seeds 42 and 43 prohibited).
 
 Semantic verification (`c360 verify-pack`) validates compiled SQL against independent Python calculation oracles and verifies that 8 classes of erroneous SQL queries are distinguished on bound datasets. Public summaries only disclose task counts and `semantic_passed`; Gold SQL, specs, and seeds remain under `private/verify.json`.
 
@@ -41,7 +41,7 @@ Four frozen Tiny data variants are supported: `tiny_seed_43_distribution`, `tiny
 }
 ~~~
 
-The default query pattern is single-metric, single-table. The only supported join is the fixed path `customer_transactions`: `dim_customer.customer_id` joined with `fact_transaction.customer_id`, supporting customer distinct counts with customer-side and transaction-side filters, where transaction filters require an explicit rolling window. `group_by` is currently restricted to `active_customer_count` grouped by `region`; output includes group keys and metric values, without zero-filling empty groups, and comparisons use unordered multisets.
+The default query pattern is single-metric, single-table. Five executable Join paths are supported (`customer_transactions`, `customer_holdings`, `customer_asset_snapshots`, `customer_cash_flows`, `customer_service_relations`), all joining on `dim_customer.customer_id` and performing authorized aggregations. `group_by` supports whitelisted categorical dimensions (`region`, `customer_level`, `risk_level`, `channel`, `transaction_type`), strictly rejecting single-customer identifier keys such as `customer_id`. The execution gateway enforces group-level aggregation defenses (`COALESCE(MIN(cnt), 0) >= 3`), and multiset comparison is used.
 
 `time_window` supports three distinct modes:
 1. `rolling`: Rolling day window backwards from an anchor date.
