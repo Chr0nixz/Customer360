@@ -101,7 +101,7 @@ Implemented official offline `BaselineAgent`, deterministic local planner adapte
 Expanded to 300 tasks (180 train / 120 dev), independent hidden set (`C360_4001+`), public/private scorecard separation, reproducible build verification, and eight formal RC release gates.
 
 ### M7: Performance & Extensions
-Established resource budget profiles (`tiny`, `standard`, `large`), performance collection tool (`c360 perf-baseline`), and architectural design for PostgreSQL adaptation and metric deprecation lifecycle.
+Established resource budget profiles (`tiny`, `standard`, `large`), performance collection tool (`c360 perf-baseline`), phase-level performance sampling (`plan_ms`, `guard_ms`, `exec_ms`, `e2e_ms`), SQLGlot cross-dialect bidirectional transpilation (DuckDB <-> PostgreSQL), live PostgreSQL execution gateway with statement timeout and read-only transaction guards (`tests/test_postgres_live.py`), query plan static validator engine, metric lifecycle governance (active/deprecated/retired), and completed scale throughput baselines on Standard and Large datasets. Expansion milestones N0–N4 are fully closed.
 
 ## 6. Scoring Protocol and Weights
 
