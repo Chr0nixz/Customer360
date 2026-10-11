@@ -35,7 +35,7 @@ uv run c360 version-info
 uv run c360 doctor
 ```
 
-Expected `doctor` diagnostic output: roughly `tables=9`, `columns=72`, `metrics=30`, `join_paths=20`, `executable_join_paths=1`, `foreign_keys=8`, `glossary_entries=111`.
+Expected `doctor` diagnostic output: roughly `tables=9`, `columns=72`, `metrics=30`, `join_paths=20`, `executable_join_paths=5`, `foreign_keys=8`, `glossary_entries=111`.
 
 When installed from a built wheel, `c360 doctor` and `c360 smoke` do not require the repository source tree or `configs/benchmark.yaml`. The following tasks still require repository files: `generate-data`, `coverage-report`, `check-rewrites`, `build-gold`, `replay-variant`, and evaluations with trusted oracles.
 

@@ -35,7 +35,7 @@ uv run c360 version-info
 uv run c360 doctor
 ```
 
-`doctor` 预期大致为：`tables=9`、`columns=72`、`metrics=30`、`join_paths=20`、`executable_join_paths=1`、`foreign_keys=8`、`glossary_entries=111`。
+`doctor` 预期大致为：`tables=9`、`columns=72`、`metrics=30`、`join_paths=20`、`executable_join_paths=5`、`foreign_keys=8`、`glossary_entries=111`。
 
 从已构建的 wheel 安装时，`c360 doctor` / `c360 smoke` 不需要源码树或 `configs/benchmark.yaml`。下面这些仍需要仓库文件：`generate-data`、`coverage-report`、`check-rewrites`、`build-gold`、`replay-variant`，以及带可信 oracle 的评测。
 
