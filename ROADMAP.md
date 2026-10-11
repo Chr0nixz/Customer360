@@ -92,8 +92,10 @@
 - [x] M6 代码质量复审：默认 seed-42 摘要保持；最小配置的随机访问边界、SQL AST/字面量边界、数据 sidecar、隐藏 profile/报告契约和 release 300 题硬验收均有回归；可信 pack 与 Agent 公开输入边界已写入文档；2026-09-18 全量 `pytest` 372 passed，ruff 通过；
 - [x] M6 生成/隐藏包语义验收与正式发布工具链：独立 oracle、8 类错误 SQL、改写槽位；300 题绑定四个公开 Tiny 变体，私有隐藏 baseline 绑定四个带 provenance 变体并执行 same-SQL replay；正式 `score`、Apache-2.0、Docker、SHA256/SBOM 和 `check-formal-release` 已实现；
 - [x] M7（部分）受控资源预算与性能采集：D055 命名 profile；Tiny 默认 10k 物化上限保留；`c360 perf-baseline`；扫描量/Token unavailable；
+- [x] M7 引擎适配与协议演化 (v1.1–v1.3)：SQLGlot 跨方言双向转译（DuckDB <-> PostgreSQL）、PostgreSQL 真实连接网关与只读事务/超时守护（`tests/test_postgres_live.py` 全绿）、阶段级性能采样（P50/P90/P95/P99）、逻辑计划静态校验引擎与指标生命周期治理（active/deprecated/retired）；
+- [x] 扩展验收与规模化闭环 (N0–N4)：单客高基数 ID 分组泄露彻底封堵、5 条 Join 路径全部由真实执行网关沙箱物化验证、隐藏 60 题与公开 120 题 Formal Evaluator 0.6 四变体重放全通、Score 1.0 正式分层出分通过（Hard Gates 100% 通过且公开/私有数据物理隔离）、Standard/Large 受控吞吐基线采集完成，sdist/wheel 分发包 0 泄露；
 - [x] GitHub 开源准备：Apache-2.0 社区文件、CONTRIBUTING/SECURITY、issue/PR 模板、gitignore 覆盖 `outputs/`/`tmp-*/`/`*.duckdb`、发布清单；维护者仍需自建远程并审查 `git status`；
-- [ ] M6 剩余：完成八个 RC evidence gates 并签署 v1.0.0（唯一未通过的是 Linux CI 下的 docker_runtime 证据）；M7 后续：PostgreSQL 适配能力矩阵、指标版本演化规范及 split 泛化审计已完成设计文档（详见 [docs/future-protocols-v1.1-v1.3.md](docs/future-protocols-v1.1-v1.3.md)）。
+- [ ] M6 剩余：完成八个 RC evidence gates 并签署 v1.0.0（唯一未通过的是 Linux CI 下的 docker_runtime 证据；本地 7 门已签署验证通过）。
 
 ### 下一阶段执行顺序（先修复，再扩展）
 
@@ -266,16 +268,17 @@
 
 **工作内容**
 
-- 已实施：命名资源预算（D055）、流式物化、`c360 perf-baseline` 采集 generate/gold-execute/evaluate 的耗时、失败码、P50/P95；
+- 已实施：命名资源预算（D055）、流式物化、`c360 perf-baseline` 采集 generate/gold-execute/evaluate 的耗时、失败码、P50/P95 与阶段级采样（plan_ms / guard_ms / exec_ms / e2e_ms）；
 - Token 与扫描量在未实现测量前标记 unavailable，禁止报 0；
 - Tiny 默认 10k 物化上限保留；Standard/Large 使用有限更高 cap，并与 scale 绑定；
-- 尚未实施：PostgreSQL 适配层、指标版本演化、字段改名/废弃矩阵。
+- 已实装：SQLGlot 跨方言转译（DuckDB <-> PostgreSQL）、PostgreSQL 真实连接网关（只读事务与语句超时守护）、多引擎等价性集成测试（`tests/test_postgres_live.py`）；
+- 已实装：受控逻辑计划校验引擎 `validate_query_plan`、指标生命周期治理（active/deprecated/retired）、多维度复合分组与 5 条经审查可执行 Join 路径沙箱执行。
 
 **退出标准**
 
 - 简单任务 P95 ≤ 30 秒，中等任务 P95 ≤ 90 秒，复杂任务 P95 ≤ 180 秒（采集报告作诊断对照，不是官方分数）；
 - 同一 semantic spec 在不同规模数据上仍使用同一口径和比较规则；数据量带来的业务结果变化不应被误判为回归；
-- 适配层有明确能力矩阵和回归测试（PostgreSQL 仍未做）。
+- 适配层有明确能力矩阵和回归测试；PostgreSQL live 实例在 CI 中与 DuckDB 多重集比较 100% 一致。
 
 ## 6. 并行工作流与依赖关系
 
