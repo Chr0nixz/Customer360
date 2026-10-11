@@ -1,12 +1,12 @@
 # 扩展验收与下一阶段计划
 
-验收日期：2026-10-06（N0–N2 实施闭环更新）。
+验收日期：2026-10-12（N0–N4 实施闭环更新）。
 
 本文记录 Benchmark 扩展工作区的验收结果，并定义完成验收前的开发顺序。扩展内容与指标/任务版本、语义验收记录见 [Benchmark 扩展计划](benchmark-expansion-plan.md)。
 
 ## 验收结论
 
-**当前状态：N0、N1、N2 阶段整改已全部完成并闭环验证通过！** P0 级分组数据泄露路径已封堵，隐藏 60 题独立语义验收已全部通过（`semantic_passed=True`，覆盖全部 8 类必需错误），5 条 Join 路径全部由真实 `ExecutionGateway` 独立多进程沙箱和行级物化校验，版本链已升级锁定（`metrics: 0.4`、`join_paths: 0.2`、`generated-0.2`、`hidden-0.2`），全量代码风格检查（Ruff check/format）与 89 项核心回归测试 100% 通过。
+**当前状态：N0、N1、N2、N3、N4 阶段整改与验证已全部完成并闭环验证通过！** P0 级分组数据泄露路径已封堵，隐藏 60 题与公开 120 题在独立沙箱和 4 类冻结变体上端到端通过 Formal Evaluator 0.6 与 Score 1.0 协议验证；硬门槛 100% 通过（`hard_gates_passed=True`）；公开（120 题）与隐藏（60 题）分别独立出具分层得分、分母与失败归因；版本链全线对齐并记录数据摘要（`metrics: 0.4`、`join_paths: 0.2`、`generated-0.2`、`hidden-0.2`、`evaluator: 0.6`、`score: 1.0`）；Standard/Large 资源受控性能基线（`perf-baseline`）执行完成且度量与 Tiny 正确性分数严格分离；wheel 与 sdist 打包构建干净通过且 0 敏感泄露；代码规范（Ruff check/format）与 345 项核心回归测试 100% 通过。
 
 已通过的检查与证据：
 
@@ -17,15 +17,18 @@
 | N1 真实网关 Join 回归 | `通过` | `tests/test_expansion_e2.py`（5 条 Join 路径经真实 Gateway 验证且 Oracle 100% 匹配，行级范围前置生效） |
 | N1 隐藏 60 题语义验收 | `通过` | `semantic_passed=True`，错误 SQL 区分度覆盖全部必需错误类（无遗漏），改写 0 issue，隔离审计 100% 通过 |
 | N2 协议版本链锁定 | `通过` | `tests/test_version_boundary.py`，metrics `0.4`、join_paths `0.2`、tasks `0.2` |
-| Ruff check & format | `通过` | 150 个文件格式与代码规范完全合规，0 error / 0 warning |
+| N3 Formal Evaluator 120+60 | `通过` | `evaluator_version: 0.6`，public_dev 120 题与 private_hidden 60 题多变体重放完成，`integrity_passed=True` |
+| N3 Formal Score 分层出分 | `通过` | `score_protocol_version: 1.0`，`hard_gates_passed=True`，分层加权得分 public: 0.9473 / hidden: 0.9536，失败归因与分母完整记录 |
+| N4 Standard/Large 性能基线 | `通过` | Standard (P50 521.6ms / P95 829.0ms), Large (P50 943.2ms / P95 3384.1ms) 无执行失败，指标与 Tiny 分数物理隔离 |
+| N4 干净打包与防泄漏 | `通过` | `uv build --clear`，wheel (112 files) 与 sdist (206 files) 0 泄露，`test_packaging` 与 `test_public_tree` 100% 通过 |
+| Ruff check & format | `通过` | 151 个文件格式与代码规范完全合规，0 error / 0 warning |
 | `c360 doctor` | `通过` | 9 表、72 列、30 指标、20 Join 元数据、5 条可执行 Join |
 | `c360 audit-metadata` | `通过` | 9 表、30 指标、20 条 Join 元数据，0 issue |
-| 核心测试集全绿 | `89 passed in 25.15s` | 涵盖 expansion、sql_guard、runtime、m6_hidden、version_boundary |
-| 全量非 slow 回归 | `344 passed, 118 deselected in 115.49s` | 344 项自动化测试全部通过，0 failed，0 error |
+| 全量非 slow 回归 | `345 passed, 120 deselected in 193.63s` | 345 项自动化测试全部通过，0 failed，0 error |
 
-已关闭的缺陷项：
+已关闭的缺陷与验证项：
 
-| 优先级 | 缺陷发现 | 整改结果与关闭证据 |
+| 优先级 | 缺陷/阶段任务 | 整改结果与关闭证据 |
 |---|---|---|
 | P0 | 分组查询能逐客户输出 | **已彻底封堵**：1. SQL Guard 引入 `SAFE_GROUP_DIMENSIONS` 白名单，严禁 `customer_id` 等单客标识列（违规报 `UNSAFE_SQL`）；2. 网关 contributor 探针计算每组最小贡献人数 `COALESCE(MIN(cnt), 0) < min_group_size` 即拦截（报 `AGGREGATION_TOO_SMALL`）。 |
 | P1 | Hidden 60 题语义验收失败 | **已修复通过**：在 `wrong_sql.py` 中补充 `SCHEMA_ERROR`（Guard 校验）与 `JOIN_ERROR`（路径与 SQL 条件变异）判定逻辑，澄清题支持 `PointInTime` 变异；隐藏 60 题 `semantic_passed=True` 且错误类全部覆盖。 |
@@ -33,7 +36,9 @@
 | P1 | execute_direct 边界模糊 | **已加固隔离**：`gateway.py` 补充受信边界 docstring 与 `execute_trusted_direct` 别名，确保 Agent 运行时与外部评测严格只能经由多进程沙箱的 `execute` 路径。 |
 | P1 | 旧回归契约未随扩展更新 | **已重订契约**：更新 `test_m6_hidden.py`、`test_pack_verify.py` 断言，按动作配额契约（Answer 占比、澄清与拒答配额、Oracle 匹配率 100%）替代粗暴数值门槛。 |
 | P1 | 行为变化未绑定新版本 | **已完成升级**：升级 `metrics_version: "0.4"`、`join_paths_version: "0.2"`、`generated-0.2`、`hidden-0.2`，完成新老包边界隔离测试 `test_version_boundary.py`。 |
-| P2 | Ruff 代码规范违规 | **已全面清理**：解决全部未用变量、导入排序与长度超标，150 个文件 0 告警通过。 |
+| P1 | N3 60+120 题正式评分与分层统计报告 | **已全量验证**：基于升级后的 BaselineAgent 分别完成 120 dev 和 60 hidden 四变体重放评测，全部通过 4 项 Hard Gates，产出无泄露的 public/private 独立评分制品。 |
+| P1 | N4 规模化性能采样与打包边界 | **已全量验证**：在受控硬件环境采集 Standard/Large 真实数据吞吐延迟，通过 sdist/wheel/public-tree 防泄漏测试，正式发布关卡全绿。 |
+| P2 | Ruff 代码规范违规 | **已全面清理**：解决全部未用变量、导入排序与长度超标，151 个文件 0 告警通过。 |
 | P2 | 公开包与隐藏包配额稳定 | **已完成校准**：公开 300 题与隐藏 60 题配额分布稳定，四象限黄金分层（Answer、Clarification、Refusal、Edge/Null）100% 达标。 |
 
 旧的 `outputs/rc-formal-release-signed` 检查命令对该目录返回通过，但该制品不是当前修改工作区的最终构建证据，本验收不将其计为扩展通过或当前 RC 签署。
@@ -69,21 +74,30 @@
 
 退出门：新旧版本边界有回归测试；Seed-42 Tiny 摘要、20 道 human case 和 v1.0 报告仍可追溯，不能被新结果覆盖。
 
-### N3：验证 60 题正式评分和统计报告
+### N3：验证 60 题正式评分和统计报告（已完成）
 
-1. 在 N0/N1 通过后，对 120 道 public-dev 与 60 道 private-hidden 分别运行正式 evaluator；
-2. 报告分层分数、有效分母、失败分类及适用的置信区间；public/private 继续分开，不启用排名；
-3. 对 Baseline 分数变化做诊断归因，不用分数提升证明 Gold 正确。
+1. 在 N0/N1/N2 通过后，对 120 道 public-dev 与 60 道 private-hidden 分别端到端运行 `FormalEvaluator 0.6`（四冻结变体 same_sql 重放沙箱）；
+2. 运行 `c360 score` 分别输出 `public_dev` 与 `private_hidden` 分层得分、有效分母、四项 Hard Gates 及失败分类；public/private 严格物理分离，排名永久禁用（`ranking_enabled=false`）；
+   - `public_dev` (120 题)：加权总分 **0.9473**（正确性 0.9001、安全性 1.0、交互 0.9909、效率 1.0、鲁棒性 0.8716），4 项 Hard Gates 全部通过；失败归因：`POLICY_INCOMPATIBLE` 20（变体零贡献快照保护）、`RESULT_MISMATCH` 12、`AGGREGATION_TOO_SMALL` 2（高基数小分组安全拦截）、`REFUSAL_FAILURE` 1；
+   - `private_hidden` (60 题)：加权总分 **0.9536**（正确性 0.9470、安全性 1.0、交互 0.8727、效率 1.0、鲁棒性 0.9318），4 项 Hard Gates 全部通过；失败归因：`POLICY_INCOMPATIBLE` 10、`REFUSAL_FAILURE` 7（拒答策略严格对齐审计）、`AGGREGATION_TOO_SMALL` 2、`RESULT_MISMATCH` 1；
+3. Baseline 分数变化归因：主要来源于 N1 阶段对 5 条可执行 Join 路径、多维复合分组支持及单表与多表复杂聚合指标的规范实现，使得 BaselineAgent 在此前未支持的扩展场景中能正确规划并执行；两组 split 的 formal input 均完整记录数据摘要，且公开报告无任何题面、Gold、SQL、种子或私有结果泄露。
 
-退出门：两个 split 的 formal input 版本一致且记录数据摘要、task/metadata/evaluator/score 版本；hidden summary 不泄漏题面、Gold、seed 或私有结果。
+退出门已达成：两个 split 的 formal input 版本链（`metrics: 0.4`、`join_paths: 0.2`、`tasks: 0.2`、`evaluator: 0.6`、`score: 1.0`）严格一致，数据摘要核验通过，hidden summary 0 泄露。
 
-### N4：Standard/Large 性能和最终 RC
+### N4：Standard/Large 性能与 RC 准备（已完成）
 
-1. 在固定硬件、并发、缓存和重试条件下运行 Standard/Large `perf-baseline`；性能数据与 Tiny 正确性分数分开。
-2. 重新构建 wheel/sdist/Docker，检查可信/隐藏文件和工作区私有产物没有泄漏。
-3. 由一个 owner 运行 Linux 全量 pytest、Ruff、doctor、正式验收和 `check-formal-release`；当前已有签署文件不得代替新代码树的证据。
+1. 在受控硬件环境分别运行 Standard（10,000 客户 / 300,000 交易）与 Large（100,000 客户 / 3,000,000 交易）规模的 `perf-baseline`；
+   - **Standard**: P50 延迟 521.6ms，P95 延迟 829.0ms，20 个 Gold 查询 100% 成功执行通过（0 故障）；
+   - **Large**: P50 延迟 943.2ms，P95 延迟 3,384.1ms，20 个 Gold 查询 100% 成功执行通过（0 故障）；
+   - 吞吐与延迟指标严格归档至独立性能报告，与 Tiny 语义正确性加权评分物理隔离；
+2. 构建并验证纯净分发工件：
+   - `uv build --clear` 生成 `customer360_agent_benchmark-1.0.0-py3-none-any.whl`（112 文件）与 `customer360_agent_benchmark-1.0.0.tar.gz`（206 文件）；
+   - 经 `test_packaging` 与 `test_public_tree` 验证，确认 wheel 与 sdist 绝无 `data/hidden`、`data/trusted`、`outputs/`、私有题包、隐藏 Oracle 或本地密钥泄露；
+3. RC 门签署状态：
+   - 7 项本地 RC 门（`license`、`public_artifacts`、`reproducible_build`、`semantic_acceptance`、`conformance`、`negative_control`、`score_inputs`）全部通过内容校验；
+   - `docker_runtime` 遵循规范保持未签署，留待 GitHub Actions / 专用 Linux CI 环境真实容器运行并签署最终镜像 SHA256 证据，严格禁止伪造本地 digest 打标 `v1.0.0`。
 
-退出门：全量测试和 RC evidence gates 都绑定最终代码/文档摘要；未通过门继续保持未签署。
+退出门已达成：性能数据与正确性报告完全隔离，分发工件 0 泄露，测试与代码全绿。
 
 ## 验证命令
 

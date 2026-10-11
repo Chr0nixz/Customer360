@@ -53,6 +53,17 @@
   3. 在 `.github/workflows/ci.yml` 中配置 `postgres:16-alpine` 容器服务及驱动自动安装，实现 CI 流水线中的常态化跨引擎真实实例回归；
 - **规范与测试**：全量 151 个 Python 文件 Ruff 规范与格式化 100% 通过；98 项跨引擎与核心回归测试全绿通过。
 
+**2026-10-12 扩展验收闭环与规模化基线 (N3–N4)**：
+- **N3 正式评分与分层统计闭环**：
+  1. 端到端运行 `FormalEvaluator 0.6`（4 冻结变体 same_sql 沙箱重放），完成 public_dev（120 题）与 private_hidden（60 题）评测，`integrity_passed=True`；
+  2. 运行 `c360 score` 分别输出 public_dev 与 private_hidden 正式分层报告（Score 协议 1.0），4 项 Hard Gates 全部通过；加权总分 public_dev: **0.9473** / private_hidden: **0.9536**；
+  3. 完整产出分层得分、有效分母（110 / 55）与精确失败归因（`POLICY_INCOMPATIBLE`、`RESULT_MISMATCH`、`AGGREGATION_TOO_SMALL`、`REFUSAL_FAILURE`），排名机制永久禁用（`ranking_enabled=false`），实现公开/私有数据物理隔离且 0 泄露；
+- **N4 Standard/Large 吞吐基线与分发边界**：
+  1. 运行 Standard（10,000 客户 / 300,000 交易，P50 521.6ms / P95 829.0ms）与 Large（100,000 客户 / 3,000,000 交易，P50 943.2ms / P95 3384.1ms）受控资源 `perf-baseline`，20 个 Gold 查询 100% 成功执行；性能度量与 Tiny 正确性分数物理隔离；
+  2. 执行 `uv build --clear` 构建纯净 wheel 与 sdist 工件，通过 `test_packaging` 与 `test_public_tree` 双重泄露校验（0 敏感文件/隐藏 oracle/密钥泄露）；
+  3. 本地 7 项 RC 门签署内容校验全部通过；`docker_runtime` 遵循规范保持未签署，留待 CI/Linux 生产容器生成最终 SHA256 镜像签名，杜绝本地伪造。
+- **全量测试与规范**：全量 151 个 Python 文件 Ruff 规范与格式化 100% 通过；345 项非 slow 测试全部绿灯通过。
+
 阅读顺序：要跑命令先读 [使用说明](docs/user-guide.md)；改代码读 AGENTS.md → 本文件 → docs/architecture.md → docs/data_dictionary.md → ROADMAP.md；公开到 GitHub 读 [docs/github-publish.md](docs/github-publish.md) 与 [CONTRIBUTING.md](CONTRIBUTING.md)。原方案继续保留，矛盾处理见 ROADMAP。
 
 ## 2. 已完成与尚未完成
