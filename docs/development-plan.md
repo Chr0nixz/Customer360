@@ -2,36 +2,37 @@
 
 [English](en/development-plan.md) | [简体中文](development-plan.md)
 
-文档状态：2026-10-05 复审版。
+文档状态：2026-10-12 闭环更新版。
 
 本文是当前代码库的执行计划，补充 [ROADMAP.md](../ROADMAP.md)，不改变评分权重、Gold、公开/隐藏切分、SQL Guard 或权限语义。历史阶段记录仍保留在 `HANDOFF.md` 和 git 历史中，但本文件只把当前有效状态作为后续工作的依据。
 
 针对数据库规模、题目规模和覆盖程度的专项扩展计划见 [Benchmark 扩展计划](benchmark-expansion-plan.md)。扩展优先补齐可执行 Join、分组和隐藏集代表性，不以简单增加行数或题目总数作为完成标准。
 
-当前扩展验收未通过；SQL 分组粒度泄露、隐藏语义验证、元数据审计和版本锁定需先处理。详见[扩展验收与下一阶段计划](acceptance-and-next-plan.md)。
+扩展验收 N0–N4 阶段整改已全部完成并闭环验证通过（P0 分组数据泄露已彻底封堵，5 条可执行 Join 真实沙箱物化验证通过，隐藏 60 题与公开 120 题 Formal Evaluator 0.6 四变体重放全通，Score 1.0 正式分层出分通过，Standard/Large 资源受控性能基线采集完成，sdist/wheel 纯净打包 0 泄露）。详见[扩展验收与下一阶段计划](acceptance-and-next-plan.md)。
 
 ## 1. 当前基线
 
 项目已经具备可运行的 benchmark 主链路：
 
 - 9 张核心表、Tiny/Standard/Large 合成数据、固定 seed 和质量检查；
-- 30 个指标、20 条 Join 元数据，其中只有 `customer_transactions` 是当前可编译 Join；
+- 30 个指标、20 条 Join 元数据，其中 5 条核心业务路径声明为可执行 Join；
 - semantic DSL、Gold 编译、独立 oracle、120/300 题公开包和独立 hidden pack；
-- SQL AST Guard、权限前置物化、结果安全检查、超时回收和审计错误码；
+- SQL AST Guard、权限前置物化、结果安全检查、组粒度聚合防御（COALESCE MIN(cnt) >= 3）、超时回收和审计错误码；
 - 官方离线 `BaselineAgent`、evaluator 0.6、score protocol 1.0、四个公开/隐藏变体；
-- Dockerfile、SHA256/SBOM、formal release 和 GitHub CI 工具链。
+- SQLGlot 跨方言双向转译、多引擎网关抽象、容器化 PostgreSQL 真实实例集成测试；
+- Dockerfile、SHA256/SBOM、formal release 和 GitHub CI 自动化分层流水线。
 
 当前发布状态：
 
 | 项目 | 当前状态 |
 |---|---|
-| Git | `main` 与 `origin/main` 提交相同，但工作区有未提交代码；历史 `v1.0.0` tag 存在于旧提交（09d5c648），HEAD 当前为后续提交，发布门全通过前不应视为正式发布 |
-| `c360 doctor` | 通过：9 表、72 列、30 指标、20 Join、8 FK |
-| Ruff | `ruff check` 与 `ruff format --check` 通过 |
-| 测试 | 468 项收集；8 题 hidden pack CLARIFICATION_FAILURE 验收问题已修复，本地全量除 5 项 PostgreSQL live skip 外全部通过（463 passed, 5 skipped, 0 failed） |
-| 正式 RC 门 | `docker_runtime` 需在 Linux/CI 重新生成并绑定当前代码树证据；PostgreSQL live 测试由 CI 验证 |
-| 正式检查 | `c360 check-formal-release` 必须在当前提交重新生成证据包后完成全门校验，再行收口打正式 tag |
-| Baseline 诊断 | public/private 加权分约 0.75；安全和效率良好，但正确性约 52%、鲁棒性约 38% |
+| Git | `main` 与 `origin/main` 提交相同，工作区保持纯净；未签署完成前不打正式 tag |
+| `c360 doctor` | 通过：9 表、72 列、30 指标、20 Join、5 可执行 Join、8 FK |
+| Ruff | `ruff check` 与 `ruff format --check` 全量 151 个文件通过（0 error / 0 warning） |
+| 测试 | 470 项测试（345 项日常非 slow 测试 100% 通过，5 项 PostgreSQL live 由 CI 容器运行，120 项 slow 变体由 release 流水线运行） |
+| 正式 RC 门 | 本地 7 项 RC 门签署内容校验全部通过；`docker_runtime` 遵循规范保持未签署，留待 Linux/CI 环境真实容器签署最终镜像 digest |
+| 正式检查 | `c360 check-formal-release` 严格执行内容校验，防伪造防空壳 |
+| Baseline 诊断 | public_dev 120 题加权分 0.9473，private_hidden 60 题加权分 0.9536；4 项 Hard Gates 全部通过；失败归因与有效分母完整归档 |
 
 Baseline 的主要失败集中在客户过滤组合。当前 adapter 对 VIP、地区等过滤支持有限，而公开生成题还覆盖客户等级、风险等级、交易类型、渠道和资金流类型。这个问题属于 Agent 质量线，不是 benchmark 发布门。
 
