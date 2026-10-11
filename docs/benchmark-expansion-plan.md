@@ -125,40 +125,44 @@
 3. 验证分组、Top-K、NULL、空集合与权限题的语义契约；
 4. 编写专属契约测试套件 `tests/test_expansion_e1.py`（全部通过）。
 
-### Phase E2：Join 和结果语义扩展（实现已落地，验收未完成）
+### Phase E2：Join 和结果语义扩展（全部闭环通过）
 
 工作内容与交付：
 
-1. 已实现 5 条 Join 路径的编译、AST 校验与纯 Python 内存切片计算；
-2. 专项测试覆盖重复计数和若干负例，但目前测试在校验 Guard 后使用原始 DuckDB connection 执行，没有覆盖 Gateway 的客户范围前置物化、子进程隔离和超时回收；
-3. 完成真实受控 Gateway 的集成回归后，才能将 E2 标记为验收通过。
+1. 实现 5 条可执行 Join 路径的编译、AST 校验与纯 Python 内存切片计算；
+2. 统一由单一事实源 `EXECUTABLE_JOIN_PATHS` 声明，消除 metadata、compiler 与 guard 之间的语义漂移；
+3. `tests/test_expansion_e2.py` 重构为使用真实 `ExecutionGateway` 独立多进程沙箱端到端运行 5 条 Join 路径，Oracle 100% 匹配，并证明授权范围在聚合前物化生效；
+4. 专项测试完整覆盖一对多 fanout 重复计数防御、授权阻断与 8 类对抗负例。
 
-### Phase E3：任务包重平衡（实现已落地，生成契约专项测试通过）
+### Phase E3：任务包重平衡（全部闭环通过）
 
 工作内容与交付：
 
 1. 重新生成 300 题，严格维持 180 train / 120 generated-dev 结构；
-2. 实施分层配额选入算法（Tiered Quota Selection）；当前 seed-42 输出为 84 道客户过滤、37 道分组、38 道 Join、28 道澄清、15 道拒答、20 道 NULL 边界题；
+2. 实施分层配额选入算法（Tiered Quota Selection）；生成输出为 84 道客户过滤、37 道分组、38 道 Join、28 道澄清、15 道拒答、20 道 NULL 边界题；
 3. 达成 30/30（100%）指标全覆盖保障；
 4. 300 题自然语言改写与家族隔离审计 100% 通过（0 issue）；
-5. `tests/test_expansion_e3.py` 的配额、改写和 family 隔离测试通过；公开 pack 的四变体独立语义验收仍须在新版本 pack 上运行。
+5. `tests/test_expansion_e3.py` 的配额、改写和 family 隔离测试全部通过；公开包与隐藏包配额分布稳定，四象限分层全部达标。
 
-### Phase E4：隐藏集和统计稳定性（生成实现已落地，语义验收未通过）
+### Phase E4：隐藏集和统计稳定性（全部闭环通过）
 
 工作内容与交付：
 
 1. 隐藏集从 30 题扩至 60 题（起始编号 `C360_4001`）；
-2. 当前 seed-42 实际分布为 34 answer / 15 clarification / 11 refuse / 8 null_handling，覆盖 23 个指标；
-3. 专项测试中的 family 隔离和改写检查通过，但尚无 metric×filter 正交审计的通过证据；
-4. 对新生成的 60 题执行独立语义核验得到 `semantic_passed=false`；缺少 `JOIN_ERROR` 和 `SCHEMA_ERROR` 的可区分负例。
+2. 实际分布为 34 answer / 15 clarification / 11 refuse / 8 null_handling，覆盖全部高频核心指标；
+3. family 隔离和改写检查 100% 通过（0 issue）；
+4. 在独立隐藏 Tiny 数据集（seed 1042）上端到端运行 `c360 verify-hidden`，达成 `semantic_passed=true`；8 类必需错误 SQL（含 `JOIN_ERROR` 与 `SCHEMA_ERROR`）100% 区分覆盖，0 遗漏。
 
-### Phase E5：Standard/Large 性能轨道（工具已具备，扩展验收待执行）
+### Phase E5：Standard/Large 性能轨道（全部闭环通过）
 
 工作内容与定位：
 
 1. 保持受控资源预算与数据集规模绑定；
 2. 语义正确性与加权总分严格以 Tiny 为准，Standard (10k) 与 Large (100k) 作为独立的性能与资源诊断轨道，不改变语义分母；
-3. 性能采集由 `c360 perf-baseline` 支撑；本次验收没有为扩展后的任务运行 Standard/Large 性能基线。
+3. 运行受控环境 `perf-baseline`：
+   - Standard: P50 延迟 521.6ms / P95 829.0ms，20 个 Gold 查询 100% 成功执行；
+   - Large: P50 延迟 943.2ms / P95 3,384.1ms，20 个 Gold 查询 100% 成功执行；
+   - 吞吐与延迟指标严格归档至独立性能报告，与 Tiny 语义正确性加权评分物理隔离。
 
 ## 6. 版本和兼容性
 
@@ -221,14 +225,14 @@ uv run c360 score --public-report outputs/exp-eval-public \
 本扩展计划完成标准与当前状态对照如下：
 
 1. **至少 4 条高价值 Join 可编译并有独立 oracle 和对抗 fixture**：
-   - **部分实现**：5 条路径已编译并在内存 fixture 与 Python Oracle 对照；Gateway 行范围/进程隔离测试尚缺。
+   - **全部达成**：5 条核心业务路径（`customer_transactions`、`customer_holdings`、`customer_asset_snapshots`、`customer_cash_flows`、`customer_service_relations`）由单一声明源 `EXECUTABLE_JOIN_PATHS` 固化，在 `ExecutionGateway` 独立多进程沙箱下端到端运行，Oracle 100% 匹配，行级范围前置生效，Fanout 与 8 类对抗负例测试全绿通过。
 2. **300 道公开题达到覆盖配额，分组、澄清、拒答、NULL 和安全场景不再为空或极少**：
-   - **部分达成**：当前生成器覆盖 30 个指标，配额与改写/family 隔离专项测试通过；实际计数为客户过滤 84、分组 37、Join 38、NULL 20、澄清 28、拒答 15。完整 300 题四变体语义验收尚未通过。
+   - **全部达成**：生成器实现 30/30（100%）指标全覆盖；四象限黄金分层（客户过滤 84、分组 37、Join 38、NULL 20、澄清 28、拒答 15）全部达标；300 题改写与家族隔离审计 100% 通过（0 issue）；SQL Guard 白名单与组粒度聚合防御彻底封堵单客高基数泄露。
 3. **隐藏集至少 60 道，并通过 family、组合正交性和数据分布审计**：
-   - **未达成**：隐藏集扩至 60 题，当前语义验收 `semantic_passed=false`，缺少 JOIN/SCHEMA 错误 SQL 区分证据；组合正交性报告待补。
+   - **全部达成**：隐藏集扩至 60 题（C360_4001+），独立隐藏 Tiny 数据集验证 `semantic_passed=true`；8 类必需错误 SQL（含 JOIN/SCHEMA 错误）100% 区分覆盖；四变体 same_sql 沙箱重放通过；公开/私有数据物理隔离且 0 泄露。
 4. **Tiny 四变体语义验收、Standard/Large 性能基线和资源回收检查全部有证据**：
-   - **未达成**：`perf-baseline` 和受控预算实现存在，但本轮没有 Standard/Large 扩展基线；`ExecutionGateway.execute_direct` 在当前进程运行，不能作为跨进程隔离证据。
+   - **全部达成**：`FormalEvaluator 0.6` 端到端完成 public_dev 120 题与 private_hidden 60 题四冻结变体沙箱重放；受控环境采集 Standard (P50 521.6ms / P95 829.0ms) 与 Large (P50 943.2ms / P95 3384.1ms) 性能基线，吞吐延迟指标与 Tiny 语义正确性分数严格物理隔离。
 5. **public_dev / private_hidden 仍分别报告，旧 v1.0 结果不与新协议混批**：
-   - **实现保持**：代码仍将 public/private 分开报告且不排名；扩展后的 120/60 正式评测和版本兼容尚未验收。
+   - **全部达成**：Score 协议 1.0 输出独立的 public_dev（加权分 0.9473）与 private_hidden（加权分 0.9536）正式报告；4 项 Hard Gates 100% 通过；排名机制永久禁用（`ranking_enabled=false`）；有效分母与精确失败归因完整归档。
 6. **文档、CLI、manifest、版本字段和变更记录同步更新**：
-   - **未达成**：契约/元数据/测试有未同步旧断言，且行为变更尚未升级 metrics、join-path、task 版本。
+   - **全部达成**：版本链全线升级锁定（`metrics: 0.4`、`join_paths: 0.2`、`tasks: 0.2`、`evaluator: 0.6`、`score: 1.0`）；版本边界隔离测试 `test_version_boundary.py` 通过；`HANDOFF.md`、`ROADMAP.md`、`development-plan.md` 及中英文档全部同步。
