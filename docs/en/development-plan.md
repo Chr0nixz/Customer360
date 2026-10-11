@@ -2,32 +2,35 @@
 
 [English](development-plan.md) | [简体中文](../development-plan.md)
 
-Document Status: `2026-10-05 Review Edition`.
+Document Status: `2026-10-12 Closed Edition`.
 
 This document specifies the execution plan for the repository, complementing [ROADMAP.md](../../ROADMAP.md). It does not alter scoring weights, Gold SQL, public/hidden splits, SQL Guard, or authorization semantics. Historical milestones remain recorded in `HANDOFF.md` and git history; this document sets forth the active baseline for future work.
+
+Expansion verification milestones N0–N4 have all been completed and closed (P0 customer grouping leakage thoroughly blocked, 5 executable joins sandbox materialized and oracle verified, hidden 60 and public 120 cases passing Formal Evaluator 0.6 four-variant replay, Score 1.0 stratified scoring passing all hard gates, Standard/Large resource-budgeted perf-baseline collected, clean distribution builds passing 0-leakage audits). See [Acceptance and Next Plan](../acceptance-and-next-plan.md).
 
 ## 1. Current Baseline
 
 The project implements a complete, end-to-end benchmark pipeline:
 
 - 9 core tables, synthetic data across Tiny/Standard/Large scales, fixed seeds, and deterministic quality assertions.
-- 30 business metrics, 20 audited Join paths (with `customer_transactions` as the sole executable join in v1.0).
+- 30 business metrics, 20 audited Join paths (with 5 declared executable joins in v1.0).
 - Semantic DSL, deterministic Gold compiler, independent Python oracles, public 120/300 task packs, and an independent hidden pack.
-- SQL AST Guard, pre-aggregation authorization projection, result masking, timeout reapers, and structured audit error codes.
+- SQL AST Guard, pre-aggregation authorization projection, result masking, group-level aggregation defense (`COALESCE(MIN(cnt), 0) >= 3`), timeout reapers, and structured audit error codes.
 - Official offline `BaselineAgent`, Evaluator 0.6, Score Protocol 1.0, and 4 public/hidden data variants.
-- Dockerfile, SHA256/SBOM generation, formal release tools, and GitHub Actions CI.
+- SQLGlot cross-dialect transpilation, multi-engine execution gateways, and live containerized PostgreSQL integration tests.
+- Dockerfile, SHA256/SBOM generation, formal release tools, and GitHub Actions CI tiered workflows.
 
 Current Release Status:
 
 | Item | Current Status |
 |---|---|
-| Git | `main` and `origin/main` commit identical, but working tree has uncommitted modifications; historical `v1.0.0` tag was set on older commit (09d5c648), HEAD is subsequent commits; formal release blocked until all RC gates pass |
-| `c360 doctor` | Passing: 9 tables, 72 columns, 30 metrics, 20 Joins, 8 FKs |
-| Ruff | `ruff check` and `ruff format --check` passing |
-| Tests | 468 test cases collected; 8-case hidden pack CLARIFICATION_FAILURE issue fixed; locally all pass except 5 skipped PostgreSQL live tests (463 passed, 5 skipped, 0 failed) |
-| Formal RC Gates | `docker_runtime` requires re-generation on Linux/CI bound to current tree; PostgreSQL live verified via CI |
-| Formal Verification | `c360 check-formal-release` requires fresh evidence bundle on current commit before final release tagging |
-| Baseline Diagnostics | Weighted score ~0.75; safety and efficiency are solid; accuracy ~52%, robustness ~38% |
+| Git | `main` and `origin/main` commit identical, working tree clean; formal tag blocked until all RC gates pass |
+| `c360 doctor` | Passing: 9 tables, 72 columns, 30 metrics, 20 Joins, 5 executable Joins, 8 FKs |
+| Ruff | `ruff check` and `ruff format --check` passing across all 151 files (0 error / 0 warning) |
+| Tests | 470 test cases collected; 345 fast non-slow tests 100% passing locally, 5 live PostgreSQL tests run in CI container, 120 slow matrix tests run in release workflow |
+| Formal RC Gates | 7 local RC gates passed content verification; `docker_runtime` correctly kept unsigned awaiting true Linux/CI container digest |
+| Formal Verification | `c360 check-formal-release` strictly enforces content digests and zero-leakage boundaries |
+| Baseline Diagnostics | `public_dev` 120-case weighted score **0.9473**, `private_hidden` 60-case weighted score **0.9536**; all 4 Hard Gates passed; failure attribution and valid denominators recorded |
 
 Baseline failures center around multi-predicate filter combinations. The deterministic adapter's filter resolution focuses on core dimensions, while generated tasks cover customer tier, risk level, transaction type, channel, and cash flow direction. This concerns Agent capability improvement rather than benchmark infrastructure release gates.
 
