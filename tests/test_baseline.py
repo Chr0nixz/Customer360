@@ -16,9 +16,14 @@ from customer360.contracts.public import AgentRequest
 from customer360.evaluator.matrix import resolve_eval_agent
 from customer360.evaluator.runner import evaluate_case
 from customer360.runtime.gateway import ExecutionGateway
+from customer360.runtime.policy import (
+    benchmark_eval_policy,
+    customer_ids_from_database,
+    tiny_eval_policy,
+)
 from customer360.runtime.tools import ToolSession
 from customer360.tasks.catalog import load_human_cases
-from customer360.tasks.variant import tiny_eval_policy
+from customer360.tasks.trusted_data import load_verified_dataset
 
 pytestmark = pytest.mark.slow
 
@@ -597,3 +602,22 @@ def test_baseline_multidimensional_grouping_and_multipath_joins(baseline, reposi
     assert resp.status == "success"
     assert 'JOIN "fact_asset_snapshot" AS "a"' in resp.sql
     assert '"c"."risk_level" = \'low\'' in resp.sql
+
+    # 8. Join: customer_holdings (requires benchmark_eval_policy to include fact_holding grant)
+    db_path, manifest = load_verified_dataset(baseline)
+    benchmark_policy = benchmark_eval_policy(manifest, customer_ids_from_database(db_path))
+    bm_gateway = ExecutionGateway(db_path, benchmark_policy)
+    bm_tools = ToolSession(bm_gateway, repository)
+    resp = agent.respond(
+        AgentRequest(
+            case_id="probe_join_holdings",
+            question="统计标准等级客户中有有效持仓的去重客户数。",
+            anchor_date=ANCHOR,
+            metadata_version=repository.metrics.metrics_version,
+        ),
+        bm_tools,
+    )
+    assert resp.status == "success"
+    assert 'JOIN "fact_holding" AS "h"' in resp.sql
+    assert '"c"."customer_level" = \'standard\'' in resp.sql
+    assert '"h"."holding_status" = \'active\'' in resp.sql
