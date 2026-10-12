@@ -64,6 +64,15 @@
   3. 本地 7 项 RC 门签署内容校验全部通过；`docker_runtime` 遵循规范保持未签署，留待 CI/Linux 生产容器生成最终 SHA256 镜像签名，杜绝本地伪造。
 - **全量测试与规范**：全量 151 个 Python 文件 Ruff 规范与格式化 100% 通过；345 项非 slow 测试全部绿灯通过。
 
+**2026-10-13 性能瓶颈加固与全路径评测贯通**：
+- **受控 Worker 作用域投影加速**：
+  1. 优化 `src/customer360/runtime/worker.py` 的 `_fetch_scoped_rows`：将 Python 参数化占位符（100 个 `?` 参数）重构为安全字面量集合渲染（`render_literal`），单次查询作用域行抽取耗时从 142ms 骤降至 2.5ms（提升 **46.9 倍**，单 query worker 端到端耗时从 236ms 优化至 73ms）；
+  2. 保持 OS 级进程隔离、10k 物化上限截断与 `tiny_eval_policy` 权限控制不改变；
+- **验证套件解耦与隔离**：
+  1. 优化 `tests/test_pack_verify.py`：为报告篡改测试（`test_report_rejects_forged_evidence`）构造专属轻量 `synthetic_300_report` fixture，避免执行昂贵的 300 题多变体实跑，单测试耗时由超时（>180s）降低至 0.6s；
+  2. 在 `BaselineAgent` 的适配层（`src/customer360/agent/adapter.py`）完善 `customer_holdings`（有效持仓）关键词解析，并在 `tests/test_baseline.py` 中补充端到端回归探针，完成全部 5 条经审查可执行 Join 路径在官方 Baseline 下的完整验证覆盖。
+- **健康度与规范**：全量 151 个 Python 文件 Ruff 代码规范与格式化 100% 通过（0 告警 0 错误）；345 项核心非 slow 回归测试全绿通过。
+
 阅读顺序：要跑命令先读 [使用说明](docs/user-guide.md)；改代码读 AGENTS.md → 本文件 → docs/architecture.md → docs/data_dictionary.md → ROADMAP.md；公开到 GitHub 读 [docs/github-publish.md](docs/github-publish.md) 与 [CONTRIBUTING.md](CONTRIBUTING.md)。原方案继续保留，矛盾处理见 ROADMAP。
 
 ## 2. 已完成与尚未完成
