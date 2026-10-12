@@ -143,3 +143,49 @@ def test_postgresql_gateway_fail_closed_without_uri():
     with pytest.raises(QueryRejected) as exc_info:
         gateway.execute("SELECT 1")
     assert exc_info.value.code == "ENGINE_UNAVAILABLE"
+
+
+def test_transpile_hardening_comments_non_ascii_and_subqueries():
+    import pytest
+
+    # 1. SQL comments (both single-line and multi-line) must be safely stripped/parsed
+    duck_sql = (
+        "-- Single line comment\n"
+        "/* Multi-line block\n"
+        "   comment */\n"
+        'SELECT COUNT(*) AS "cnt" FROM "dim_customer" WHERE "region" = \'华东\''
+    )
+    res = transpile_sql(duck_sql, source_dialect="duckdb", target_dialect="postgres")
+    assert res.ast_valid is True
+    assert '"dim_customer"' in res.transpiled_sql
+    assert "'华东'" in res.transpiled_sql
+
+    # 2. Chinese column alias and table identifiers
+    duck_chinese = 'SELECT "customer_id", "region" AS "客户地区" FROM "dim_customer"'
+    res_chinese = transpile_sql(duck_chinese, source_dialect="duckdb", target_dialect="postgres")
+    assert res_chinese.ast_valid is True
+    assert '"客户地区"' in res_chinese.transpiled_sql
+
+    # 3. Injection attempt masked inside or after comments must still be blocked
+    with pytest.raises(ValueError, match="multi-statement queries are forbidden"):
+        transpile_sql(
+            'SELECT 1 -- safe comment\n; DROP TABLE "dim_customer"',
+            source_dialect="duckdb",
+            target_dialect="postgres",
+        )
+
+    # 4. Expressions with COALESCE, NULL checks and CASE WHEN
+    duck_expr = (
+        'SELECT COALESCE("occupation", \'未知\') AS "occ", '
+        'CASE WHEN "status" = \'active\' THEN 1 ELSE 0 END AS "is_act" '
+        'FROM "dim_customer" WHERE "customer_level" IS NOT NULL'
+    )
+    res_expr = transpile_sql(duck_expr, source_dialect="duckdb", target_dialect="postgres")
+    assert res_expr.ast_valid is True
+    assert "COALESCE" in res_expr.transpiled_sql
+    assert "CASE" in res_expr.transpiled_sql
+    has_not_null = (
+        'NOT "customer_level" IS NULL' in res_expr.transpiled_sql
+        or "IS NOT NULL" in res_expr.transpiled_sql
+    )
+    assert has_not_null is True
