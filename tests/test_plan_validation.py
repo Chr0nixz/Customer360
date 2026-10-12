@@ -173,3 +173,16 @@ def test_validate_query_plan_decimal_and_string_hardening(repository):
     res_bad_str = validate_query_plan(req_bad_string, repository, policy)
     assert res_bad_str.is_valid is False
     assert any(i.code == "INVALID_PREDICATE_LITERAL" for i in res_bad_str.issues)
+
+    # 3. High-cardinality identifier in group_by (customer_id) must be rejected
+    req_bad_group = QueryPlanValidationRequest(
+        source_table="dim_customer",
+        operation="count_distinct",
+        measure_column="customer_id",
+        output_column="cnt",
+        group_by=("customer_id",),
+    )
+    res_bad_group = validate_query_plan(req_bad_group, repository, policy)
+    assert res_bad_group.is_valid is False
+    assert any(i.code == "INVALID_GROUP_DIMENSION" for i in res_bad_group.issues)
+    assert any("not in safe group dimensions whitelist" in i.message for i in res_bad_group.issues)

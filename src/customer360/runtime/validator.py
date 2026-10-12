@@ -17,6 +17,7 @@ from customer360.contracts.validation import (
 )
 from customer360.metadata.metrics import MetadataRepository
 from customer360.metadata.models import EXECUTABLE_JOIN_PATHS
+from customer360.safety.sql_guard import SAFE_GROUP_DIMENSIONS
 
 
 def _is_valid_date_str(val: Any) -> bool:
@@ -251,6 +252,18 @@ def validate_query_plan(
             )
         if table_def is not None:
             for g_field in request.group_by:
+                if g_field not in SAFE_GROUP_DIMENSIONS:
+                    issues.append(
+                        QueryPlanIssue(
+                            code="INVALID_GROUP_DIMENSION",
+                            field=g_field,
+                            message=(
+                                f"Group column '{g_field}' is not in safe group dimensions "
+                                "whitelist."
+                            ),
+                        )
+                    )
+                    continue
                 try:
                     table_def.column(g_field)
                     if granted_columns is not None:
