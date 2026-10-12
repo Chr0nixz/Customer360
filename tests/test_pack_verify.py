@@ -12,6 +12,7 @@ from customer360.contracts.family import ERROR_CLASSES_REQUIRED
 from customer360.contracts.pack_verify import (
     PUBLIC_VERIFY_FORBIDDEN,
     PackVariantResult,
+    PackVerifyCase,
     PackVerifyReport,
 )
 from customer360.contracts.public import Column, QueryReceipt, QueryResult
@@ -205,9 +206,81 @@ def test_policy_rejection_cannot_hide_variant_oracle_mismatch(baseline, variant,
     assert mismatched[0].variants[0].independent_match is False
 
 
+@pytest.fixture
+def synthetic_300_report():
+    cases = [
+        PackVerifyCase(
+            case_id="C360_1001",
+            split="dev",
+            expected_action="answer",
+            material_status="compilable_answer",
+            intended_failure_class="FILTER_ERROR",
+            independent_match=True,
+            rewrite_passed=True,
+            wrong_sql_distinguished=True,
+            wrong_sql_mode="mismatch",
+            variants=tuple(
+                PackVariantResult(
+                    variant_id=vid,
+                    independent_match=True,
+                    results_differ_from_baseline=(vid == SEMANTIC_VERIFY_VARIANT_IDS[0]),
+                )
+                for vid in SEMANTIC_VERIFY_VARIANT_IDS
+            ),
+        )
+    ]
+    for i, err_cls in enumerate(sorted(ERROR_CLASSES_REQUIRED)):
+        if err_cls == "FILTER_ERROR":
+            continue
+        cases.append(
+            PackVerifyCase(
+                case_id=f"C360_{2000 + i:04d}",
+                split="dev",
+                expected_action="refuse" if "PERMISSION" in err_cls else "clarification_needed",
+                material_status="unscored_oracle",
+                intended_failure_class=err_cls,
+                rewrite_passed=True,
+                wrong_sql_distinguished=True,
+                wrong_sql_mode="guard_rejected",
+            )
+        )
+    for i in range(len(cases), 300):
+        cases.append(
+            PackVerifyCase(
+                case_id=f"C360_{3000 + i:04d}",
+                split="train",
+                expected_action="clarification_needed",
+                material_status="unscored_oracle",
+                intended_failure_class="CLARIFICATION_FAILURE",
+                rewrite_passed=True,
+                wrong_sql_distinguished=True,
+                wrong_sql_mode="guard_rejected",
+            )
+        )
+    classes = tuple(sorted({c.intended_failure_class for c in cases if c.wrong_sql_distinguished}))
+    return PackVerifyReport(
+        hidden=False,
+        pack_id="generated-m3-0.2",
+        m6_structure=True,
+        semantic_passed=True,
+        case_count=300,
+        compilable_answers=1,
+        independent_oracle_matches=1,
+        unscored_oracles=299,
+        policy_incompatible_count=0,
+        wrong_sql_classes=classes,
+        rewrite_passed=True,
+        variant_count=4,
+        replay_mode="same_sql",
+        dataset_seed=42,
+        limitations=("test",),
+        cases=tuple(cases),
+    )
+
+
 @pytest.mark.parametrize("tamper", ["count", "duplicate", "pass", "matches", "policy", "classes"])
-def test_report_rejects_forged_evidence(report_300, tamper):
-    payload = report_300.model_dump()
+def test_report_rejects_forged_evidence(synthetic_300_report, tamper):
+    payload = synthetic_300_report.model_dump()
     executable = next(c for c in payload["cases"] if c["material_status"] == "compilable_answer")
     if tamper == "count":
         executable["variants"] = executable["variants"][:-1]

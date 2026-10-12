@@ -28,10 +28,9 @@ def _fetch_scoped_rows(source, select_columns: str, table_name: str, customer_id
     rows: list = []
     for start in range(0, len(customer_ids), _ID_BATCH):
         batch = customer_ids[start : start + _ID_BATCH]
-        placeholders = ", ".join("?" for _ in batch)
+        in_clause = ", ".join(render_literal(cid) for cid in batch)
         cursor = source.execute(
-            f'SELECT {select_columns} FROM "{table_name}" WHERE "customer_id" IN ({placeholders})',
-            list(batch),
+            f'SELECT {select_columns} FROM "{table_name}" WHERE "customer_id" IN ({in_clause})'
         )
         while True:
             window = cap + 1 - len(rows)
