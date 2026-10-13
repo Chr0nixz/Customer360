@@ -141,7 +141,7 @@ def build_variant_replay(
         if gateway is not None:
             applicability = "applicable"
             try:
-                gateway.execute(compiled.sql)
+                gateway.execute_trusted_direct(compiled.sql)
             except QueryRejected as exc:
                 if exc.code != "AGGREGATION_TOO_SMALL":
                     raise
