@@ -855,6 +855,10 @@ class LocalDeterministicAdapter:
                             field="channel", operator="eq", values=("branch",), side="join"
                         )
                     )
+                elif "银行" in question:
+                    found.append(
+                        IntentFilter(field="channel", operator="eq", values=("bank",), side="join")
+                    )
                 if "买入" in question:
                     found.append(
                         IntentFilter(
@@ -867,6 +871,27 @@ class LocalDeterministicAdapter:
                             field="transaction_type", operator="eq", values=("sell",), side="join"
                         )
                     )
+                elif "申购" in question:
+                    found.append(
+                        IntentFilter(
+                            field="transaction_type",
+                            operator="eq",
+                            values=("subscribe",),
+                            side="join",
+                        )
+                    )
+                elif "赎回" in question:
+                    found.append(
+                        IntentFilter(
+                            field="transaction_type",
+                            operator="eq",
+                            values=("redeem",),
+                            side="join",
+                        )
+                    )
+                null_prod_tokens = ("产品为空", "无产品", "未关联产品", "产品ID为空", "产品缺失")
+                if any(k in question for k in null_prod_tokens):
+                    found.append(IntentFilter(field="product_id", operator="is_null", side="join"))
             elif join_path == "customer_cash_flows":
                 found.append(
                     IntentFilter(

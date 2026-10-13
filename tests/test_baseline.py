@@ -391,6 +391,38 @@ def test_baseline_extended_filters_and_join_combinations(baseline, repository):
     assert '"t"."status" = \'success\'' in resp.sql
     assert '"t"."transaction_type" = \'buy\'' in resp.sql
 
+    # 8a. Join query with branch channel
+    resp_branch = agent.respond(
+        AgentRequest(
+            case_id="probe_join_branch",
+            question="统计华东客户中截至2025年6月30日近90天有成功网点渠道交易的去重客户数。",
+            anchor_date=ANCHOR,
+            metadata_version=repository.metrics.metrics_version,
+        ),
+        tools,
+    )
+    assert resp_branch.status == "success"
+    assert 'JOIN "fact_transaction"' in resp_branch.sql
+    assert '"c"."region" = \'华东\'' in resp_branch.sql
+    assert '"t"."status" = \'success\'' in resp_branch.sql
+    assert '"t"."channel" = \'branch\'' in resp_branch.sql
+
+    # 8b. Join query with subscribe transaction_type
+    resp_sub = agent.respond(
+        AgentRequest(
+            case_id="probe_join_subscribe",
+            question="统计VIP客户中截至2025年6月30日近90天有成功申购交易的去重客户数。",
+            anchor_date=ANCHOR,
+            metadata_version=repository.metrics.metrics_version,
+        ),
+        tools,
+    )
+    assert resp_sub.status == "success"
+    assert 'JOIN "fact_transaction"' in resp_sub.sql
+    assert '"c"."customer_level" = \'VIP\'' in resp_sub.sql
+    assert '"t"."status" = \'success\'' in resp_sub.sql
+    assert '"t"."transaction_type" = \'subscribe\'' in resp_sub.sql
+
     # 9. PII unknown field refusal remains fail-closed
     resp = agent.respond(
         AgentRequest(
