@@ -166,12 +166,24 @@ def validate_query_plan(
     # 5. Check predicates (allowed columns, type compatibility)
     has_transaction_success_filter = False
     has_cash_flow_success_filter = False
+    has_holding_active_filter = False
+    has_service_relation_primary_filter = False
     for pred in request.predicates:
         target_table_def = table_def
         target_table_name = request.source_table
         if pred.alias in {"t", "cf", "h", "a", "sr"} and join_target_def is not None:
             target_table_def = join_target_def
             target_table_name = right_table_name or join_target_def.table_name
+
+        # Prohibit filtering customer_id on joined right table
+        if pred.field == "customer_id" and target_table_name != "dim_customer":
+            issues.append(
+                QueryPlanIssue(
+                    code="DISALLOWED_FILTER_COLUMN",
+                    field="customer_id",
+                    message=f"Joined table '{target_table_name}' customer_id cannot be filtered.",
+                )
+            )
 
         # Check column existence & grant
         col_def = None
@@ -211,6 +223,21 @@ def validate_query_plan(
             and ("success",) in (pred.values,)
         ):
             has_cash_flow_success_filter = True
+        if (
+            target_table_name == "fact_holding"
+            and pred.field == "holding_status"
+            and pred.operator == "eq"
+            and ("active",) in (pred.values,)
+        ):
+            has_holding_active_filter = True
+        if (
+            target_table_name == "fact_service_relation"
+            and pred.field == "is_primary"
+            and pred.operator == "eq"
+            and len(pred.values) == 1
+            and isinstance(pred.values[0], bool)
+        ):
+            has_service_relation_primary_filter = True
 
         # Check predicate literals compatibility
         if col_def is not None:
@@ -231,6 +258,25 @@ def validate_query_plan(
                 code="INVALID_JOIN_PREDICATES",
                 field="status",
                 message="Join with fact_cash_flow requires 'status = success' predicate.",
+            )
+        )
+    if request.join_path == "customer_holdings" and not has_holding_active_filter:
+        issues.append(
+            QueryPlanIssue(
+                code="INVALID_JOIN_PREDICATES",
+                field="holding_status",
+                message="Join with fact_holding requires 'holding_status = active' predicate.",
+            )
+        )
+    if (
+        request.join_path == "customer_service_relations"
+        and not has_service_relation_primary_filter
+    ):
+        issues.append(
+            QueryPlanIssue(
+                code="INVALID_JOIN_PREDICATES",
+                field="is_primary",
+                message="Join with fact_service_relation requires 'is_primary' boolean predicate.",
             )
         )
 

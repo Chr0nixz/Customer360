@@ -186,3 +186,51 @@ def test_validate_query_plan_decimal_and_string_hardening(repository):
     assert res_bad_group.is_valid is False
     assert any(i.code == "INVALID_GROUP_DIMENSION" for i in res_bad_group.issues)
     assert any("not in safe group dimensions whitelist" in i.message for i in res_bad_group.issues)
+
+    # 4. Filter on joined table's customer_id must be disallowed
+    req_bad_join_cid = QueryPlanValidationRequest(
+        source_table="dim_customer",
+        operation="count_distinct",
+        measure_column="customer_id",
+        output_column="cnt",
+        join_path="customer_transactions",
+        predicates=(
+            PlanPredicate(field="status", operator="eq", values=("success",), alias="t"),
+            PlanPredicate(field="customer_id", operator="eq", values=("C001",), alias="t"),
+        ),
+    )
+    res_bad_join_cid = validate_query_plan(req_bad_join_cid, repository, policy)
+    assert res_bad_join_cid.is_valid is False
+    assert any(i.code == "DISALLOWED_FILTER_COLUMN" for i in res_bad_join_cid.issues)
+    assert any("customer_id cannot be filtered" in i.message for i in res_bad_join_cid.issues)
+
+    # 5. Missing holding_status=active on customer_holdings join must be rejected
+    req_bad_holding = QueryPlanValidationRequest(
+        source_table="dim_customer",
+        operation="count_distinct",
+        measure_column="customer_id",
+        output_column="cnt",
+        join_path="customer_holdings",
+        predicates=(),
+    )
+    res_bad_holding = validate_query_plan(req_bad_holding, repository, policy)
+    assert res_bad_holding.is_valid is False
+    assert any(
+        i.code == "INVALID_JOIN_PREDICATES" and i.field == "holding_status"
+        for i in res_bad_holding.issues
+    )
+
+    # 6. Missing is_primary boolean predicate on customer_service_relations must be rejected
+    req_bad_sr = QueryPlanValidationRequest(
+        source_table="dim_customer",
+        operation="count_distinct",
+        measure_column="customer_id",
+        output_column="cnt",
+        join_path="customer_service_relations",
+        predicates=(),
+    )
+    res_bad_sr = validate_query_plan(req_bad_sr, repository, policy)
+    assert res_bad_sr.is_valid is False
+    assert any(
+        i.code == "INVALID_JOIN_PREDICATES" and i.field == "is_primary" for i in res_bad_sr.issues
+    )
