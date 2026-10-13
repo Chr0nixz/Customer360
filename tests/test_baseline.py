@@ -133,14 +133,24 @@ def _run_case(agent, repository, gateway, item):
     )
 
 
-def test_official_baseline_completes_human_pack(baseline, repository):
+@pytest.fixture(scope="module")
+def human_pack_run(baseline, repository):
     catalog = load_human_cases()
     gateway = ExecutionGateway(baseline / "dataset.duckdb", tiny_eval_policy())
     agent = BaselineAgent()
-    outcomes = {}
+    records = {}
     for item in catalog.cases:
-        record = _run_case(agent, repository, gateway, item)
-        outcomes[item.case_id] = (record.outcome, record.reason_code)
+        records[item.case_id] = (item, _run_case(agent, repository, gateway, item))
+    return agent, records
+
+
+def test_official_baseline_completes_human_pack(baseline, repository, human_pack_run):
+    catalog = load_human_cases()
+    gateway = ExecutionGateway(baseline / "dataset.duckdb", tiny_eval_policy())
+    agent, records = human_pack_run
+    outcomes = {}
+    for case_id, (item, record) in records.items():
+        outcomes[case_id] = (record.outcome, record.reason_code)
         assert item.split == "dev"
     assert outcomes["C360_0019"] == ("pass", "CLARIFICATION_OK")
     assert outcomes["C360_0020"] == ("pass", "REFUSAL_OK")
@@ -214,16 +224,13 @@ def test_official_baseline_handles_rewrite_and_rejects_month_alias(baseline, rep
     assert "time_window" in months.requested_slots
 
 
-def test_official_baseline_does_not_emit_unsafe_sql(baseline, repository):
+def test_official_baseline_does_not_emit_unsafe_sql(human_pack_run):
     from customer360.agent.sqlgen import sql_is_unsafe
 
     assert sql_is_unsafe("DROP TABLE dim_customer")
     assert sql_is_unsafe("SELECT 1; DELETE FROM dim_customer")
-    catalog = load_human_cases()
-    gateway = ExecutionGateway(baseline / "dataset.duckdb", tiny_eval_policy())
-    agent = BaselineAgent()
-    for item in catalog.cases:
-        record = _run_case(agent, repository, gateway, item)
+    _agent, records = human_pack_run
+    for _case_id, (_item, record) in records.items():
         for audit in record.rounds:
             for receipt in audit.receipts:
                 assert not sql_is_unsafe(receipt.sql)
