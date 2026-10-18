@@ -17,6 +17,8 @@ class AnswerOracle(Contract):
 class SlotReply(Contract):
     slot: Identifier
     reply: Text
+    distractor: Text | None = None
+    distractor_role: Literal["noise", "counterfactual", "irrelevant"] | None = None
 
 
 class ClarificationTurn(Contract):

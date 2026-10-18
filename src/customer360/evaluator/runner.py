@@ -166,8 +166,23 @@ def evaluate_case(
                 return finish("fail", "CLARIFICATION_FAILURE", response.status)
             if set(response.requested_slots) != set(turn.expected_slots):
                 return finish("fail", "CLARIFICATION_FAILURE", response.status)
-            conversation.append(Message(role="assistant", content=" ".join(response.questions)))
-            conversation.extend(Message(role="user", content=reply.reply) for reply in turn.replies)
+            conversation.append(
+                Message(
+                    role="assistant",
+                    content=" ".join(response.questions),
+                    turn=clarification_rounds + 1,
+                )
+            )
+            user_replies: list[str] = []
+            for reply in turn.replies:
+                content = reply.reply
+                if reply.distractor:
+                    content = f"{content} {reply.distractor}"
+                user_replies.append(content)
+            conversation.extend(
+                Message(role="user", content=text, turn=clarification_rounds + 1)
+                for text in user_replies
+            )
             current = case.request.model_copy(update={"conversation": tuple(conversation)})
             clarification_rounds += 1
         final = invoke(current)

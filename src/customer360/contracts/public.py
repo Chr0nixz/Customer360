@@ -52,6 +52,7 @@ class QueryResult(Contract):
 class Message(Contract):
     role: Literal["user", "assistant"]
     content: Text
+    turn: int | None = None
 
 
 class AgentRequest(Contract):
@@ -59,7 +60,7 @@ class AgentRequest(Contract):
     question: Text
     anchor_date: date
     metadata_version: Text
-    protocol_version: Literal["0.1"] = "0.1"
+    protocol_version: Literal["0.1", "1.1"] = "0.1"
     conversation: tuple[Message, ...] = ()
 
 

@@ -114,10 +114,15 @@ Customer360 uses DuckDB as the official benchmark referee engine. v1.3 implement
 
 ---
 
-## 5. Split Generalization Auditing (v1.1 Implemented)
+## 5. Split Generalization Auditing & Multi-turn Interaction Protocol (v1.1 Implemented)
 
 ### 5.1 Motivation and Positioning
 While public and hidden task sets use `family_id` hashes to prevent exact duplicates, full feature combinations do not guarantee statistical decoupling across individual metrics or filter predicates. v1.1 implemented three-layer generalization and orthogonality auditing via `c360 audit-splits` (`tasks/audit.py`).
+
+Furthermore, v1.1 formally expanded the **Multi-turn Clarification & Distractor Resistance Protocol**:
+1. **Multi-turn State Machine & Turn Tracking**: `AgentRequest` supports `protocol_version="1.1"` and optional `turn` indexing on `Message`;
+2. **Counterfactual & Distractor Resistance**: `SlotReply` introduces `distractor` and `distractor_role` to emulate realistic conversational noise; Agent planners must extract valid slots without being derailed;
+3. **Over-clarification Guard**: If an Agent persistently asks for clarification after all required slots have already been fulfilled, the evaluator fails the interaction as `CLARIFICATION_FAILURE`.
 
 ### 5.2 Generalization Audit Dimensions
 1. **Template Generalization**: Checks whether the hidden set introduces syntactic structures unseen in the public set (e.g., negations, comparisons, nested constraints).

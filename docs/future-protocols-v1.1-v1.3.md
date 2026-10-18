@@ -115,10 +115,15 @@
 
 ---
 
-## 5. Split 泛化审计机制 (v1.1 已落地)
+## 5. Split 泛化审计与多轮交互协议 (v1.1 已落地)
 
 ### 5.1 动机与定位
-目前公开集与隐藏集使用 `family_id` 判重（由模板、指标、Join、时间、过滤签名联合哈希）。但这只能保证“完整特征组合”不重复，无法保证公开集与隐藏集在“单指标”或“单过滤谓词”维度的统计解耦。v1.1 已通过 `c360 audit-splits` 命令（`tasks/audit.py`）落地三层泛化与正交性审计。
+目前公开集与隐藏集使用 `family_id` 判重（由模板、指标、Join、时间、过滤签名联合哈希）。但这只能保证“完整特征组合”不重复，无法保证公开集与隐藏集在“单指标”或“单过滤谓词”维度的统计解耦。v1.1 通过 `c360 audit-splits` 命令（`tasks/audit.py`）落地三层泛化与正交性审计。
+
+同时，v1.1 正式扩展了**多轮动态澄清与反事实交互协议（Multi-turn Clarification & Distractor Resistance）**：
+1. **多轮状态机与轮次追踪**：`AgentRequest` 支持 `protocol_version="1.1"`，并在 `Message` 中引入可选 `turn` 字段；
+2. **反事实干扰抵抗（Distractor Resistance）**：`SlotReply` 引入 `distractor` 与 `distractor_role`，模拟用户在澄清时附带的噪声（如业务叙述、反事实假设）；Agent 必须具备噪声隔离与准确槽位提取能力；
+3. **过度澄清拦截（Over-clarification Guard）**：对于已经提供完整槽位的请求，若 Agent 持续无故追问，评测引擎判定为 `CLARIFICATION_FAILURE` 交互失败，杜绝无休止澄清作弊。
 
 ### 5.2 泛化审计维度
 在 v1.1 中将构建 `c360 audit-splits` 命令，提供三层泛化重合度审计：
