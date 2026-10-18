@@ -59,11 +59,11 @@
 | `UNKNOWN_SOURCE_TABLE` | `source_table` 不在 catalog 或未授权 | 保护未授权表名 |
 | `UNSUPPORTED_OPERATION` | 聚合非 `count` / `count_distinct` / `sum` | 限制在支持的聚合算子 |
 | `INVALID_MEASURE_COLUMN` | 度量列不存在、类型不匹配或未授权 | 防止非数值列求和 |
-| `DISALLOWED_FILTER_COLUMN` | 过滤列不在指标的 `allowed_filter_columns` | 遵循指标白名单约束 |
-| `INVALID_PREDICATE_LITERAL`| 过滤字面量类型不匹配（如字符串赋给日期） | 严格类型校验 |
-| `UNSUPPORTED_JOIN_PATH` | Join 路径非经审查的白名单（如非 `customer_transactions`） | 防止笛卡尔积和任意 Join |
-| `INVALID_JOIN_PREDICATES` | Join 侧缺少必选条件（如缺少 `status='success'`） | 强制业务口径约束 |
-| `INVALID_GROUP_DIMENSION` | 分组维度不在指标声明的 `allowed_group_dimensions` | 防止细粒度越权聚合 |
+| `DISALLOWED_FILTER_COLUMN` | 过滤列不在允许列清单，或在关联从表侧过滤 `customer_id` | 遵循白名单约束与关联键安全 |
+| `INVALID_PREDICATE_LITERAL`| 过滤字面量类型不匹配（如字符串赋给日期/数值） | 严格字面量类型与元数校验 |
+| `UNSUPPORTED_JOIN_PATH` | Join 路径非经审查的 5 条可执行白名单路径 | 防止笛卡尔积和任意未授权 Join |
+| `INVALID_JOIN_PREDICATES` | Join 侧缺少必选条件（如交易/资金流缺少 `status='success'`，持仓缺少 `holding_status='active'`，服务关系缺少 `is_primary`） | 强制业务口径与状态约束 |
+| `INVALID_GROUP_DIMENSION` | 分组维度不在安全白名单（`SAFE_GROUP_DIMENSIONS`）或指标允许维度，或在 Join 题中分组 | 防止单客细粒度与跨表分组泄露 |
 
 ---
 

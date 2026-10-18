@@ -59,11 +59,11 @@ When agents lack pre-execution validation tools, they frequently submit syntacti
 | `UNKNOWN_SOURCE_TABLE` | `source_table` not in catalog or unauthorized | Protects unauthorized table names |
 | `UNSUPPORTED_OPERATION` | Aggregation not `count`, `count_distinct`, or `sum` | Enforces supported aggregation operators |
 | `INVALID_MEASURE_COLUMN` | Measure column missing, type mismatched, or unauthorized | Prevents summing non-numeric columns |
-| `DISALLOWED_FILTER_COLUMN` | Filter column not in metric's `allowed_filter_columns` | Enforces metric filter whitelist |
-| `INVALID_PREDICATE_LITERAL` | Filter literal type mismatch (e.g. string passed to date) | Strict type checking |
-| `UNSUPPORTED_JOIN_PATH` | Join path not on vetted whitelist (e.g. not `customer_transactions`) | Prevents cartesian products and unverified joins |
-| `INVALID_JOIN_PREDICATES` | Join side missing required predicates (e.g. missing `status='success'`) | Enforces business rule constraints |
-| `INVALID_GROUP_DIMENSION` | Grouping dimension not in metric's `allowed_group_dimensions` | Prevents unauthorized granular aggregation |
+| `DISALLOWED_FILTER_COLUMN` | Filter column not granted, or filtering `customer_id` on joined right table | Enforces column whitelist and join-key protection |
+| `INVALID_PREDICATE_LITERAL` | Filter literal type/arity mismatch (e.g. string for date/number) | Strict scalar literal and operator validation |
+| `UNSUPPORTED_JOIN_PATH` | Join path not in the 5 vetted executable paths | Prevents cartesian products and unverified joins |
+| `INVALID_JOIN_PREDICATES` | Join side missing required predicates (e.g. `status='success'`, `holding_status='active'`, or `is_primary`) | Enforces business rule constraints and required states |
+| `INVALID_GROUP_DIMENSION` | Dimension not in `SAFE_GROUP_DIMENSIONS` or allowed groups, or grouping on a join query | Prevents individual privacy leakage and unvetted grouping |
 
 ---
 
