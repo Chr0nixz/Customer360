@@ -20,11 +20,11 @@ def test_expansion_e3_rebalanced_pack_quotas_and_isolation() -> None:
     assert splits["train"] == 180
     assert splits["dev"] == 120
 
-    # 2. Expected actions balance
+    # 2. Expected actions balance (WP-04 stratified quotas: 240 answer, 36 clarification, 24 refuse)
     actions = Counter(c.expected_action for c in pack.cases)
-    assert 240 <= actions["answer"] <= 275
-    assert 20 <= actions["clarification_needed"] <= 30
-    assert 10 <= actions["refuse"] <= 20
+    assert actions["answer"] == 240
+    assert actions["clarification_needed"] == 36
+    assert actions["refuse"] == 24
 
     # 3. Categories balance
     categories = Counter(c.category for c in pack.cases)

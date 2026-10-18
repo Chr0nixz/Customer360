@@ -2,6 +2,8 @@
 
 [English](formal-release.md) | [简体中文](../formal-release.md)
 
+> Scope clarification (2026-10-18): This preserves the historical v1.0 release procedure. Do not recreate the existing v1.0.0 tag. Current-main integrity fixes, versioned evidence, and next-release acceptance follow [Development Plan](development-plan.md), WP-02/WP-07. Until the new contracts are implemented, these commands and older signed artifacts do not certify the next version.
+
 For day-to-day installation, evaluation, and scoring, see the [User Guide](user-guide.md). To publish the source repository to GitHub, see the [GitHub Publishing Checklist](github-publish.md). This document details maintainer commands for signing all eight RC gates and preparing the v1.0.0 release.
 
 ## Frozen Boundaries

@@ -352,6 +352,22 @@ def _pool_drafts(repository: MetadataRepository) -> list[Draft]:
                     ),
                 )
             )
+            for lvl in ("VIP", "standard"):
+                drafts.append(
+                    Draft(
+                        expected_action="clarification_needed",
+                        category="clarification",
+                        material_status="unscored_oracle",
+                        intended_failure_class="CLARIFICATION_FAILURE",
+                        metric=metric.metric_name,
+                        filters=(Filter(field="customer_level", operator="eq", values=(lvl,)),),
+                        time_window=LATEST,
+                        missing_slots=("time_window",),
+                        slot_replies=(
+                            SlotReply(slot="time_window", reply="截至2025-06-30的最新资产快照"),
+                        ),
+                    )
+                )
             continue
         win = _window_for(metric)
         for dim in metric.allowed_group_dimensions:
@@ -608,6 +624,18 @@ def _pool_drafts(repository: MetadataRepository) -> list[Draft]:
                 join=_join_spec_path("customer_holdings"),
             )
         )
+    for risk in ("low", "medium", "high"):
+        drafts.append(
+            Draft(
+                expected_action="answer",
+                category="join",
+                material_status="compilable_answer",
+                intended_failure_class="JOIN_ERROR",
+                metric="distinct_customer_count",
+                filters=(Filter(field="risk_level", operator="eq", values=(risk,)),),
+                join=_join_spec_path("customer_holdings"),
+            )
+        )
 
     # 4. customer_asset_snapshots
     for region in ("华东", "华北", "华南", "西南"):
@@ -631,6 +659,18 @@ def _pool_drafts(repository: MetadataRepository) -> list[Draft]:
                 intended_failure_class="JOIN_ERROR",
                 metric="distinct_customer_count",
                 filters=(Filter(field="customer_level", operator="eq", values=(level,)),),
+                join=_join_spec_path("customer_asset_snapshots"),
+            )
+        )
+    for risk in ("low", "medium", "high"):
+        drafts.append(
+            Draft(
+                expected_action="answer",
+                category="join",
+                material_status="compilable_answer",
+                intended_failure_class="JOIN_ERROR",
+                metric="distinct_customer_count",
+                filters=(Filter(field="risk_level", operator="eq", values=(risk,)),),
                 join=_join_spec_path("customer_asset_snapshots"),
             )
         )
@@ -668,6 +708,12 @@ def _pool_drafts(repository: MetadataRepository) -> list[Draft]:
         (Filter(field="region", operator="eq", values=("西南",)),),
         (Filter(field="customer_level", operator="eq", values=("VIP",)),),
         (Filter(field="customer_level", operator="eq", values=("standard",)),),
+        (Filter(field="status", operator="eq", values=("active",)),),
+        (Filter(field="status", operator="eq", values=("dormant",)),),
+        (Filter(field="gender", operator="eq", values=("M",)),),
+        (Filter(field="gender", operator="eq", values=("F",)),),
+        (Filter(field="risk_level", operator="eq", values=("low",)),),
+        (Filter(field="risk_level", operator="eq", values=("high",)),),
     ]
     for codes, f_class in refuse_base:
         for ctx in refuse_contexts:
@@ -997,68 +1043,247 @@ def generate_task_pack(
     if len(candidates) < fill_needed:
         raise ValueError("not enough independent families for the generated pack")
 
-    by_category: dict[str, list[str]] = {}
-    for fid, draft in candidates.items():
-        by_category.setdefault(draft.category, []).append(fid)
+    if count >= M6_PUBLIC_COUNT:
+        rng = Random(seed)
 
-    rng = Random(seed)
-    for cat_list in by_category.values():
-        rng.shuffle(cat_list)
+        cand_answers = [
+            fid for fid, d in sorted(candidates.items()) if d.expected_action == "answer"
+        ]
+        cand_clarifications = [
+            fid
+            for fid, d in sorted(candidates.items())
+            if d.expected_action == "clarification_needed"
+        ]
+        cand_refuses = [
+            fid for fid, d in sorted(candidates.items()) if d.expected_action == "refuse"
+        ]
 
-    quotas = {
-        "join": 40,
-        "grouping": 35,
-        "clarification": 20,
-        "refuse": 12,
-        "null_handling": 15,
-        "time_window": 35,
-        "point_in_time": 35,
-        "latest_snapshot": 10,
-    }
+        rng.shuffle(cand_answers)
+        rng.shuffle(cand_clarifications)
+        rng.shuffle(cand_refuses)
 
-    chosen_ids: list[str] = []
-    chosen_set: set[str] = set()
+        dev_drafts: list[Draft] = list(required)  # 6 answer, 1 clarify, 1 refuse
+        train_drafts: list[Draft] = []
+        used_fids: set[str] = set()
 
-    covered_metrics = {draft.metric for draft in required if draft.metric}
-    for m in repository.metrics.metrics:
-        if m.metric_name not in covered_metrics:
-            for fid, draft in candidates.items():
-                if draft.metric == m.metric_name and fid not in chosen_set:
-                    chosen_ids.append(fid)
-                    chosen_set.add(fid)
-                    covered_metrics.add(m.metric_name)
+        # 1. Allocate Clarifications: Dev needs 17 more (total 18), Train needs 18
+        for fid in cand_clarifications:
+            d = candidates[fid]
+            if sum(1 for x in dev_drafts if x.expected_action == "clarification_needed") < 18:
+                dev_drafts.append(d)
+                used_fids.add(fid)
+            elif sum(1 for x in train_drafts if x.expected_action == "clarification_needed") < 18:
+                train_drafts.append(d)
+                used_fids.add(fid)
+            if (
+                sum(1 for x in dev_drafts if x.expected_action == "clarification_needed") == 18
+                and sum(1 for x in train_drafts if x.expected_action == "clarification_needed")
+                == 18
+            ):
+                break
+
+        # 2. Allocate Refusals: Dev needs 11 more (total 12), Train needs 12
+        for fid in cand_refuses:
+            d = candidates[fid]
+            if sum(1 for x in dev_drafts if x.expected_action == "refuse") < 12:
+                dev_drafts.append(d)
+                used_fids.add(fid)
+            elif sum(1 for x in train_drafts if x.expected_action == "refuse") < 12:
+                train_drafts.append(d)
+                used_fids.add(fid)
+            if (
+                sum(1 for x in dev_drafts if x.expected_action == "refuse") == 12
+                and sum(1 for x in train_drafts if x.expected_action == "refuse") == 12
+            ):
+                break
+
+        # 3. Dev Answer Quality Gates (Dev needs 84 more answers to reach 90)
+        # 3a. Metric coverage: all 30 metrics in Dev, each >= 2 families
+        dev_metric_counts: dict[str, int] = {}
+        for d in dev_drafts:
+            if d.metric:
+                dev_metric_counts[d.metric] = dev_metric_counts.get(d.metric, 0) + 1
+
+        for m in repository.metrics.metrics:
+            m_name = m.metric_name
+            while dev_metric_counts.get(m_name, 0) < 2:
+                picked = False
+                for fid in cand_answers:
+                    if fid not in used_fids and candidates[fid].metric == m_name:
+                        dev_drafts.append(candidates[fid])
+                        used_fids.add(fid)
+                        dev_metric_counts[m_name] = dev_metric_counts.get(m_name, 0) + 1
+                        picked = True
+                        break
+                if not picked:
                     break
 
-    for cat, quota in quotas.items():
-        available = by_category.get(cat, [])
-        for fid in available:
-            cat_count = sum(1 for x in chosen_ids if candidates[x].category == cat)
-            if cat_count >= quota:
+        # 3b. 5 Executable Join paths: each >= 3 cases in Dev, total Join >= 15
+        executable_paths = (
+            "customer_transactions",
+            "customer_cash_flows",
+            "customer_holdings",
+            "customer_asset_snapshots",
+            "customer_service_relations",
+        )
+        for path in executable_paths:
+            while sum(1 for d in dev_drafts if d.join and d.join.path == path) < 3:
+                for fid in cand_answers:
+                    if (
+                        fid not in used_fids
+                        and candidates[fid].join
+                        and candidates[fid].join.path == path
+                    ):
+                        dev_drafts.append(candidates[fid])
+                        used_fids.add(fid)
+                        break
+        while sum(1 for d in dev_drafts if d.join) < 15:
+            for fid in cand_answers:
+                if fid not in used_fids and candidates[fid].join:
+                    dev_drafts.append(candidates[fid])
+                    used_fids.add(fid)
+                    break
+
+        # 3c. Grouping coverage: >= 15 cases in Dev, covering >= 4 allowed dimensions
+        group_dims = ("region", "customer_level", "risk_level", "gender")
+        for dim in group_dims:
+            if not any(d.group_by and d.group_by[0] == dim for d in dev_drafts):
+                for fid in cand_answers:
+                    if (
+                        fid not in used_fids
+                        and candidates[fid].group_by
+                        and candidates[fid].group_by[0] == dim
+                    ):
+                        dev_drafts.append(candidates[fid])
+                        used_fids.add(fid)
+                        break
+        while sum(1 for d in dev_drafts if d.group_by) < 15:
+            for fid in cand_answers:
+                if fid not in used_fids and candidates[fid].group_by:
+                    dev_drafts.append(candidates[fid])
+                    used_fids.add(fid)
+                    break
+
+        # 3d. Null / Edge coverage: >= 12 cases in Dev
+        def is_null_edge(d: Draft) -> bool:
+            return (
+                d.category == "null_handling"
+                or any(f.operator == "is_null" for f in d.filters)
+                or any(f.values == ("closed",) for f in d.filters)
+            )
+
+        while sum(1 for d in dev_drafts if is_null_edge(d)) < 12:
+            for fid in cand_answers:
+                if fid not in used_fids and is_null_edge(candidates[fid]):
+                    dev_drafts.append(candidates[fid])
+                    used_fids.add(fid)
+                    break
+
+        # 3e. Fill remaining Dev answers to exactly 90
+        for fid in cand_answers:
+            if sum(1 for d in dev_drafts if d.expected_action == "answer") >= 90:
                 break
-            if fid not in chosen_set:
-                chosen_ids.append(fid)
-                chosen_set.add(fid)
+            if fid not in used_fids:
+                dev_drafts.append(candidates[fid])
+                used_fids.add(fid)
 
-    remaining = [
-        fid
-        for fid in candidates
-        if fid not in chosen_set and candidates[fid].expected_action == "answer"
-    ]
-    needed_more = fill_needed - len(chosen_ids)
-    if len(remaining) < needed_more:
-        fallback = [fid for fid in candidates if fid not in chosen_set and fid not in remaining]
-        rng.shuffle(fallback)
-        remaining.extend(fallback)
-    rng.shuffle(remaining)
-    if needed_more > 0:
-        chosen_ids.extend(remaining[:needed_more])
+        # 4. Fill Train answers to exactly 150 with balanced category distribution
+        train_category_targets = {
+            "join": 22,
+            "grouping": 18,
+            "null_handling": 6,
+            "time_window": 18,
+            "point_in_time": 25,
+        }
+        for cat, target in train_category_targets.items():
+            for fid in cand_answers:
+                if sum(1 for d in train_drafts if d.category == cat) >= target:
+                    break
+                if fid not in used_fids and candidates[fid].category == cat:
+                    train_drafts.append(candidates[fid])
+                    used_fids.add(fid)
 
-    chosen_fill = [unique[family_id] for family_id in chosen_ids[:fill_needed]]
-    train_budget = TRAIN_COUNT_M6 if count >= M6_PUBLIC_COUNT else TRAIN_COUNT
-    train_n = min(train_budget, fill_needed)
-    ordered: list[tuple[str, Draft]] = [("dev", draft) for draft in required]
-    ordered.extend(("train", draft) for draft in chosen_fill[:train_n])
-    ordered.extend(("dev", draft) for draft in chosen_fill[train_n:])
+        # Fill any remaining train answers
+        for fid in cand_answers:
+            if sum(1 for d in train_drafts if d.expected_action == "answer") >= 150:
+                break
+            if fid not in used_fids:
+                train_drafts.append(candidates[fid])
+                used_fids.add(fid)
+
+        if len(dev_drafts) != 120:
+            raise ValueError(
+                f"failed to generate required dev cases: expected 120, got {len(dev_drafts)}"
+            )
+        if len(train_drafts) != 180:
+            raise ValueError(
+                f"failed to generate required train cases: expected 180, got {len(train_drafts)}"
+            )
+
+        ordered = [("train", d) for d in train_drafts] + [("dev", d) for d in dev_drafts]
+    else:
+        by_category: dict[str, list[str]] = {}
+        for fid, draft in candidates.items():
+            by_category.setdefault(draft.category, []).append(fid)
+
+        rng = Random(seed)
+        for cat_list in by_category.values():
+            rng.shuffle(cat_list)
+
+        quotas = {
+            "join": 40,
+            "grouping": 35,
+            "clarification": 20,
+            "refuse": 12,
+            "null_handling": 15,
+            "time_window": 35,
+            "point_in_time": 35,
+            "latest_snapshot": 10,
+        }
+
+        chosen_ids: list[str] = []
+        chosen_set: set[str] = set()
+
+        covered_metrics = {draft.metric for draft in required if draft.metric}
+        for m in repository.metrics.metrics:
+            if m.metric_name not in covered_metrics:
+                for fid, draft in candidates.items():
+                    if draft.metric == m.metric_name and fid not in chosen_set:
+                        chosen_ids.append(fid)
+                        chosen_set.add(fid)
+                        covered_metrics.add(m.metric_name)
+                        break
+
+        for cat, quota in quotas.items():
+            available = by_category.get(cat, [])
+            for fid in available:
+                cat_count = sum(1 for x in chosen_ids if candidates[x].category == cat)
+                if cat_count >= quota:
+                    break
+                if fid not in chosen_set:
+                    chosen_ids.append(fid)
+                    chosen_set.add(fid)
+
+        remaining = [
+            fid
+            for fid in candidates
+            if fid not in chosen_set and candidates[fid].expected_action == "answer"
+        ]
+        needed_more = fill_needed - len(chosen_ids)
+        if len(remaining) < needed_more:
+            fallback = [fid for fid in candidates if fid not in chosen_set and fid not in remaining]
+            rng.shuffle(fallback)
+            remaining.extend(fallback)
+        rng.shuffle(remaining)
+        if needed_more > 0:
+            chosen_ids.extend(remaining[:needed_more])
+
+        chosen_fill = [unique[family_id] for family_id in chosen_ids[:fill_needed]]
+        train_budget = TRAIN_COUNT
+        train_n = min(train_budget, fill_needed)
+        ordered: list[tuple[str, Draft]] = [("dev", draft) for draft in required]
+        ordered.extend(("train", draft) for draft in chosen_fill[:train_n])
+        ordered.extend(("dev", draft) for draft in chosen_fill[train_n:])
     cases: list[GeneratedCaseBlueprint] = []
     questions: set[str] = set()
     for index, (split, draft) in enumerate(ordered, start=1001):

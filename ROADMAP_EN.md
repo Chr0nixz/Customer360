@@ -2,8 +2,8 @@
 
 [English](ROADMAP_EN.md) | [简体中文](ROADMAP.md)
 
-> Document Version: v0.2; Created: 2026-09-16; Reviewed & Updated: 2026-09-18 (based on `Customer360-Agent-Benchmark-Implementation-Plan.md`)  
-> Status: M0–M7, formal score protocol 1.0, evaluator 0.6, four private hidden variants with provenance/same-SQL replay, Apache-2.0 license, Dockerfile, SHA256/SBOM, and formal release tools are fully implemented; GitHub community files, public tree ignore rules, and publishing checklists are ready. Release candidate (RC) evidence gates are being signed (v1.0.0 tag withheld until all 8 gates pass). Public dev and private hidden evaluations report separately without competitive rankings. Online services, external model APIs, PostgreSQL, and OS sandboxes remain out of v1.0 scope. For CLI commands, see the [User Guide](docs/en/user-guide.md) ([中文](docs/user-guide.md)).  
+> Document Version: v0.3; Created: 2026-09-16; Reviewed & Updated: 2026-10-18 (based on `Customer360-Agent-Benchmark-Implementation-Plan.md`)
+> Status: Core benchmark, formal scoring, and release tools are implemented. The 2026-10-18 local full Tiny suite passed 466 tests with five unconfigured PostgreSQL live skips. An existing v1.0.0 tag belongs to a historical revision; current main requires separate acceptance. The N4 candidate records a missing docker_runtime gate, with additional artifact-integrity, PostgreSQL safety, and Dev-coverage findings now open. Follow [Development Plan](docs/en/development-plan.md), WP-01–WP-07. DuckDB remains the formal engine; a PostgreSQL implementation is not qualification. Public/private reports remain separate without rankings; external models, online services, and untrusted Python OS sandboxes remain disabled. This document version is not a package/protocol version, and remote CI status requires actual platform evidence.
 > Objective: Implement a reproducible, auditable, and extensible Customer360 Agent benchmark.
 
 ## 1. North Star Objective

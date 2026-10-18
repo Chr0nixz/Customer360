@@ -2,6 +2,8 @@
 
 [English](future-protocols-v1.1-v1.3.md) | [简体中文](../future-protocols-v1.1-v1.3.md)
 
+> Acceptance clarification (2026-10-18): v1.1–v1.3 below are historical capability groupings, not proof of released Git versions. Design targets and partial implementations require independent qualification; the PostgreSQL prototype has not passed formal security admission. Follow [Development Plan](development-plan.md) for execution order, proposed versions, and exit gates rather than treating implemented labels as evidence.
+
 Document Version: `v1.3-implemented`  
 Implementation Status: v1.1 Diagnostic Enhancements (Implemented), v1.2 Metadata Evolution (Implemented), v1.3 Engine Adaptation (Implemented)  
 Constraints: Does not alter v1.0 scoring weights, does not alter 30 business metric definitions, does not leak hidden sets, does not loosen SQL Guard or authorization boundaries.

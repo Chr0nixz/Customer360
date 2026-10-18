@@ -284,3 +284,127 @@ def test_prepare_formal_release_unsigned_docker_fails_check(
     checked = check_formal_release(output, root=REPO)
     assert checked["passed"] is False
     assert any("docker_runtime" in item for item in checked["issues"])
+
+
+def test_formal_release_rejects_tampered_public_artifact(
+    tmp_path: Path, formal_distributions
+) -> None:
+    from customer360.tasks.generator import generate_task_pack, write_generated_pack
+
+    pack_dir = tmp_path / "pack"
+    write_generated_pack(pack_dir, generate_task_pack(seed=42, count=300))
+    output = tmp_path / "release"
+    prepare_formal_release(output, public_pack=pack_dir, root=REPO)
+
+    # Tamper with an existing public file (e.g., append a line to LICENSE)
+    license_file = output / "public" / "LICENSE"
+    assert license_file.is_file()
+    tampered_content = license_file.read_text(encoding="utf-8") + "\n# tampered"
+    license_file.write_text(tampered_content, encoding="utf-8")
+
+    checked = check_formal_release(output, root=REPO)
+    assert checked["passed"] is False
+    assert any("digest mismatch" in issue.lower() for issue in checked["issues"])
+
+
+def test_formal_release_rejects_missing_public_artifact(
+    tmp_path: Path, formal_distributions
+) -> None:
+    from customer360.tasks.generator import generate_task_pack, write_generated_pack
+
+    pack_dir = tmp_path / "pack"
+    write_generated_pack(pack_dir, generate_task_pack(seed=42, count=300))
+    output = tmp_path / "release"
+    prepare_formal_release(output, public_pack=pack_dir, root=REPO)
+
+    # Delete a declared public artifact
+    pack_file = output / "public" / "pack.json"
+    assert pack_file.is_file()
+    pack_file.unlink()
+
+    checked = check_formal_release(output, root=REPO)
+    assert checked["passed"] is False
+    assert any("missing declared public artifact" in issue.lower() for issue in checked["issues"])
+
+
+def test_formal_release_rejects_undeclared_public_artifact(
+    tmp_path: Path, formal_distributions
+) -> None:
+    from customer360.tasks.generator import generate_task_pack, write_generated_pack
+
+    pack_dir = tmp_path / "pack"
+    write_generated_pack(pack_dir, generate_task_pack(seed=42, count=300))
+    output = tmp_path / "release"
+    prepare_formal_release(output, public_pack=pack_dir, root=REPO)
+
+    # Inject an undeclared artifact into public/
+    extra_file = output / "public" / "unexpected.txt"
+    extra_file.write_text("undeclared artifact content", encoding="utf-8")
+
+    checked = check_formal_release(output, root=REPO)
+    assert checked["passed"] is False
+    assert any("undeclared public artifact" in issue.lower() for issue in checked["issues"])
+
+
+def test_formal_release_rejects_tampered_checksums_file(
+    tmp_path: Path, formal_distributions
+) -> None:
+    from customer360.tasks.generator import generate_task_pack, write_generated_pack
+
+    pack_dir = tmp_path / "pack"
+    write_generated_pack(pack_dir, generate_task_pack(seed=42, count=300))
+    output = tmp_path / "release"
+    prepare_formal_release(output, public_pack=pack_dir, root=REPO)
+
+    # Tamper with SHA256SUMS file
+    sums_file = output / "SHA256SUMS"
+    assert sums_file.is_file()
+    lines = sums_file.read_text(encoding="utf-8").splitlines()
+    # Replace first hash with a bogus hash
+    tampered_line = "0" * 64 + "  " + lines[0].split("  ", 1)[1]
+    sums_file.write_text("\n".join([tampered_line] + lines[1:]) + "\n", encoding="utf-8")
+
+    checked = check_formal_release(output, root=REPO)
+    assert checked["passed"] is False
+    assert any("checksum" in issue.lower() for issue in checked["issues"])
+
+
+def test_formal_release_rejects_path_escape(tmp_path: Path, formal_distributions) -> None:
+    from customer360.tasks.generator import generate_task_pack, write_generated_pack
+
+    pack_dir = tmp_path / "pack"
+    write_generated_pack(pack_dir, generate_task_pack(seed=42, count=300))
+    output = tmp_path / "release"
+    prepare_formal_release(output, public_pack=pack_dir, root=REPO)
+
+    manifest_file = output / "formal_release_manifest.json"
+    data = json.loads(manifest_file.read_text(encoding="utf-8"))
+    # Inject a path traversal key
+    data["public_artifact_digests"]["../escape.txt"] = "a" * 64
+    manifest_file.write_text(json.dumps(data, indent=2), encoding="utf-8")
+
+    checked = check_formal_release(output, root=REPO)
+    assert checked["passed"] is False
+    has_path_issue = any(
+        "unsafe" in issue.lower() or "escape" in issue.lower() or "path" in issue.lower()
+        for issue in checked["issues"]
+    )
+    assert has_path_issue
+
+
+def test_formal_release_rejects_corrupted_sbom(tmp_path: Path, formal_distributions) -> None:
+    from customer360.tasks.generator import generate_task_pack, write_generated_pack
+
+    pack_dir = tmp_path / "pack"
+    write_generated_pack(pack_dir, generate_task_pack(seed=42, count=300))
+    output = tmp_path / "release"
+    prepare_formal_release(output, public_pack=pack_dir, root=REPO)
+
+    # Corrupt sbom.json
+    sbom_file = output / "sbom.json"
+    assert sbom_file.is_file()
+    sbom_file.write_text("not a valid json content", encoding="utf-8")
+
+    checked = check_formal_release(output, root=REPO)
+    assert checked["passed"] is False
+    assert any("sbom" in issue.lower() for issue in checked["issues"])

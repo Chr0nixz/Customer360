@@ -36,15 +36,62 @@ def _policy() -> AccessPolicy:
     )
 
 
-def test_postgresql_gateway_driver_and_env_diagnostics():
+def test_postgresql_gateway_driver_and_env_diagnostics(monkeypatch):
     from customer360.errors import QueryRejected
 
     policy = _policy()
-    # 1. Unset URI must reject with ENGINE_UNAVAILABLE
-    gateway_no_uri = PostgreSQLExecutionGateway(connection_uri=None, policy=policy)
+    # 1. Default (admitted=False) must fail-closed with ENGINE_UNAVAILABLE
+    gateway_default = PostgreSQLExecutionGateway(
+        connection_uri="postgresql://fake:5432/fake", policy=policy
+    )
     with pytest.raises(QueryRejected) as exc_info:
-        gateway_no_uri.execute("SELECT 1")
+        gateway_default.execute('SELECT COUNT("customer_id") FROM "dim_customer"')
     assert exc_info.value.code == "ENGINE_UNAVAILABLE"
+    assert "not formally admitted" in exc_info.value.message
+
+    # 2. Admitted but unset URI must reject with ENGINE_UNAVAILABLE
+    gateway_no_uri = PostgreSQLExecutionGateway(connection_uri=None, policy=policy, admitted=True)
+    with pytest.raises(QueryRejected) as exc_info:
+        gateway_no_uri.execute('SELECT COUNT("customer_id") FROM "dim_customer"')
+    assert exc_info.value.code == "ENGINE_UNAVAILABLE"
+    assert "not configured" in exc_info.value.message
+
+    # 3. Admitted with URI but driver missing must reject with ENGINE_UNAVAILABLE
+    import customer360.runtime.gateway as gw_module
+
+    monkeypatch.setattr(gw_module, "_get_pg_driver", lambda: None)
+    gateway_no_driver = PostgreSQLExecutionGateway(
+        connection_uri="postgresql://fake:5432/fake",
+        policy=policy,
+        admitted=True,
+    )
+    with pytest.raises(QueryRejected) as exc_info:
+        gateway_no_driver.execute('SELECT COUNT("customer_id") FROM "dim_customer"')
+    assert exc_info.value.code == "ENGINE_UNAVAILABLE"
+    assert "driver" in exc_info.value.message
+
+    # 4. Admitted gateway with simulated driver enforces SQL Guard before execution
+    class DummyDriver:
+        @staticmethod
+        def connect(*args, **kwargs):
+            raise AssertionError("Should not attempt DB connection when SQL Guard rejects query")
+
+    monkeypatch.setattr(gw_module, "_get_pg_driver", lambda: DummyDriver)
+    gateway_admitted = PostgreSQLExecutionGateway(
+        connection_uri="postgresql://fake:5432/fake",
+        policy=policy,
+        admitted=True,
+    )
+    # Dangerous SQL (DROP) rejected by SQL Guard before DB connection
+    with pytest.raises(QueryRejected) as exc_info:
+        gateway_admitted.execute('DROP TABLE "dim_customer"')
+    assert exc_info.value.code == "UNSAFE_SQL"
+
+    # Single-customer grouping (customer_id as group dimension) rejected before DB connection
+    group_sql = 'SELECT "customer_id", COUNT("status") FROM "dim_customer" GROUP BY "customer_id"'
+    with pytest.raises(QueryRejected) as exc_info:
+        gateway_admitted.execute(group_sql)
+    assert exc_info.value.code == "UNSAFE_SQL"
 
 
 @pytest.mark.skipif(not HAS_PG_ENV, reason="PostgreSQL live environment is not configured")
@@ -57,7 +104,7 @@ class TestPostgresLiveIntegration:
         driver = _get_pg_driver()
         with (
             driver.connect(PG_URI) as pg_conn,
-            duckdb.connect(str(baseline), read_only=True) as duck_conn,
+            duckdb.connect(str(baseline / "dataset.duckdb"), read_only=True) as duck_conn,
         ):
             with pg_conn.cursor() as cur:
                 # DDL Setup
@@ -162,8 +209,8 @@ class TestPostgresLiveIntegration:
     def test_duckdb_and_postgres_semantic_equivalence(self, baseline, query_sql):
         policy = _policy()
         limits = SqlLimits(timeout_seconds=5)
-        duck_gw = DuckDBExecutionGateway(baseline, policy, limits)
-        pg_gw = PostgreSQLExecutionGateway(PG_URI, policy, limits)
+        duck_gw = DuckDBExecutionGateway(baseline / "dataset.duckdb", policy, limits)
+        pg_gw = PostgreSQLExecutionGateway(PG_URI, policy, limits, admitted=True)
 
         duck_receipt = duck_gw.execute(query_sql)
         pg_receipt = pg_gw.execute(query_sql)

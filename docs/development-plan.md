@@ -2,238 +2,223 @@
 
 [English](en/development-plan.md) | [简体中文](development-plan.md)
 
-文档状态：2026-10-12 闭环更新版。
+文档状态：2026-10-18 执行计划。编制基线：`main@bb1373f`。适用范围：M6 可信发布收口与 M7 扩展准入。
 
-本文是当前代码库的执行计划，补充 [ROADMAP.md](../ROADMAP.md)，不改变评分权重、Gold、公开/隐藏切分、SQL Guard 或权限语义。历史阶段记录仍保留在 `HANDOFF.md` 和 git 历史中，但本文件只把当前有效状态作为后续工作的依据。
+本文取代 2026-10-12 版后续工作安排，补充 [ROADMAP.md](../ROADMAP.md)。下列工作包均待执行；已验证基线、开发目标和待确认提案分别标注。本文不修改代码、任务、Gold、现行切分、权限或评分规则。N0–N4 的历史交付记录保留，但不能替代当前提交的验收。
 
-针对数据库规模、题目规模和覆盖程度的专项扩展计划见 [Benchmark 扩展计划](benchmark-expansion-plan.md)。扩展优先补齐可执行 Join、分组和隐藏集代表性，不以简单增加行数或题目总数作为完成标准。
+## 1. 目标、基线与边界
 
-扩展验收 N0–N4 阶段整改已全部完成并闭环验证通过（P0 分组数据泄露已彻底封堵，5 条可执行 Join 真实沙箱物化验证通过，隐藏 60 题与公开 120 题 Formal Evaluator 0.6 四变体重放全通，Score 1.0 正式分层出分通过，Standard/Large 资源受控性能基线采集完成，sdist/wheel 纯净打包 0 泄露）。详见[扩展验收与下一阶段计划](acceptance-and-next-plan.md)。
+下一阶段的目标是：让发布检查能证明制品完整，让执行能力与声明的安全边界一致，让正式 Dev 的覆盖支持成绩解释，最后形成绑定同一提交的发布证据。
 
-## 1. 当前基线
+2026-10-18 本地核查基线：
 
-项目已经具备可运行的 benchmark 主链路：
-
-- 9 张核心表、Tiny/Standard/Large 合成数据、固定 seed 和质量检查；
-- 30 个指标、20 条 Join 元数据，其中 5 条核心业务路径声明为可执行 Join；
-- semantic DSL、Gold 编译、独立 oracle、120/300 题公开包和独立 hidden pack；
-- SQL AST Guard、权限前置物化、结果安全检查、组粒度聚合防御（COALESCE MIN(cnt) >= 3）、超时回收和审计错误码；
-- 官方离线 `BaselineAgent`、evaluator 0.6、score protocol 1.0、四个公开/隐藏变体；
-- SQLGlot 跨方言双向转译、多引擎网关抽象、容器化 PostgreSQL 真实实例集成测试；
-- Dockerfile、SHA256/SBOM、formal release 和 GitHub CI 自动化分层流水线。
-
-当前发布状态：
-
-| 项目 | 当前状态 |
+| 项目 | 核实状态 |
 |---|---|
-| Git | `main` 与 `origin/main` 提交相同，工作区保持纯净；未签署完成前不打正式 tag |
-| `c360 doctor` | 通过：9 表、72 列、30 指标、20 Join、5 可执行 Join、8 FK |
-| Ruff | `ruff check` 与 `ruff format --check` 全量 151 个文件通过（0 error / 0 warning） |
-| 测试 | 470 项测试（345 项日常非 slow 测试 100% 通过，5 项 PostgreSQL live 由 CI 容器运行，120 项 slow 变体由 release 流水线运行） |
-| 正式 RC 门 | 本地 7 项 RC 门签署内容校验全部通过；`docker_runtime` 遵循规范保持未签署，留待 Linux/CI 环境真实容器签署最终镜像 digest |
-| 正式检查 | `c360 check-formal-release` 严格执行内容校验，防伪造防空壳 |
-| Baseline 诊断 | public_dev 120 题加权分 0.9473，private_hidden 60 题加权分 0.9536；4 项 Hard Gates 全部通过；失败归因与有效分母完整归档 |
+| 工程与数据 | 9 表、72 列、30 指标、20 条 Join 元数据、5 条可执行 Join；三档数据生成实现已存在 |
+| 任务 | 20 道固定 human dev 题；公开 300 题为 180 train / 120 generated-dev；已有独立隐藏 60 题制品 |
+| 验证 | 完整 Tiny 回归 `466 passed, 5 skipped`，耗时 1048.74s；5 项跳过均为 PostgreSQL live 环境未配置 |
+| 自检 | Ruff check/format、doctor、audit-metadata 通过；Tiny 60/60 质量检查和架构 smoke 通过 |
+| 版本 | package 1.0.0、Agent protocol 0.1、formal evaluator 0.6、score 1.0、metrics 0.4、join_paths 0.2、generated/hidden tasks 0.2 |
+| 发布历史 | 本地已有 `v1.0.0`，指向 `09d5c64`；当前基线在其后有 27 次提交。旧签署包通过检查，N4 候选仍记录缺少 docker_runtime |
+| 已发现缺口 | 发布检查未重算制品摘要；PostgreSQL 路径未实施同等授权/结果检查；正式 Dev 动作与复杂语义覆盖偏斜 |
+| 未核验环境 | 本次未读取到远程 CI 结果，未运行真实 Docker / PostgreSQL；本地跳过不计为跨引擎通过 |
 
-Baseline 的主要失败集中在客户过滤组合。当前 adapter 对 VIP、地区等过滤支持有限，而公开生成题还覆盖客户等级、风险等级、交易类型、渠道和资金流类型。这个问题属于 Agent 质量线，不是 benchmark 发布门。
+历史成绩必须保留日期与版本：2026-10-12 public_dev / private_hidden 加权分分别为 0.9473 / 0.9536，不代表最近 Baseline 修改后的成绩。历史性能报告的 20 个 human case 中，17 条执行成功、2 条非回答任务跳过、1 条策略不兼容、0 条执行故障。
 
-## 2. 近期目标
+本轮保持九表、三档行数、Tiny seed-42 内容摘要、30 个指标口径和现行 DuckDB SQL 白名单。human 20 题不改标隐藏集。Public/Private 分开报告，`ranking_enabled=false`；Token/扫描量继续标为 unavailable。外部模型、在线服务、任意 Python Agent 沙箱和在线排名不进入本轮。
 
-近期目标按以下顺序执行：
+## 2. 工作顺序与退出门
 
-1. 完成真实 Docker runtime 证据，签署最后一个 RC gate；
-2. 让一份单一、可复核的 Linux 全量回归替代历史测试计数；
-3. 提升官方 Baseline 的过滤和 Join 语义覆盖，不改变 evaluator 判定规则；
-4. 清理文档状态冲突，并为 v1.1 之后的协议演化留下可执行设计；
-5. 在所有发布证据通过前，不修改评分权重、Gold、split、SQL 白名单或权限策略。
+尚未约定人员投入与目标日期，因此按依赖和验收证据安排，不虚设日历工期。每个工作包指定一名交付责任人，最终全量验证由同一维护者执行。
 
-## 3. 三个 Agent 工作包
+| 工作包 | 优先级 | 依赖 | 主要交付 | 开发退出门 |
+|---|---|---|---|---|
+| WP-01 基线与版本边界 | 最高 | 无 | 能力/版本清单、历史与当前状态说明、待决记录 | G1：每项能力都有实现状态、验证环境和证据身份 |
+| WP-02 发布完整性 | 最高 | WP-01 的证据契约 | 严格检查器、版本化证据契约、篡改回归 | G2：篡改、缺失、混批及路径越界均拒绝 |
+| WP-03 PostgreSQL 安全边界 | 最高 | WP-01 的引擎范围 | 默认拒绝边界、fixture 修复；按需补正式适配 | G3a：实验能力安全关闭；G3b：正式准入另行验证 |
+| WP-04 Dev 分层覆盖 | 高 | WP-01；配额决策确认 | 新任务版本、split 覆盖门、独立语义验收 | G4：分层覆盖和 family 隔离同时成立 |
+| WP-05 Baseline 质量 | 高 | WP-03 的能力边界；WP-04 冻结题包 | 公开回归 fixture、失败归因、同批双 split 诊断 | G5：本期失败样例修复、旧正例不回退、安全不回退 |
+| WP-06 性能与报告证据 | 中 | WP-01；最终测量依赖 WP-04/05 | 阶段实测、正确分母、资源与环境记录 | G6：指标可解释、可重跑，未知量明确 unavailable |
+| WP-07 统一 RC 验收 | 高 | G1/G2/G3a/G4/G5/G6；启用 PG 时还需 G3b | 同提交 Linux/Windows、Docker、分发与评测证据 | G7：全部现行 RC 门及本轮缺口通过实证验收 |
 
-三个工作包可以并行开始。每个 agent 使用独立分支或 worktree，只修改自己的文件边界；共享契约由主负责人最终合并。
+G1–G7 是开发工作的退出条件，不新增评分 hard gate，也不改变现有八个 RC 门的定义。WP-02 与 WP-03 可在共享契约明确后独立实现；题包冻结先于 Baseline 最终对照，代码和文档冻结先于最终 RC 构建。
 
-### Agent A：发布与证据收口
+## 3. 工作包与验收标准
 
-**职责**
+### WP-01：建立单一基线和版本边界
 
-- 在 Linux/CI 上构建当前提交的 Docker image；
-- 使用 `--read-only --network=none --user 10001` 运行 `doctor` 和 smoke；
-- 使用 `.github/scripts/record_docker_runtime.py` 生成真实 image Id 证据；
-- 重新构建 wheel/sdist，绑定 `docker_runtime` 和 reproducible build 证据；
-- 运行 `prepare-formal-release` 和 `check-formal-release`。
+**实现范围：** `ROADMAP*`、`HANDOFF*`、用户/发布/协议文档、版本与能力清单；本阶段不升级运行时版本。
 
-**允许修改**
+1. 区分代码已实现、单元测试通过、真实环境通过、正式支持四种状态。方言可转译不能推导为执行安全已经通过。
+2. 把旧标签、N4 候选与当前 main 分开记录；不移动、删除或重打已有 `v1.0.0`。
+3. 记录工作包、责任人、输入/输出契约、验收命令、版本影响和未通过事项；历史 N0–N4 记录标明适用提交。
+4. 清理“只差 Docker”“PostgreSQL 未实现/已完成”“仅 1 条可执行 Join”等互相冲突的当前说明；历史结论保留其日期。
+5. 形成第 6 节待决记录。未决版本号不阻塞独立缺陷复现和测试设计，依赖它的格式迁移与发布绑定需在确认后执行。
 
-- `.github/` 工作流和 Docker 验证脚本；
-- 独立的 `outputs/` 证据目录；
-- 发布命令所需的最小 CI 修复。
+**G1：** 从任一入口都能定位有效计划和能力清单；测试跳过、历史分数和历史标签不会被当成当前通过证据。
 
-**禁止修改**
+### WP-02：发布检查证明实际制品完整性
 
-- 评分权重、Gold、任务 split、SQL Guard、权限策略；
-- 伪造 `sha256:<64 hex>` digest；
-- 在八个 gate 全通过前创建 `v1.0.0` tag。
+**实现范围：** `release.py`、`contracts/release.py`、`contracts/evidence.py`、相关 CLI/CI 与 `tests/test_formal_release.py`、`test_packaging.py`、`test_public_tree.py`。
 
-**验收标准**
+1. 先为“修改发布包 README 后仍通过”编写失败回归，再重算并核对公开制品、证据文件及 SHA256SUMS；检查清单与实际文件集合一致，明确哪些私有输入只由可信侧校验。
+2. 对缺文件、多出未声明制品、wheel/sdist 内容变化、证据值与 gate 不一致、旧报告混批、未知格式返回稳定失败。解析归档目录项，不能仅看文件扩展名。
+3. 所有制品引用限定为安全相对路径，拒绝绝对路径、`..`、符号链接逃逸等越界访问；错误信息不暴露私有文件内容。
+4. 拟增加显式证据格式版本，以及 source commit、构建树摘要、锁文件摘要、运行环境、能力 profile 和适用的任务/评测版本绑定；校验各阶段身份一致。字段名称与旧格式迁移方案先写契约，不把提案当现有字段。
+5. 当前正式契约多处硬编码 1.0.0。下一发布版本确定后，用明确的版本化模型或受支持版本映射迁移；不以任意字符串替代严格版本约束。
+6. 摘要用于证明内容一致性；证据来源依赖可信 CI/维护者记录。清单自身的摘要保存到可信侧根记录，避免自引用；格式合法的 digest 或 JSON 中的 passed 值不能单独证明来源真实性。
 
-- `DockerRuntimeEvidence.passed=true`；
-- image digest 是真实的 64 位 SHA256；
-- 镜像无 hidden/trusted/duckdb/outputs 泄漏；
-- `check-formal-release` 返回 `passed=true`，八个 gate 全为 true；
-- 证据绑定的是最终代码和最终文档树，而不是旧构建产物。
+**G2：** 合法同批制品通过；逐一修改 README、分发包、证据、锁文件或绑定身份均被拒绝；删除/插入文件和路径逃逸被拒绝。旧格式只作历史核验，不自动满足新 RC。
 
-### Agent B：Baseline 质量与回归
+### WP-03：PostgreSQL 先关闭缺口，再决定正式准入
 
-**职责**
+**实现范围：** `runtime/gateway.py`、`runtime/dialects.py`、能力契约、CI、`tests/test_postgres_live.py` 及对应安全测试。
 
-- 扩展确定性 adapter 对公开 metadata 中过滤字段和值的解析；
-- 覆盖客户等级、风险等级、交易类型、渠道、资金流类型和组合过滤；
-- 复查客户交易 Join 的去重、时间窗口和权限边界；
-- 为每类失败补充最小回归 fixture；
-- 在 evaluator 不变的前提下重新运行 public_dev/private_hidden 诊断分数。
+最低交付 G3a 是当前主线的必需项：
 
-**允许修改**
+1. 默认正式执行器仍为 DuckDB。PostgreSQL 在缺少已验证的安全能力时，明确拒绝 Agent SQL；不以 URI 已配置或转译成功作为准入条件。能力不可用与权限拒绝分别记录，不把 ENGINE_UNAVAILABLE 计为正确权限拒答。
+2. 同步能力声明、网关行为与 CLI 文档。纯方言转译保留，但不得获得数据库执行或文件/网络访问权限。
+3. 修复 live fixture 将目录传给 DuckDB 的问题，显式使用已核验的数据库文件。只在专用合成测试库/独立测试 schema 初始化，不对任意连接目标执行破坏性建表清理。
+4. 增加无驱动、无环境、能力未准入、未授权列和客户范围等拒绝回归。默认关闭分支应有真实断言；跳过只表示未验证。
 
-- `src/customer360/agent/adapter.py`；
-- `src/customer360/agent/baseline.py`；
-- `tests/test_baseline.py` 及新增 Baseline 回归测试；
-- Baseline 相关诊断文档。
+只有确认进入正式评测范围后，才执行 G3b：
 
-**禁止修改**
+- 在执行前实施 SQL AST、角色/表/列/客户范围校验，客户范围在聚合前可信实施；执行后实施脱敏、最小贡献人数、行数和截断检查。
+- 使用最小权限账户和当前事务只读控制；建立引擎超时、客户端回收与服务端查询终止验证，记录稳定失败码。
+- 在锁定驱动和服务版本的真实 PostgreSQL CI 中覆盖日期、Decimal、NULL、五条允许 Join、分组、客户范围、受限字段和超时；只测试声明支持的 SQL 子集。
+- 同一 synthetic spec 的 DuckDB/PG 结果按现有多重集比较器核验；安全拒绝同样需要比较。CI 声称 PG 已准入时，必需 live 测试不得以跳过通过。
 
-- Gold compiler、independent oracle、evaluator 比较器和评分权重；
-- 通过放宽 Guard、权限或最小聚合策略来提高分数；
-- 把错误回答改成拒答以规避语义失败。
+**G3a：** 未准入能力无法通过公开执行入口访问数据库；默认 DuckDB 安全回归不变。**G3b：** 声明的引擎能力、安全策略和真实执行结果一致。仅完成 G3a 时文档仍须标为实验/未准入。
 
-**验收标准**
+### WP-04：让正式 Dev 覆盖业务能力
 
-- 新增过滤组合都能由公开元数据解释，并通过真实网关执行；
-- 未支持或歧义值仍 fail-closed；
-- 没有读取 Gold、trusted oracle 或 hidden profile；
-- public/private score 的失败分类、输入 digest 和协议版本可追溯；
-- 正确性和鲁棒性较当前基线有可解释提升，安全项不回退。
+**实现范围：** 任务生成/切分/审计、pack 契约和版本边界测试；不改变指标口径、SQL Guard、评分权重或比较器。
 
-### Agent C：文档、版本与未来协议设计
+当前 seed-42 Dev 为 118 answer / 1 clarification / 1 refuse，Join 与分组各 2 题。候选分层配额如下，**须经第 6 节确认后实施，不修改现有题包**：
 
-**职责**
+| 动作 | 当前 Dev | 候选 Dev | 候选 Train |
+|---|---:|---:|---:|
+| answer | 118 | 90 | 150 |
+| clarification_needed | 1 | 18 | 18 |
+| refuse | 1 | 12 | 12 |
+| 合计 | 120 | 120 | 180 |
 
-- 清理 `ROADMAP.md`、`HANDOFF.md`、本文和 `docs/task_format.md` 中的过时状态；
-- 明确“历史 no-score evaluator 0.5”和“正式 evaluator 0.6/score 1.0”的边界；
-- 记录当前唯一发布阻塞是 Docker runtime，而不是正式评分工具缺失；
-- 为 `validate_query_plan`、指标版本演化、PostgreSQL capability matrix 和 split 泛化审计写设计文档；
-- 建立未来版本的变更影响表，说明何时需要升级 protocol/evaluator/task/metadata 版本。
+候选整包仍为 300 独立语义 case，动作合计为 240/36/24。先证明独立 family 池可满足配额；不能用改写或变体凑数，也不能把非回答题全部转移到 Dev 后使 Train 丢失示范。
 
-**允许修改**
+候选 Dev 质量门：
 
-- `ROADMAP.md`；
-- `HANDOFF.md`；
-- `docs/*.md` 和决策记录。
+- 30/30 指标覆盖，每个指标至少 2 个独立 family。
+- 至少 15 道 Join，5 条可执行路径各至少 3 个独立 case。
+- 至少 15 道分组题，覆盖至少 4 个现有允许维度；不因此开放 Join+GROUP BY。
+- 至少 12 道带 NULL、空集合、缺失关系或时间边界的 case。标签可重叠，但每道 case 只计一次。
+- 按动作、指标、Join、分组、时间和预期错误类型同时报告 train/dev/private 的受控聚合覆盖；私有详细矩阵不公开。
 
-**禁止修改**
+实施步骤：先写覆盖与 family 隔离测试，再按 family 分层分配；生成新任务版本，保留旧包及其成绩；验证新公开包与保留隐藏 family 的冲突，禁止把旧隐藏用例转为公开 fixture。若隐藏语义或关联公开包身份变化，同步升级其 task/pack 版本并生成新的可信制品。
 
-- 当前 30 个指标的业务口径；
-- 当前公开/隐藏数据；
-- 代码协议、评分实现或 SQL 能力范围。
+**G4：** 300/180/120 数量、动作配额、切分覆盖和隔离同时通过；Gold 与独立 oracle、改写检查、八类错误 SQL 区分、全部适用四变体检查通过。池不足或策略不兼容逐项记录，不放宽 Guard 达标。
 
-**验收标准**
+### WP-05：Baseline 与可诊断性
 
-- 文档不再把已实现的 score、Dockerfile、Apache-2.0 或 formal release 写成“尚未实现”；
-- 明确 `pyproject` 的 package version 不是已打出的 Git tag；
-- 未来设计能够区分“只加文档/测试”和“改变可观察协议行为”；
-- 不泄漏 Gold、hidden seed、私有结果或本地绝对路径。
+**实现范围：** `agent/`、公开合成回归、诊断报告；评价规则与 Gold 编译器不因 Agent 成绩修改。
 
-## 4. 合并顺序与统一验证
+1. 以当前实现重新建立公开失败清单，不把已支持的过滤字段和五条 Join 再当作全新功能。优先处理尚未通过的组合、否定/互斥条件、时间端点、NULL 与状态口径。
+2. 每类修复使用独立公开合成 fixture，经真实受控网关验证；记录问题、解析计划、失败阶段、原因码、执行回执与版本。
+3. 对澄清覆盖最少必要槽位、补齐后重规划、矛盾补充和最大轮次；拒答区分权限、未知字段、政策禁止及运行故障。
+4. Baseline 不读取 case ID 规则、Gold、semantic spec、隐藏题面或隐藏诊断明细；隐藏结果只作冻结后的维护者验收，不反馈私有用例进行调参。
+5. 在同一任务/数据/策略版本上做变更前后对照；新旧题包分别统计，不把切分变化带来的分数变化归因于 Agent 提升。
 
-Agent A、B、C 可以并行开发。合并时按以下顺序执行：
+**G5：** 本期列入修复的公开失败样例全部通过，旧正例不回退，P0 安全违规为 0；分数变化可归因。public_dev/private_hidden 分别保留有效分母、policy-incompatible、四个现行 hard gates 与失败分类；既不合并也不排名。
 
-1. 先合并 Agent B 的代码和回归测试，确认 Baseline 没有扩大安全边界；
-2. 合并 Agent C 的状态文档，确保命令和版本说明与代码一致；
-3. 冻结发布树，停止评分、Gold、split 和 Guard 变更；
-4. 合并 Agent A 的 Docker evidence；
-5. 只由一个 owner 执行最终验证：
+### WP-06：补齐真实性能和报告证据
+
+**实现范围：** `evaluator/perf.py`、性能/诊断契约、报告与 `test_perf_*.py`。
+
+1. 正确区分成功、非回答跳过、策略不兼容、超时和执行失败；P50/P95 使用明确的计时样本集合，跳过不伪填 0ms 成功。
+2. 实测并记录 plan/guard/execute/end-to-end 的边界、进程启动开销和是否重叠，产出实际 phase_stats；现有归档 phase_stats=null 不能算阶段采样完成。
+3. 固定硬件、并发、缓存、线程、依赖、Agent、重试和预算 profile。Standard/Large 仅在显式性能流水线运行，不混入 Tiny 语义成绩。
+4. 保留有限物化/时长/结果行数预算；未测量的 Token、扫描量、峰值内存继续 unavailable，接入真实测量前先补能力与报告契约。
+5. 对动作、Join、分组、时间等提供诊断分层。若新增 95% 置信区间，先冻结统计方法，以 case/family 为采样单位，不把改写与四个相关变体当作独立样本；作为诊断扩展单独版本化。
+
+**G6：** 新性能报告的分母、失败与耗时边界可复核；性能与评分制品物理分离，公开报告无 Gold、隐藏结果、种子或可还原私有用例的信息。
+
+### WP-07：同一最终提交的发布验收
+
+**实现范围：** 最终构建、CI、RC 证据与发布文档，不再加入语义能力。
+
+1. 先完成依赖工作包和中英文文档，冻结 Git commit、构建树、锁依赖及版本组合；随后生成所有发布证据。
+2. 同一发布身份执行 Linux 全量 Tiny 回归、Windows 回归、doctor、metadata/split 审计、wheel 源码树外安装 smoke。
+3. 两次独立构建验证声明的可复现性；扫描源码树、wheel/sdist 和镜像，排除 hidden/trusted、私有报告、凭证和生成库。
+4. 真实 Docker 非 root、只读、无网络运行 doctor/smoke，记录对应镜像的 image Id、来源 commit 与日志；旧镜像 digest 不可绑定新代码。
+5. 当前任务版本的公开 300 题语义验收、独立隐藏验收、四个公开/私有变体的正式评测、WrongAgent 负对照、分开评分均使用同批身份。隐藏数据只在可信侧通过受控挂载使用。
+6. 用 WP-02 严格检查器核验全部八个现行 RC 门及其内容/来源绑定。证据通过后由维护者发布下一版本，不覆盖旧标签。
+
+**G7：** 没有未解释的 P0/P1；八个 RC 门均有同批真实证据，Gold/独立 oracle 在全部适用变体通过；Agent 成绩按现行评分与四个 hard gates 报告，不要求 Baseline 满分。所有 public 制品通过泄漏检查，私有输入可在可信侧追溯。文档列明可重跑命令、环境限制和仍未准入的能力。
+
+## 4. 验证与交付约定
+
+以下均为已有命令；新证据格式或 CLI 参数若需要扩展，先补契约、帮助与测试，不在本文假定它们已实现。
+
+日常与目标回归：
 
 ```bash
 uv sync --locked
-uv run ruff check src tests
-uv run ruff format --check src tests
-uv run pytest -q
-uv run c360 doctor
-uv run c360 check-formal-release --input outputs/<final-formal-release>
+uv run --locked ruff check src tests
+uv run --locked ruff format --check src tests
+uv run --locked pytest -q -m "not slow"
+uv run --locked c360 doctor
+uv run --locked c360 audit-metadata
 ```
 
-全量测试不能由多个 agent 同时运行。Windows 本地结果不能代替 Linux Docker runtime 证据。输出目录中的 Gold、hidden pack、formal input 和私有 JSONL 只能留在可信侧。
+按工作包补充：
 
-## 5. 版本路线
+| 工作包 | 现有测试入口 |
+|---|---|
+| WP-02 | `tests/test_formal_release.py`、`test_packaging.py`、`test_public_tree.py` |
+| WP-03 | `tests/test_runtime.py`、`test_sql_guard.py`、`test_dialects.py`、`test_postgres_live.py` |
+| WP-04 | `tests/test_m3_pack.py`、`test_m6_hidden.py`、`test_pack_verify.py`、`test_audit_splits.py`、`test_version_boundary.py` |
+| WP-05 | `tests/test_baseline.py`、`test_clarification_interaction.py`、`test_plan_validation.py`、`test_diagnostics.py` |
+| WP-06 | `tests/test_perf_baseline.py`、`test_perf_phases.py` |
 
-### v1.0.0：正式发布收口
+实现改动先跑目标测试，语义/执行/安全改动提交前再跑完整 Tiny `uv run --locked pytest -q`。最终 RC 由单一 owner 执行完整回归和 `check-formal-release`；测试跳过单列，不用多个历史局部计数拼成全量通过。纯文档改动执行链接、公开边界和 diff 检查，不重复长时间生成/评分。
 
-目标是发布当前已经实现的 DuckDB-only、本地离线 benchmark，不新增语义能力。
+每个工作包交付：实现与测试清单、版本影响、命令与退出码、证据身份/路径、未通过门、限制和待决事项。输出使用独占新目录，不覆盖历史结果；公开摘要与可信侧详细报告分离。修改已冻结的代码、文档或依赖后，重新生成受影响的构建和绑定证据。
 
-必须完成：
+## 5. 版本与兼容策略
 
-- Docker runtime 真实证据；
-- 八个 RC gates 全通过；
-- 最终 wheel/sdist/Docker/public tree 内容检查；
-- 一份 Linux 全量 pytest、ruff、doctor 和 formal release 记录；
-- 维护者人工审查后创建 `v1.0.0` tag。
+下一主线发布建议使用 `v1.1.0`，**版本号仍待维护者确认**。当前 main 含旧 `v1.0.0` 之后的语义和能力扩展，不直接把整个 main 标成补丁版。若确需 `v1.0.1` 安全维护版，从旧标签的独立维护线选择最小补丁并单独验收；不作为本轮默认新增工作。
 
-保持不变：`ranking_enabled=false`、public/private 分开、Token/scan unavailable、外部模型和在线服务关闭。
+| 变化 | 必须审查的版本/制品 |
+|---|---|
+| 仅状态文档与测试 | 不改运行协议；文档进入最终构建后重绑构建摘要 |
+| 发布清单、证据格式、身份校验 | 显式证据/manifest 格式版本、package 与兼容规则；旧格式不伪升级 |
+| Agent 工具字段、状态或稳定拒绝契约 | protocol_version；若影响 evaluator 可观察行为，同步评估 evaluator_version |
+| 任务语义、配额、生成或 split | 新 task/pack 版本及 case 身份规则、独立 oracle、切分审计和回归基线；禁止只改期望值 |
+| 指标口径、Join 或 Schema | 对应 metrics/join/catalog/schema 版本；本轮默认不改变口径 |
+| 生成器或数据内容 | generator/snapshot/config 摘要；本轮保持 Tiny 内容冻结 |
+| Baseline 规划/SQL/澄清行为 | Agent/adapter 版本、参数和同版本任务上的前后对照 |
+| 比较器、回放或失败归因行为 | evaluator/report 版本及迁移说明；旧结果不可换版本号冒充重跑 |
+| 权重、计分分母规则或硬门槛 | score protocol 与回归基线；本计划不提出此类改动 |
+| 引擎正式准入 | 能力 profile、网关/协议/评测身份、锁定驱动与真实环境证据；通过不自动启用跨引擎排名 |
 
-### v1.1：Baseline 与评测可诊断性
+## 6. 待确认决策与默认推进方式
 
-目标是提升官方 Baseline 的业务覆盖和失败可解释性，不改变正式评分协议。
+以下是提案，不是已经冻结的协议。实施相关变更前由维护者记录结论；确认前可继续独立缺陷复现与回归设计。
 
-计划内容：
+| 编号 | 待确认事项 | 建议与确认前推进方式 |
+|---|---|---|
+| P-01 | 下一主线发布版本 | 建议 v1.1.0；先做复现与契约草案，不改 package 版本或标签 |
+| P-02 | Dev/Train 动作配额及语义覆盖门 | 建议采用 WP-04 候选表；先验证独立 family 池与迁移影响，确认后才生成新正式包 |
+| P-03 | PostgreSQL 是否进入本轮正式范围 | 默认只完成 G3a，继续 DuckDB-only 正式评测；G3b 需单独确认与真实环境验收 |
+| P-04 | RC 证据来源与保管责任 | 指定可信 CI/维护者及私有制品存储位置；先实现本地内容一致性回归，正式签署前确认来源链 |
 
-- 完整过滤字段解析和受限 Join 规划；
-- 失败按 metric/filter/time/join 分类统计；
-- 补充 Baseline 的多轮澄清和拒答回归；
-- 增加 public_dev 与 private_hidden 的稳定诊断报告；
-- 完善 family-only isolation 的模板、指标、Join 维度审计。
+## 7. 后续扩展的进入条件
 
-如果修改 Agent 输出协议或 evaluator 行为，必须分别升级 protocol/evaluator 版本并提供迁移说明。
+发布可信性与覆盖质量稳定后，再按证据决定扩展：
 
-### v1.2：元数据和指标演化
+- 隐藏集从 60 扩到 100：先证明新增独立 family 和统计价值，并冻结任务版本、分层与私有 provenance；不把题量当质量门替代。
+- 新指标、复合 Join、Top-K 或多指标 DSL：先补契约、独立 oracle、反例和执行能力矩阵；已有生命周期/计划校验实现优先补验收，不重复搭建。
+- PostgreSQL 正式执行与更完整阶段性能：只在 G3b 和真实测量完成后声明支持。
+- 外部模型、远程服务、不可信 Python OS 隔离：另立产品/安全决策和阶段计划；网络许可、成本记录与可信边界未确认前不启用。
+- 在线排名不属于本路线，现有 `ranking_enabled=false` 保持不变。任何不同赛制需另行明确决策，不能由模型分数或新增服务自动开启。
 
-目标是支持业务元数据变化，同时保持旧任务可审计。
-
-计划内容：
-
-- `validate_query_plan` 的能力矩阵和稳定拒绝码；
-- metric version、rename、deprecation 和迁移检查；
-- 字段改名、指标废弃、业务别名变化的回归 fixture；
-- manifest 绑定 metadata/task/protocol 版本，拒绝隐式漂移。
-
-这一版本不得把 metadata-only Join 自动升级成可执行 Join，也不得静默改变已有指标口径。
-
-### v1.3：性能与数据库适配设计
-
-目标是为扩展执行引擎建立边界，而不是立即引入第二套生产路径。
-
-计划内容：
-
-- PostgreSQL capability matrix 和 adapter interface；
-- DuckDB/PostgreSQL 在日期、Decimal、NULL、聚合和权限上的差异 fixture；
-- Standard/Large 的稳定性能基线；
-- 如要启用真实 scan/token 统计，先升级评分协议、报告契约和版本记录。
-
-在适配层和回归覆盖完成前，官方 benchmark 仍以 DuckDB 为唯一执行引擎。
-
-### v2.0：可选平台能力
-
-只有产品决策明确后才进入此版本：
-
-- 外部模型 API 或厂商 SDK；
-- FastAPI/远程评测服务；
-- 不可信 Python Agent 的 OS 级隔离；
-- 在线排行榜、提交服务或多数据库正式评分。
-
-这些能力会改变信任边界、网络策略或发布范围，不能作为 v1.x 的顺手扩展。
-
-## 6. 永久边界
-
-- 不提交真实客户数据、生产凭证、真实手机号或身份证号；
-- 不用 LLM 生成 Gold 或作为最终裁判；
-- 不把空结果、截断结果、策略拒绝或执行失败伪装成成功；
-- 不把历史测试计数、候选 release 或本地 score 宣称为正式发布；
-- 不为了 Baseline 分数关闭 SQL Guard、权限检查、最小聚合或结果脱敏。
-
-每个 agent 交付时必须附上：改动文件、验证命令、证据路径、版本影响、未通过 gate 和已知限制。
+验收以源码、独立结果与同批真实证据为准。实施顺序中的任何门未通过，都保留明确缺口，不以文档状态或 manifest 布尔值代替。

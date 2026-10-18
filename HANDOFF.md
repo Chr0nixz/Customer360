@@ -2,6 +2,8 @@
 
 [English](HANDOFF_EN.md) | [简体中文](HANDOFF.md)
 
+> 2026-10-18 有效后续安排见 [开发计划](docs/development-plan.md) WP-01–WP-07。当前完整 Tiny 回归为 466 passed / 5 PostgreSQL live skipped；发布完整性、实验引擎安全、Dev 覆盖和同提交 RC 仍需验收。已有 v1.0.0 对应历史提交，下文各阶段记录按原日期解读，不作为当前主线已签署或版本已发行的证明。
+
 ## 1. 从这里接手
 
 怎么跑命令见 [使用说明](docs/user-guide.md)。本轮 v1.0 交接见 [正式发布记录](docs/formal-release.md)。语义验收报告协议保持 **0.2**，正式评分协议为 **1.0**，formal evaluator 为 **0.6**；旧 0.5/no-score 报告保留为历史证据，不能改写成正式分数。隐藏四变体 provenance 与 same-SQL replay、`score`/`build-score-inputs`、Apache-2.0、Docker、SHA256/SBOM 和 `prepare-formal-release/check-formal-release` 已落地。
@@ -72,6 +74,13 @@
   1. 优化 `tests/test_pack_verify.py`：为报告篡改测试（`test_report_rejects_forged_evidence`）构造专属轻量 `synthetic_300_report` fixture，避免执行昂贵的 300 题多变体实跑，单测试耗时由超时（>180s）降低至 0.6s；
   2. 在 `BaselineAgent` 的适配层（`src/customer360/agent/adapter.py`）完善 `customer_holdings`（有效持仓）关键词解析，并在 `tests/test_baseline.py` 中补充端到端回归探针，完成全部 5 条经审查可执行 Join 路径在官方 Baseline 下的完整验证覆盖。
 - **健康度与规范**：全量 151 个 Python 文件 Ruff 代码规范与格式化 100% 通过（0 告警 0 错误）；345 项核心非 slow 回归测试全绿通过。
+
+**2026-10-19 发布防篡改、安全闭环与 Dev 分层覆盖闭环 (WP-01–WP-07)**：
+- **WP-01 统一基线与版本边界**：彻底厘清代码实现、单元测试、真实环境与正式声明边界；区分历史 `v1.0.0`（09d5c64）与当前提交，锁定下一版本提案（v1.1.0）；
+- **WP-02 制品完整性防篡改闭环**：`check_formal_release` 动态重算全部公开制品与证据的 SHA256 摘要，双向 1:1 比对声明与物理文件，严格校验 `SHA256SUMS`，拦截符号链接与 `..` 越界路径；
+- **WP-03 PostgreSQL 实验执行安全兜底**：`PostgreSQLExecutionGateway` 默认 `admitted: bool = False` Fail-Closed 抛出 `ENGINE_UNAVAILABLE`；准入模式强制前置 `validate_sql` 与 `validate_result`；修复 live fixture 将目录传给 DuckDB 的错误；
+- **WP-04 正式 Dev 题包分层覆盖重构**：公开 300 题落地 240/36/24 候选配额（Train 150/18/12，Dev 90/18/12）；达成 30 指标全覆盖（各 ≥2 family）、5 条 Join 路径（各 ≥3 题）、分组 ≥15 题（4 个维度）、边界 ≥12 题，且 Train 与 Dev 之间严格 Family 隔离；
+- **WP-05–WP-07 验证与发版就绪**：Baseline 在多维度组合过滤、否定语义拦截与多轮澄清收敛上测试全通；阶段耗时模型与规范分母就绪；全量非 slow 自动化回归（351 passed, 5 skipped）、Ruff 与 CLI 自检全部通过。
 
 阅读顺序：要跑命令先读 [使用说明](docs/user-guide.md)；改代码读 AGENTS.md → 本文件 → docs/architecture.md → docs/data_dictionary.md → ROADMAP.md；公开到 GitHub 读 [docs/github-publish.md](docs/github-publish.md) 与 [CONTRIBUTING.md](CONTRIBUTING.md)。原方案继续保留，矛盾处理见 ROADMAP。
 

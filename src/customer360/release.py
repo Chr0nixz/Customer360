@@ -12,6 +12,7 @@ from customer360 import __version__
 from customer360.artifacts import digest, write_json_new
 from customer360.contracts.evaluation import EVALUATOR_VERSION
 from customer360.contracts.evidence import (
+    DOCKER_DIGEST,
     RC_GATE_NAMES,
     SCORE_HARD_GATES,
     ConformanceEvidence,
@@ -634,7 +635,8 @@ def prepare_formal_release(
     for name in ("Dockerfile", ".dockerignore", "LICENSE", "NOTICE", "THIRD_PARTY_NOTICES.md"):
         shutil.copyfile(root / name, public_dir / name)
     public_digests = {
-        str(path.relative_to(public_dir)): _sha256(path) for path in _artifact_files(public_dir)
+        path.relative_to(public_dir).as_posix(): _sha256(path)
+        for path in _artifact_files(public_dir)
     }
     private_digests: dict[str, str] = {}
     oracle_path = public_pack / "generated_oracles.yaml"
@@ -691,12 +693,112 @@ def check_formal_release(manifest_dir: Path, *, root: Path | None = None) -> dic
     for path_name in (manifest.checksum_file, manifest.sbom_file):
         if not (manifest_dir / path_name).is_file():
             issues.append(f"missing release artifact {path_name}")
+
+    sbom_path = manifest_dir / manifest.sbom_file
+    if sbom_path.is_file():
+        try:
+            sbom_data = json.loads(sbom_path.read_text(encoding="utf-8"))
+            if not isinstance(sbom_data, dict) or sbom_data.get("bomFormat") != "cyclonedx":
+                issues.append(f"invalid SBOM artifact format: {manifest.sbom_file}")
+        except Exception:
+            issues.append(f"corrupted SBOM artifact: {manifest.sbom_file}")
+
+    public_dir = manifest_dir / "public"
+    if not public_dir.is_dir():
+        issues.append("missing public/ directory in release")
+        actual_files: dict[str, Path] = {}
+    else:
+        actual_files = {
+            str(p.relative_to(public_dir)).replace("\\", "/"): p
+            for p in _artifact_files(public_dir)
+        }
+
+    # Verify safety of paths in declared public digests
+    public_resolved = public_dir.resolve()
+    for rel_str in manifest.public_artifact_digests:
+        rel_p = Path(rel_str)
+        if rel_p.is_absolute():
+            issues.append(f"unsafe declared public artifact path (absolute): {rel_str}")
+        elif ".." in rel_p.parts:
+            issues.append(f"unsafe declared public artifact path (escape): {rel_str}")
+        else:
+            target = public_dir / rel_p
+            if target.is_symlink() or target.exists():
+                try:
+                    target.resolve().relative_to(public_resolved)
+                except ValueError:
+                    issues.append(
+                        f"unsafe declared public artifact path (symlink escape): {rel_str}"
+                    )
+
+    # Verify bidirectional 1:1 match between declared and actual public artifacts
+    declared_files = set(manifest.public_artifact_digests.keys())
+    actual_names = set(actual_files.keys())
+    for missing_name in sorted(declared_files - actual_names):
+        issues.append(f"missing declared public artifact: {missing_name}")
+    for extra_name in sorted(actual_names - declared_files):
+        issues.append(f"undeclared public artifact found: {extra_name}")
+
+    # Recompute and verify digests of all declared public artifacts
+    for rel_name, expected_sha in sorted(manifest.public_artifact_digests.items()):
+        if rel_name in actual_files:
+            file_path = actual_files[rel_name]
+            computed_sha = _sha256(file_path)
+            if computed_sha != expected_sha:
+                issues.append(
+                    f"public artifact digest mismatch: {rel_name} "
+                    f"(expected {expected_sha}, got {computed_sha})"
+                )
+
+    # Recompute and verify SHA256SUMS file
+    checksum_file_path = manifest_dir / manifest.checksum_file
+    if checksum_file_path.is_file():
+        checksums_map: dict[str, str] = {}
+        for line_no, raw_line in enumerate(
+            checksum_file_path.read_text(encoding="utf-8").splitlines(), 1
+        ):
+            line = raw_line.strip()
+            if not line:
+                continue
+            if "  " not in line:
+                issues.append(f"malformed checksum line {line_no} in {manifest.checksum_file}")
+                continue
+            sha_val, rel_name = line.split("  ", 1)
+            rel_name = rel_name.replace("\\", "/")
+            checksums_map[rel_name] = sha_val
+
+        if set(checksums_map.keys()) != declared_files:
+            issues.append("checksum file does not match declared public artifacts")
+        for rel_name, sha_val in checksums_map.items():
+            if rel_name in manifest.public_artifact_digests:
+                if manifest.public_artifact_digests[rel_name] != sha_val:
+                    issues.append(f"checksum file entry mismatch with manifest for {rel_name}")
+            if rel_name in actual_files:
+                actual_sha = _sha256(actual_files[rel_name])
+                if actual_sha != sha_val:
+                    issues.append(
+                        f"checksum entry mismatch: {rel_name} file hash does not match checksum"
+                    )
+
+    # Distribution leaks check inside public wheels/sdists
+    for dist_file in actual_files.values():
+        if dist_file.suffix == ".whl" or dist_file.name.endswith(".tar.gz"):
+            leaks = distribution_leaks(dist_file)
+            if leaks:
+                issues.append(f"distribution leaks in {dist_file.name}: {', '.join(leaks)}")
+
     issues.extend(_public_leak_issues(manifest_dir))
     issues.extend(
         f"RC evidence gate not passed: {name}"
         for name, passed in manifest.gates.items()
         if not passed
     )
+    if manifest.gates.get("docker_runtime"):
+        if not DOCKER_DIGEST.fullmatch(manifest.docker_digest):
+            issues.append("passed docker_runtime requires a valid digest")
+    elif manifest.docker_digest:
+        issues.append("unsigned docker_runtime cannot carry a digest")
+
     passed = not issues and all(manifest.gates.values())
     return {
         "passed": passed,

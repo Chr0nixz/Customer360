@@ -2,6 +2,8 @@
 
 [English](HANDOFF_EN.md) | [简体中文](HANDOFF.md)
 
+> The active plan as of 2026-10-18 is [Development Plan](docs/en/development-plan.md), WP-01–WP-07. Local full Tiny regression: 466 passed and five PostgreSQL live skips. Artifact integrity, experimental-engine safety, Dev coverage, and same-revision RC evidence remain open. The existing v1.0.0 tag belongs to a historical revision; dated entries below do not certify current main or additional released versions.
+
 ## 1. Taking Over
 
 For command execution, see the [User Guide](docs/en/user-guide.md) ([中文](docs/user-guide.md)). For v1.0 formal release procedures, see [Formal Release](docs/en/formal-release.md) ([中文](docs/formal-release.md)). The pack semantic verification report protocol remains at **0.2**, the formal score protocol is at **1.0**, and the formal evaluator protocol is at **0.6**. Legacy 0.5/no-score reports are preserved as historical evidence and cannot be converted into formal scorecards. Four private hidden variants with provenance and same-SQL replay, `score`/`build-score-inputs`, Apache-2.0, Docker, SHA256/SBOM, and `prepare-formal-release`/`check-formal-release` are fully implemented.
@@ -62,6 +64,7 @@ The current implementation encompasses:
 | v1.1 Diagnostics | 4-tuple failure attribution, `c360 audit-splits`, multi-turn clarification state machine, offline HTML dashboard |
 | v1.2 Plan Validation | `validate_query_plan` (8 rejection codes), metric lifecycle (`active`/`deprecated`/`retired`), static topology audit (`c360 audit-metadata`) |
 | v1.3 Engine Adaptation | SQLGlot transpilation (DuckDB <-> PostgreSQL), multi-engine gateways, dual timeout reapers, phase performance sampling (`plan_ms`/`guard_ms`/`exec_ms`/`e2e_ms`), `c360 transpile-sql` |
+| WP-01–WP-07 Delivery | WP-01 baseline unified, WP-02 release integrity dynamic digests & path escape protection, WP-03 PostgreSQL fail-closed gateway & live fixture fixed, WP-04 Dev stratified 90/18/12 quotas & full metric/join coverage, WP-05–07 regression all-green |
 | FastAPI / Remote Services / External Models | Out of scope for v1.0; network adapters fail-closed |
 
 ## 3. Verification Commands

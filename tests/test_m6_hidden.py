@@ -60,6 +60,73 @@ def test_public_300_pack_is_isolated_and_not_human():
     assert check_human_pack_frozen(human) == ()
 
 
+def test_dev_stratified_coverage_quality_gates():
+    from collections import Counter, defaultdict
+
+    pack = generate_task_pack(seed=42, count=M6_PUBLIC_COUNT)
+    dev_cases = [c for c in pack.cases if c.split == "dev"]
+    train_cases = [c for c in pack.cases if c.split == "train"]
+
+    # 1. Total counts
+    assert len(train_cases) == 180
+    assert len(dev_cases) == 120
+
+    # 2. Action quotas: Dev (90/18/12), Train (150/18/12)
+    dev_actions = Counter(c.expected_action for c in dev_cases)
+    assert dev_actions["answer"] == 90
+    assert dev_actions["clarification_needed"] == 18
+    assert dev_actions["refuse"] == 12
+
+    train_actions = Counter(c.expected_action for c in train_cases)
+    assert train_actions["answer"] == 150
+    assert train_actions["clarification_needed"] == 18
+    assert train_actions["refuse"] == 12
+
+    # 3. 30/30 metrics covered in Dev, each >= 2 independent families
+    dev_metric_families = defaultdict(set)
+    for c in dev_cases:
+        if c.metric:
+            dev_metric_families[c.metric].add(c.family.family_id)
+    assert len(dev_metric_families) == 30
+    for m, fams in dev_metric_families.items():
+        assert len(fams) >= 2, f"metric {m} has fewer than 2 families in Dev: {len(fams)}"
+
+    # 4. Join coverage: >= 15 cases in Dev, all 5 executable join paths >= 3
+    executable_paths = {
+        "customer_transactions",
+        "customer_cash_flows",
+        "customer_holdings",
+        "customer_asset_snapshots",
+        "customer_service_relations",
+    }
+    dev_join_paths = Counter(c.join.path for c in dev_cases if c.join)
+    assert sum(dev_join_paths.values()) >= 15
+    for path in executable_paths:
+        assert dev_join_paths[path] >= 3, f"join path {path} has < 3 in Dev: {dev_join_paths[path]}"
+
+    # 5. Grouping coverage: >= 15 cases in Dev, across >= 4 allowed dimensions, NO Join+GROUP BY
+    dev_groups = [c for c in dev_cases if c.group_by]
+    assert len(dev_groups) >= 15
+    assert all(c.join is None for c in dev_groups), "Join + GROUP BY is forbidden"
+    group_dims = {c.group_by[0] for c in dev_groups}
+    assert len(group_dims) >= 4
+
+    # 6. Null / Edge coverage: >= 12 cases in Dev
+    dev_null_edge = [
+        c
+        for c in dev_cases
+        if c.category == "null_handling"
+        or any(f.operator == "is_null" for f in c.filters)
+        or any(f.values == ("closed",) for f in c.filters)
+    ]
+    assert len(dev_null_edge) >= 12
+
+    # 7. Family isolation between train and dev
+    train_families = {c.family.family_id for c in train_cases}
+    dev_families = {c.family.family_id for c in dev_cases}
+    assert train_families.isdisjoint(dev_families)
+
+
 def test_hidden_pack_is_independent_of_public_and_human(tmp_path):
     public = generate_task_pack(seed=42, count=M6_PUBLIC_COUNT)
     hidden = generate_hidden_pack(public, seed=42, count=30)

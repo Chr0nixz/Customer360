@@ -2,6 +2,8 @@
 
 [English](en/formal-release.md) | [简体中文](formal-release.md)
 
+> 适用范围澄清（2026-10-18）：本文保留 v1.0 契约下的历史发布流程。已有 v1.0.0 标签不重打；当前 main 的发布完整性修复、版本化证据与下一版本验收按 [开发计划](development-plan.md) WP-02/WP-07 执行。新版本契约未实现前，不直接把下列命令或旧签署包当成新版本发布通过。
+
 日常安装、评测和打分见 [使用说明](user-guide.md)。把源码公开到 GitHub 见 [GitHub 发布清单](github-publish.md)。本文只列出维护者签署八个 RC 门、准备 v1.0.0 的命令。
 
 ## 冻结边界

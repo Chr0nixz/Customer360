@@ -199,15 +199,24 @@ class PostgreSQLExecutionGateway(BaseExecutionGateway):
         connection_uri: str | None,
         policy: AccessPolicy,
         limits: SqlLimits | None = None,
+        *,
+        admitted: bool = False,
     ):
         super().__init__(policy, limits)
         self.connection_uri = connection_uri
+        self.admitted = admitted
 
     @property
     def engine_name(self) -> str:
         return "postgres"
 
     def execute(self, sql: str) -> QueryReceipt:
+        if not self.admitted:
+            raise QueryRejected(
+                "ENGINE_UNAVAILABLE",
+                "PostgreSQL live execution engine is experimental and not formally admitted "
+                "for benchmark evaluation; formal evaluation requires DuckDB.",
+            )
         if not self.connection_uri:
             raise QueryRejected(
                 "ENGINE_UNAVAILABLE",
@@ -220,6 +229,8 @@ class PostgreSQLExecutionGateway(BaseExecutionGateway):
                 "ENGINE_UNAVAILABLE",
                 "PostgreSQL driver (psycopg or psycopg2) is not installed in the environment.",
             )
+
+        guarded = validate_sql(sql, self.catalog, self.policy, self.limits)
 
         transpile_res = transpile_sql(sql, source_dialect="duckdb", target_dialect="postgres")
         if not transpile_res.ast_valid:
@@ -257,6 +268,7 @@ class PostgreSQLExecutionGateway(BaseExecutionGateway):
                         rows=receipt_rows,
                         truncated=truncated,
                     )
+                    validate_result(result, guarded, self.limits)
                     return QueryReceipt(
                         query_id=uuid4().hex,
                         result=result,

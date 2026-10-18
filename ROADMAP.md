@@ -2,8 +2,8 @@
 
 [English](ROADMAP_EN.md) | [简体中文](ROADMAP.md)
 
-> 文档版本：v0.2；编写日期：2026-09-16；审阅更新：2026-09-18（基于 `Customer360-Agent-Benchmark-Implementation-Plan.md`）  
-> 状态：M0–M7、正式评分协议 1.0、evaluator 0.6、四个私有隐藏变体 provenance/same-SQL replay、Apache-2.0、Docker、SHA256/SBOM 和 formal release 工具链已实现；GitHub 社区文件、公开树忽略规则和发布清单已就绪。RC evidence gates 尚未在本地全部签署，因此暂不打 v1.0.0 标签。public_dev/private_hidden 分开报告且不排名。在线服务、在线排行榜、外部模型 API、PostgreSQL 和不可信 Python OS 沙箱仍明确不在范围内。本文版本不代表软件或评测协议版本。Linux/Windows 工作流已入库，远程运行结果以平台记录为准。  
+> 文档版本：v0.3；编写日期：2026-09-16；审阅更新：2026-10-18（基于 `Customer360-Agent-Benchmark-Implementation-Plan.md`）
+> 状态：benchmark 主链、正式评分与发布工具已实现；2026-10-18 本地完整 Tiny 回归为 466 passed / 5 skipped，跳过项为 PostgreSQL live。现存 v1.0.0 标签对应历史提交，当前 main 的验收需单独完成。N4 候选记录缺少 docker_runtime，本轮另有发布摘要/证据链、PostgreSQL 安全边界及 Dev 分层覆盖待补；有效执行计划见 [后续开发计划](docs/development-plan.md) WP-01–WP-07。正式执行仍为 DuckDB；PostgreSQL 实装不代表正式准入。public_dev/private_hidden 分开报告且不排名，外部模型、在线服务和不可信 Python OS 沙箱仍未启用。本文版本不代表软件或评测协议版本；远程 CI 状态以实际平台证据为准。
 > 目标：把方案落成一个可复现、可审计、可扩展的 Customer360 Agent 评测基准。CLI 用法见 [使用说明](docs/user-guide.md)。
 
 ## 1. 北极星目标
@@ -68,7 +68,7 @@
 
 建议按依赖顺序推进。可以先做无依赖的设计和 stub，但依赖验收未通过时不能宣称下游集成完成。没有人员投入和目标日期前不虚设日历工期；各阶段用可核验证据退出。
 
-### 当前检查点（2026-09-18 复审）
+### 历史实施检查点（2026-09 至 2026-10；本轮验收见后续开发计划）
 
 - [x] M0 工程配置、锁依赖、CLI、共享契约、catalog、执行网关和测试基线；
 - [x] 一条公开六客户 fixture 纵向链路：Gold 编译、授权执行、结果比较、错误 SQL 和危险 SQL 负例；
@@ -92,20 +92,20 @@
 - [x] M6 代码质量复审：默认 seed-42 摘要保持；最小配置的随机访问边界、SQL AST/字面量边界、数据 sidecar、隐藏 profile/报告契约和 release 300 题硬验收均有回归；可信 pack 与 Agent 公开输入边界已写入文档；2026-09-18 全量 `pytest` 372 passed，ruff 通过；
 - [x] M6 生成/隐藏包语义验收与正式发布工具链：独立 oracle、8 类错误 SQL、改写槽位；300 题绑定四个公开 Tiny 变体，私有隐藏 baseline 绑定四个带 provenance 变体并执行 same-SQL replay；正式 `score`、Apache-2.0、Docker、SHA256/SBOM 和 `check-formal-release` 已实现；
 - [x] M7（部分）受控资源预算与性能采集：D055 命名 profile；Tiny 默认 10k 物化上限保留；`c360 perf-baseline`；扫描量/Token unavailable；
-- [x] M7 引擎适配与协议演化 (v1.1–v1.3)：SQLGlot 跨方言双向转译（DuckDB <-> PostgreSQL）、PostgreSQL 真实连接网关与只读事务/超时守护（`tests/test_postgres_live.py` 全绿）、阶段级性能采样（P50/P90/P95/P99）、逻辑计划静态校验引擎与指标生命周期治理（active/deprecated/retired）；
+- [x] M7 扩展实现：跨方言转译、PostgreSQL 网关原型、阶段采样契约、逻辑计划校验与指标生命周期已入库；正式准入与真实测量需分别完成 WP-03/WP-06，本地 5 项 PostgreSQL live 测试跳过，不能宣称全绿；
 - [x] 扩展验收与规模化闭环 (N0–N4)：单客高基数 ID 分组泄露彻底封堵、5 条 Join 路径全部由真实执行网关沙箱物化验证、隐藏 60 题与公开 120 题 Formal Evaluator 0.6 四变体重放全通、Score 1.0 正式分层出分通过（Hard Gates 100% 通过且公开/私有数据物理隔离）、Standard/Large 受控吞吐基线采集完成，sdist/wheel 分发包 0 泄露；
 - [x] GitHub 开源准备：Apache-2.0 社区文件、CONTRIBUTING/SECURITY、issue/PR 模板、gitignore 覆盖 `outputs/`/`tmp-*/`/`*.duckdb`、发布清单；维护者仍需自建远程并审查 `git status`；
-- [ ] M6 剩余：完成八个 RC evidence gates 并签署 v1.0.0（唯一未通过的是 Linux CI 下的 docker_runtime 证据；本地 7 门已签署验证通过）。
+- [ ] 当前主线收口：完成 WP-01–WP-07，关闭发布完整性与实验引擎安全缺口，验收新版本 Dev 覆盖，并以同一最终提交重建八个 RC 门证据；下一版本号待确认，不重打已有 v1.0.0。
 
-### 下一阶段执行顺序（先修复，再扩展）
+### 下一阶段执行顺序（2026-10-18 更新）
 
-详细工作包、依赖、验收标准与主/轻量 agent 分工见 [后续开发计划](docs/development-plan.md)。H1–H8 与阶段 B–F/S/G 及正式评分工具链已实施，设计规范已建立在 [docs/future-protocols-v1.1-v1.3.md](docs/future-protocols-v1.1-v1.3.md)；剩余是签署八个 RC evidence gates（本机 docker_runtime 待 CI 签署）与后续版本能力演进。
+详细工作包、依赖、验收标准和待决提案见 [后续开发计划](docs/development-plan.md)。H1–H8、阶段 B–F/S/G 与 N0–N4 保留为历史交付记录；当前不能只凭旧签署包或 manifest 布尔值宣称新主线通过。能力设计见 [协议演化说明](docs/future-protocols-v1.1-v1.3.md)，其章节版本名不等于 Git 发行版本。
 
-1. **H1–H8 修复关卡**：已实施。
-2. **M2 补齐与最小接入**：已实施分组/latest-snapshot（D038/D039）与确定性 TemplateAgent；覆盖仍非官方分数。
-3. **M3 自动任务扩展**：已实施 semantic family 与 split 隔离、30 指标、20 条有效 Join 路径和 120 独立语义 case；C360_0001–0020 仍为 split=dev。
-4. **M4 评测/报告**：已实施矩阵评测与公私报告；正式分母/缺失/超时策略确认前不得启用计分。**M5 baseline**：已实施官方本地 Baseline 与独立 adapter；TemplateAgent 不是官方 baseline；接外部模型前仍须确认网络许可。
-5. **M6 隐藏集与发布**：已实施独立隐藏 pack、300 题结构、语义验收、正式 `score` 与 formal release 工具链（D057）。剩余是签署八个 RC evidence gates；本机 `docker_runtime` 未签署，不打 v1.0.0。**M7 性能**：已实施受控资源预算与 `perf-baseline`；不得删除 Tiny 10k 默认上限；PostgreSQL 适配仍未做。
+1. **WP-01 基线与版本**：区分历史标签、当前实现、验证环境与正式支持，记录未决版本/配额/引擎范围。
+2. **WP-02/03 可信性修复**：重算发布摘要并绑定证据来源；未准入 PostgreSQL 执行默认拒绝，正式资格单独验收。
+3. **WP-04 Dev 覆盖**：确认候选配额与 family 池可行性后，以新任务版本做分层切分；不修改旧包和旧成绩。
+4. **WP-05/06 Agent 与报告**：在冻结题包上验证 Baseline，补阶段性能实测、正确分母与公开脱敏报告。
+5. **WP-07 同提交发布**：冻结代码和文档后完成 Linux/Windows、真实 Docker、分发包、语义与正式评分的同批证据；下一主线建议 v1.1.0，须维护者确认。
 
 | 里程碑 | 目标 | 主要产物 | 退出标准 |
 |---|---|---|---|
@@ -271,7 +271,7 @@
 - 已实施：命名资源预算（D055）、流式物化、`c360 perf-baseline` 采集 generate/gold-execute/evaluate 的耗时、失败码、P50/P95 与阶段级采样（plan_ms / guard_ms / exec_ms / e2e_ms）；
 - Token 与扫描量在未实现测量前标记 unavailable，禁止报 0；
 - Tiny 默认 10k 物化上限保留；Standard/Large 使用有限更高 cap，并与 scale 绑定；
-- 已实装：SQLGlot 跨方言转译（DuckDB <-> PostgreSQL）、PostgreSQL 真实连接网关（只读事务与语句超时守护）、多引擎等价性集成测试（`tests/test_postgres_live.py`）；
+- 已实现跨方言转译、PostgreSQL 网关原型和 live 测试入口；受控授权、结果检查与真实环境等价性仍需 WP-03 验收，正式执行保持 DuckDB-only；
 - 已实装：受控逻辑计划校验引擎 `validate_query_plan`、指标生命周期治理（active/deprecated/retired）、多维度复合分组与 5 条经审查可执行 Join 路径沙箱执行。
 
 **退出标准**
