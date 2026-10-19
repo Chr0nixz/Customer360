@@ -39,6 +39,9 @@ def _json_arguments(arguments: dict[str, Any]) -> str:
     return json.dumps(arguments, sort_keys=True, default=str)
 
 
+MAX_CLARIFICATION_TURNS = 4
+
+
 def evaluate_case(
     case: PrivateCase, agent: Agent, gateway: ExecutionGateway, repository: MetadataRepository
 ) -> EvaluationRecord:
@@ -158,7 +161,10 @@ def evaluate_case(
             return finish("error", "ORACLE_ANCHOR_MISMATCH")
         conversation = list(case.request.conversation)
         current = case.request
-        for turn in case.oracle.replay_script():
+        script = case.oracle.replay_script()
+        if len(script) > MAX_CLARIFICATION_TURNS:
+            return finish("fail", "CLARIFICATION_FAILURE")
+        for turn in script:
             response = invoke(current)
             if isinstance(response, EvaluationRecord):
                 return response

@@ -196,3 +196,34 @@ def test_multi_round_stepwise_convergence(baseline: Path, repository) -> None:
     assert (record.outcome, record.reason_code) == ("pass", "CLARIFICATION_OK")
     assert record.clarification_rounds == 2
     assert record.mode == "scripted_multi_round"
+
+
+def test_evaluator_rejects_exceeding_max_clarification_turns(baseline: Path, repository) -> None:
+    """Clarification scripted with more than MAX_CLARIFICATION_TURNS (4) fails-closed."""
+    gateway = ExecutionGateway(baseline / "dataset.duckdb", tiny_eval_policy())
+    replies = tuple(SlotReply(slot=f"slot_{i}", reply=f"val_{i}") for i in range(5))
+    case = PrivateCase(
+        request=AgentRequest(
+            case_id="case_excessive_turns",
+            question="统计客户数。",
+            anchor_date=ANCHOR,
+            metadata_version=repository.metrics.metrics_version,
+            protocol_version="1.1",
+        ),
+        oracle=ClarificationOracle(
+            replies=replies,
+            turns=tuple(
+                ClarificationTurn(expected_slots=(f"slot_{i}",), replies=(replies[i],))
+                for i in range(5)
+            ),
+            completed_spec=SemanticSpec(metric="distinct_customer_count"),
+        ),
+    )
+
+    class DummyAgent:
+        def respond(self, request, tools):
+            return Clarification(questions=("请补充？",), requested_slots=("slot_0",))
+
+    record = evaluate_case(case, DummyAgent(), gateway, repository)
+    assert record.outcome == "fail"
+    assert record.reason_code == "CLARIFICATION_FAILURE"
