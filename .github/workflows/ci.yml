@@ -145,15 +145,13 @@ jobs:
         uses: astral-sh/setup-uv@v5
         with:
           version: "0.8.x"
-      - name: Install locked environment and postgres driver
-        run: |
-          uv sync --locked
-          uv pip install "psycopg[binary]"
+      - name: Install locked environment
+        run: uv sync --locked
       - name: Live PostgreSQL multi-engine equivalence integration test
         env:
           C360_TEST_PG_URI: "postgresql://c360_tester:c360_password@127.0.0.1:5432/customer360_test"
         run: |
-          uv run --no-sync pytest -v -s --tb=short tests/test_dialects.py tests/test_v1_3_engine_adaptation.py tests/test_postgres_live.py
+          uv run --with "psycopg[binary]" pytest -v -s --tb=short tests/test_dialects.py tests/test_v1_3_engine_adaptation.py tests/test_postgres_live.py
 
   docker:
     runs-on: ubuntu-latest

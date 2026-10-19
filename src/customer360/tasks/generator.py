@@ -328,17 +328,16 @@ def _pool_drafts(repository: MetadataRepository) -> list[Draft]:
     drafts: list[Draft] = []
     for metric in repository.metrics.metrics:
         if metric.metric_name == "latest_total_asset":
-            for snap_date in (date(2025, 6, 30), date(2025, 3, 31), date(2024, 12, 31)):
-                drafts.append(
-                    Draft(
-                        expected_action="answer",
-                        category="latest_snapshot",
-                        material_status="compilable_answer",
-                        intended_failure_class="TIME_RANGE_ERROR",
-                        metric=metric.metric_name,
-                        time_window=LatestSnapshot(anchor_date=snap_date),
-                    )
+            drafts.append(
+                Draft(
+                    expected_action="answer",
+                    category="latest_snapshot",
+                    material_status="compilable_answer",
+                    intended_failure_class="TIME_RANGE_ERROR",
+                    metric=metric.metric_name,
+                    time_window=LATEST,
                 )
+            )
             drafts.append(
                 Draft(
                     expected_action="clarification_needed",
@@ -351,6 +350,18 @@ def _pool_drafts(repository: MetadataRepository) -> list[Draft]:
                     slot_replies=(
                         SlotReply(slot="time_window", reply="截至2025-06-30的最新资产快照"),
                     ),
+                )
+            )
+            drafts.append(
+                Draft(
+                    expected_action="clarification_needed",
+                    category="clarification",
+                    material_status="unscored_oracle",
+                    intended_failure_class="CLARIFICATION_FAILURE",
+                    metric=metric.metric_name,
+                    time_window=LATEST,
+                    missing_slots=("metric",),
+                    slot_replies=(SlotReply(slot="metric", reply="最新总资产合计"),),
                 )
             )
             continue
@@ -848,6 +859,14 @@ def _render(draft: Draft, repository: MetadataRepository) -> tuple[str, tuple[st
         return question, rewrites
     if draft.expected_action == "clarification_needed":
         who = f"{label}客户" if label else ""
+        if "metric" in draft.missing_slots:
+            question = f"统计{who}最新的资产状况。" if who else "统计最新的客户资产状况。"
+            rewrites = (
+                f"{who}最新的资产状况如何？" if who else "最新的客户资产状况如何？",
+                f"请给出{who}最新的资产情况。" if who else "请给出最新的客户资产情况。",
+                f"{who}最新资产数据是多少？" if who else "最新资产数据是多少？",
+            )
+            return question, rewrites
         if isinstance(draft.time_window, RollingWindow) and draft.time_window.days == 30:
             question = f"统计{who}近期的{biz}。"
             rewrites = (
@@ -960,17 +979,6 @@ def _render(draft: Draft, repository: MetadataRepository) -> tuple[str, tuple[st
         )
         return question, rewrites
     if isinstance(draft.time_window, LatestSnapshot):
-        if draft.time_window.anchor_date != ANCHOR:
-            snap = draft.time_window.anchor_date
-            cn = f"{snap.year}年{snap.month}月{snap.day}日"
-            iso = snap.isoformat()
-            question = f"统计截至{cn}每个客户最新快照的{biz}。"
-            rewrites = (
-                f"截至{cn}各客户最新快照的{biz}是多少？",
-                f"请给出截至{iso}每个客户最近一次快照的{biz}。",
-                f"截至{cn}最新资产快照口径下{biz}一共是多少？",
-            )
-            return question, rewrites
         question = f"统计每个客户最新快照的{biz}。"
         rewrites = (
             f"各客户最新快照的{biz}是多少？",

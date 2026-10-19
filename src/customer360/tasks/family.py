@@ -25,6 +25,8 @@ def infer_template_id(
     if expected_action == "refuse":
         return "t_refuse"
     if expected_action == "clarification_needed" or missing_slots:
+        if "metric" in missing_slots:
+            return "t_clarify_metric"
         return "t_clarify_time"
     if join is not None:
         return "t_join"

@@ -189,16 +189,6 @@ def _pg_cell(value):
     return str(value)
 
 
-def _infer_pg_kind(val: object) -> str:
-    if isinstance(val, (int, bool)) and not isinstance(val, bool):
-        return "integer"
-    if isinstance(val, (Decimal, float)):
-        return "decimal"
-    if isinstance(val, (date, datetime)):
-        return "date"
-    return "string"
-
-
 class PostgreSQLExecutionGateway(BaseExecutionGateway):
     """PostgreSQL execution gateway adapter.
 
@@ -267,15 +257,9 @@ class PostgreSQLExecutionGateway(BaseExecutionGateway):
                     truncated = len(raw_rows) > self.limits.max_rows
                     rows = raw_rows[: self.limits.max_rows]
                     desc = cur.description or []
-                    sample_row = rows[0] if rows else ()
                     columns = tuple(
-                        Column(
-                            name=col[0],
-                            kind=_infer_pg_kind(sample_row[idx])
-                            if idx < len(sample_row)
-                            else "string",
-                        )
-                        for idx, col in enumerate(desc)
+                        Column(name=col[0], kind=kind)
+                        for col, kind in zip(desc, guarded.output_kinds, strict=True)
                     )
                     receipt_rows = tuple(tuple(_pg_cell(v) for v in row) for row in rows)
                     result = QueryResult(
