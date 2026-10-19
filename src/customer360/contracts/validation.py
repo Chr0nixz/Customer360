@@ -14,6 +14,7 @@ PlanOperator = Literal["eq", "ne", "gte", "lte", "in", "is_null", "is_not_null"]
 PlanOperation = Literal["count_distinct", "count", "sum"]
 
 ValidationIssueCode = Literal[
+    "INVALID_PLAN_SCHEMA",
     "UNKNOWN_SOURCE_TABLE",
     "UNSUPPORTED_OPERATION",
     "INVALID_MEASURE_COLUMN",

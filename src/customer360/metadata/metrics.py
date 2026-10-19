@@ -59,6 +59,12 @@ class MetricDef(Contract):
 
     @model_validator(mode="after")
     def validate_metric(self) -> "MetricDef":
+        if (
+            self.effective_date
+            and self.deprecation_date
+            and self.deprecation_date < self.effective_date
+        ):
+            raise ValueError("deprecation_date cannot be earlier than effective_date")
         if self.status == "retired" and not self.replaced_by:
             raise ValueError("retired metric must declare replaced_by pointing to replacement")
         if self.replaced_by and self.replaced_by == self.metric_name:

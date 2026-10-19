@@ -20,9 +20,8 @@ def audit_metadata(repository: MetadataRepository) -> MetadataAuditReport:
     join_paths = repository.join_paths
 
     # 1. Catalog schema & sensitive field boundary
-    table_map = {}
+    table_map = {table.table_name: table for table in catalog.tables}
     for table in catalog.tables:
-        table_map[table.table_name] = table
         col_names = {col.column_name for col in table.columns}
         blocked = col_names & UNDECLARED_ENTITY_FIELDS
         if blocked:
@@ -34,6 +33,28 @@ def audit_metadata(repository: MetadataRepository) -> MetadataAuditReport:
                     message=f"Table '{table.table_name}' declares forbidden field '{b_field}'.",
                 )
             )
+        for fk in table.foreign_keys:
+            if fk.target_table not in table_map:
+                issues.append(
+                    MetadataAuditIssue(
+                        code="BROKEN_FOREIGN_KEY_TABLE",
+                        target=f"{table.table_name}.{fk.column}",
+                        message=f"Foreign key references unknown target table '{fk.target_table}'.",
+                    )
+                )
+            elif fk.target_column not in {
+                col.column_name for col in table_map[fk.target_table].columns
+            }:
+                issues.append(
+                    MetadataAuditIssue(
+                        code="BROKEN_FOREIGN_KEY_COLUMN",
+                        target=f"{table.table_name}.{fk.column}",
+                        message=(
+                            f"Foreign key column '{fk.target_column}' not found on "
+                            f"target table '{fk.target_table}'."
+                        ),
+                    )
+                )
 
     # 2. Metric referential integrity
     metric_map = {m.metric_name: m for m in metrics.metrics}

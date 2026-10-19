@@ -3,7 +3,11 @@ from typing import Any, TypeVar
 
 from customer360.contracts.execution import ExecutionRecord
 from customer360.contracts.public import QueryReceipt
-from customer360.contracts.validation import QueryPlanValidationRequest
+from customer360.contracts.validation import (
+    QueryPlanIssue,
+    QueryPlanValidationRequest,
+    QueryPlanValidationResponse,
+)
 from customer360.errors import ExecutionFailure, QueryRejected
 from customer360.metadata.metrics import MetadataRepository
 from customer360.runtime.gateway import ExecutionGateway
@@ -200,7 +204,18 @@ class ToolSession:
 
     def validate_query_plan(self, plan: dict) -> dict:
         def run() -> dict:
-            req = QueryPlanValidationRequest.model_validate(plan)
+            try:
+                req = QueryPlanValidationRequest.model_validate(plan)
+            except Exception as exc:
+                return QueryPlanValidationResponse(
+                    is_valid=False,
+                    issues=(
+                        QueryPlanIssue(
+                            code="INVALID_PLAN_SCHEMA",
+                            message=f"Query plan schema invalid: {exc}",
+                        ),
+                    ),
+                ).model_dump(mode="json")
             res = _validate_plan(req, self._repository, self._gateway.policy)
             return res.model_dump(mode="json")
 

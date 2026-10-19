@@ -278,8 +278,13 @@ class BaselineAgent:
         self, code: str, reason: str, alternative: str | None = None
     ) -> Refusal | AgentError:
         effective_code = code if code in _REFUSAL_CODES else "UNSUPPORTED_QUERY"
+        default_alt = (
+            "请使用已更新的有效替代指标进行查询。"
+            if code == "DEPRECATED_METRIC_REJECTED"
+            else "请使用授权范围内、受支持的聚合查询。"
+        )
         return Refusal(
             reason_code=effective_code,  # type: ignore[arg-type]
             reason=reason,
-            alternative=alternative or "请使用授权范围内、受支持的聚合查询。",
+            alternative=alternative or default_alt,
         )
