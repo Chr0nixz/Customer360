@@ -279,6 +279,9 @@ For exhaustive parameter lists, run `uv run c360 <command> --help`.
 | `prepare-release` / `check-release` | Build / verify scoreless release candidate |
 | `bind-rc-evidence` | Bind raw evaluation reports into RC evidence |
 | `prepare-formal-release` / `check-formal-release` | Manage and audit the eight v1.0 RC gates |
+| `audit-metadata` | Statically audit catalog, metrics, and foreign key closures |
+| `audit-splits` | Audit template novelty, orthogonality, and variant drift |
+| `transpile-sql` | SQLGlot cross-dialect transpilation (DuckDB <-> PostgreSQL) |
 
 Unimplemented commands will fail cleanly with an error message rather than silently reporting success.
 

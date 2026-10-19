@@ -103,6 +103,11 @@ Expanded to 300 tasks (180 train / 120 dev), independent hidden set (`C360_4001+
 ### M7: Performance & Extensions
 Established resource budget profiles (`tiny`, `standard`, `large`), performance collection tool (`c360 perf-baseline`), phase-level performance sampling (`plan_ms`, `guard_ms`, `exec_ms`, `e2e_ms`), SQLGlot cross-dialect bidirectional transpilation (DuckDB <-> PostgreSQL), live PostgreSQL execution gateway with statement timeout and read-only transaction guards (`tests/test_postgres_live.py`), query plan static validator engine, metric lifecycle governance (active/deprecated/retired), and completed scale throughput baselines on Standard and Large datasets. Expansion milestones N0–N4 are fully closed.
 
+### Mainline Hardening & Evolution (WP-01–WP-07, v1.1, v1.2)
+- **WP-01–WP-07**: Complete release anti-tampering verification, PostgreSQL default fail-closed boundary, Dev 90/18/12 stratified quota coverage with family isolation, and Baseline quality hardening;
+- **v1.1 Multi-Turn Protocol**: `protocol_version: "1.1"`, `Message.turn` tracking, `SlotReply.distractor` counterfactual noise injection, over-clarification guard, and `MAX_CLARIFICATION_TURNS = 4`;
+- **v1.2 Query Plan Validation & Metadata Lifecycle**: `validate_query_plan` with `INVALID_PLAN_SCHEMA` and `time_column` validation, `MetricDef` lifecycle constraints (`deprecation_date >= effective_date`), `DEPRECATED_METRIC_REJECTED` alternative guidance, and full foreign key referential integrity auditing in `c360 audit-metadata`.
+
 ## 6. Scoring Protocol and Weights
 
 ### Automated Evaluation Dimensions

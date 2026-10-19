@@ -82,6 +82,19 @@
 - **WP-04 正式 Dev 题包分层覆盖重构**：公开 300 题落地 240/36/24 候选配额（Train 150/18/12，Dev 90/18/12）；达成 30 指标全覆盖（各 ≥2 family）、5 条 Join 路径（各 ≥3 题）、分组 ≥15 题（4 个维度）、边界 ≥12 题，且 Train 与 Dev 之间严格 Family 隔离；
 - **WP-05–WP-07 验证与发版就绪**：Baseline 在多维度组合过滤、否定语义拦截与多轮澄清收敛上测试全通；阶段耗时模型与规范分母就绪；全量非 slow 自动化回归（351 passed, 5 skipped）、Ruff 与 CLI 自检全部通过。
 
+**2026-10-19 协议升级与元数据加固 (v1.1–v1.2)**：
+- **v1.1 多轮动态澄清与反事实干扰抵抗协议**（Commit `6517c34`, `a73b47c`）：
+  1. `AgentRequest` 支持 `protocol_version: "1.1"`，`Message` 扩充 `turn` 可选轮次字段；
+  2. `SlotReply` 扩充 `distractor` 与 `distractor_role`（`noise` / `counterfactual` / `irrelevant`），模拟真实交互场景下的背景叙述与反事实噪声；
+  3. `evaluate_case` 回放引擎注入干扰文本，实施过度澄清拦截（对已完整槽位仍追问判 `CLARIFICATION_FAILURE`），并引入 `MAX_CLARIFICATION_TURNS = 4` 交互轮次上限强制防御；
+  4. 新增 `tests/test_v1_1_multiturn.py` 覆盖噪声抵抗、过度澄清拦截与多轮分步收敛。
+- **v1.2 受控计划校验加固与元数据生命周期演进**（Commit `5e9bf89`, `240fe6a`）：
+  1. `validate_query_plan` 增加 `INVALID_PLAN_SCHEMA` 优雅降级，防止畸形 Payload 引发未捕获异常；补齐 `time_column` 存在性、授权与 `date` 类型静态校验；
+  2. `MetricDef` 补充生命周期约束：`deprecation_date` 严禁早于 `effective_date`；
+  3. `BaselineAgent._refusal` 针对 `DEPRECATED_METRIC_REJECTED` 提供 `replaced_by` 替代指引；
+  4. `c360 audit-metadata` 补齐全量表 `foreign_keys` 外键表与列关联一致性审计（`BROKEN_FOREIGN_KEY_TABLE` / `BROKEN_FOREIGN_KEY_COLUMN`）；
+  5. 新增 `tests/test_v1_2_metadata_plan.py`，全量 153 个 Python 文件规范与 363 项非 slow 测试全部绿灯通过。
+
 阅读顺序：要跑命令先读 [使用说明](docs/user-guide.md)；改代码读 AGENTS.md → 本文件 → docs/architecture.md → docs/data_dictionary.md → ROADMAP.md；公开到 GitHub 读 [docs/github-publish.md](docs/github-publish.md) 与 [CONTRIBUTING.md](CONTRIBUTING.md)。原方案继续保留，矛盾处理见 ROADMAP。
 
 ## 2. 已完成与尚未完成
@@ -120,8 +133,8 @@
 | M5 官方 Baseline | `c360 run-case --agent baseline` 与 `evaluate --agent baseline`：公开元数据检索→本地 adapter 规划→候选 SQL→网关；记录参数/重试/缓存/network_used；TemplateAgent 仍可选用但不是官方；外部 gpt/openai/network 标识 fail-closed |
 | 正式评分协议 1.0 | 已实现：`c360 evaluate-public` / `evaluate-hidden --formal` 写 evaluator 0.6 `formal_input`；`c360 score` 分别输出 public_dev / private_hidden；`ranking_enabled=false`。历史 `evaluate --mode scoring` 仍拒绝 |
 | 正式 RC 发布关卡 | 工具链已落地：Apache-2.0、Dockerfile、SHA256/SBOM、`prepare-formal-release`/`check-formal-release`。八个 RC 门为严格内容校验（D057）。当前 7/8 门已就绪，本机因无 Linux/Docker 环境，`docker_runtime` 留待 CI/Linux 运行签署，不打 `v1.0.0` |
-| v1.1 诊断与交互加固 | 已实现：四元组失败归因（`contracts/diagnostics.py`、`evaluator/diagnostics.py`）、`c360 audit-splits` 泛化正交审计、多轮澄清收敛/持续模糊/越权拦截状态机、离线现代 HTML 诊断看板 |
-| v1.2 计划校验与元数据 | 已实现：受控计划校验引擎 `validate_query_plan`（8 类稳定拒绝码）、指标生命周期（active/deprecated/retired）、Baseline 前置规划自检拦截、`c360 audit-metadata` 静态拓扑闭包审计 |
+| v1.1 多轮协议与反事实抵抗 | 已实现：`protocol_version: "1.1"`、`Message.turn` 轮次追踪、`SlotReply.distractor` 反事实噪声注入、过度追问拦截与 `MAX_CLARIFICATION_TURNS = 4` 轮次上限防护（`tests/test_v1_1_multiturn.py`） |
+| v1.2 计划校验与元数据演化 | 已实现：受控计划校验引擎 `validate_query_plan`（9 类稳定拒绝码含 `INVALID_PLAN_SCHEMA` 与 `time_column` 校验）、指标生命周期（deprecation_date >= effective_date）、`c360 audit-metadata` 全量外键拓扑闭包审计（`tests/test_v1_2_metadata_plan.py`） |
 | v1.3 引擎适配与性能采样 | 已实现：SQLGlot 跨方言转译（DuckDB <-> Postgres）、多引擎网关抽象（`BaseExecutionGateway`/`PostgreSQLExecutionGateway`）、双重超时物理回收、阶段拆分性能采样（`phase_stats` P50/P90/P95/P99）、`c360 transpile-sql` |
 | FastAPI、任意插件沙箱、私有竞赛部署、外部模型 | 未实现；网络 adapter 仍 fail-closed |
 

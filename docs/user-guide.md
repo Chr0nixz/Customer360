@@ -279,6 +279,9 @@ outputs/score-local/
 | `prepare-release` / `check-release` | 无分数候选 |
 | `bind-rc-evidence` | 把原生报告绑成 RC 证据 |
 | `prepare-formal-release` / `check-formal-release` | v1.0 正式门 |
+| `audit-metadata` | 静态审计 catalog / metrics / 外键拓扑闭包 |
+| `audit-splits` | 审计训练集与验证集的模板/正交/变体泛化度 |
+| `transpile-sql` | SQLGlot 跨方言转译（DuckDB <-> PostgreSQL） |
 
 尚未实现的命令（例如 `build-metadata-index`）会报错，不会假装成功。
 

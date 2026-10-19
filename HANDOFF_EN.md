@@ -25,10 +25,10 @@ The current implementation encompasses:
 - Phase G controlled resource budgets and `c360 perf-baseline`;
 - Formal scoring toolchain and Dockerfile. 7 of 8 RC gates are signed (v1.0.0 tag withheld until `docker_runtime` is signed on Linux CI). Region grouping and latest snapshot are supported in compiled Gold (D038/D039). `C360_0001–0020` permanently remain `split=dev`. TemplateAgent is not the official baseline.
 
-**Protocol Evolution Closure (v1.1–v1.3)**:
-- **v1.1**: 4-tuple fine-grained failure attribution (`contracts/diagnostics.py`, `evaluator/diagnostics.py`), `c360 audit-splits` generalization and orthogonality auditing, Baseline multi-turn clarification state machine, and offline HTML diagnostic dashboard.
-- **v1.2**: Controlled query plan validation engine `validate_query_plan` (8 stable rejection codes), metric lifecycle management (`active`, `deprecated`, `retired`), Baseline pre-planning self-check interceptor, and `c360 audit-metadata` topology closure audit.
-- **v1.3**: SQLGlot cross-engine transpiler (DuckDB <-> PostgreSQL), multi-engine gateway abstractions (`BaseExecutionGateway`, `DuckDBExecutionGateway`, `PostgreSQLExecutionGateway`), dual timeout process reapers, phase-split performance sampling (`plan_ms`, `guard_ms`, `exec_ms`, `e2e_ms` and P50/P90/P95/P99 percentiles), and `c360 transpile-sql` CLI.
+**Protocol & Infrastructure Evolution (WP-01–WP-07, v1.1–v1.2)**:
+- **WP-01–WP-07 Release Integrity & Stratified Dev**: Complete closure of release anti-tampering (recomputing SHA256 digests, symlink/path traversal defense, CycloneDX SBOM verification), PostgreSQL default fail-closed boundary with live fixture fix, 300-task 240/36/24 quota re-allocation (Train 150/18/12, Dev 90/18/12) with full metric and join coverage, and Baseline quality hardening.
+- **v1.1 Multi-Turn Dynamic Clarification & Distractor Resistance**: Implemented `protocol_version: "1.1"`, optional `turn` tracking on `Message`, `SlotReply` counterfactual noise/distractor support (`distractor`, `distractor_role`), over-clarification guard, and `MAX_CLARIFICATION_TURNS = 4` fail-closed limit (`tests/test_v1_1_multiturn.py`).
+- **v1.2 Query Plan Validation & Metadata Lifecycle**: Implemented controlled plan validation graceful degradation (`INVALID_PLAN_SCHEMA`), time column existence/authorization/date-type validation, `MetricDef` chronology constraints (`deprecation_date >= effective_date`), `BaselineAgent` refusal with `replaced_by` alternative guidance for `DEPRECATED_METRIC_REJECTED`, and complete foreign key closure auditing in `c360 audit-metadata` (`tests/test_v1_2_metadata_plan.py`). All 153 files pass Ruff lint/format, and 363 non-slow tests pass.
 
 ## 2. Completed vs. Uncompleted Status
 
@@ -61,8 +61,8 @@ The current implementation encompasses:
 | Resource Budgets | D055: Tiny 10k row cap; Standard/Large named budget profiles (400k / 4M rows) with ATTACH projection; `c360 perf-baseline`; token/scan unavailable |
 | Formal Score Protocol 1.0 | `c360 evaluate-public` / `evaluate-hidden --formal` emit formal inputs; `c360 score` produces separate public_dev and private_hidden scorecards |
 | Formal RC Release Gates | 8 gates with cryptographic content validation; 7 of 8 signed; `docker_runtime` awaiting Linux CI run |
-| v1.1 Diagnostics | 4-tuple failure attribution, `c360 audit-splits`, multi-turn clarification state machine, offline HTML dashboard |
-| v1.2 Plan Validation | `validate_query_plan` (8 rejection codes), metric lifecycle (`active`/`deprecated`/`retired`), static topology audit (`c360 audit-metadata`) |
+| v1.1 Clarification & Distractor | `protocol_version: "1.1"`, `Message.turn` tracking, `SlotReply.distractor` counterfactual noise injection, over-clarification guard, and `MAX_CLARIFICATION_TURNS = 4` (`tests/test_v1_1_multiturn.py`) |
+| v1.2 Plan Validation & Metadata | Controlled validator `validate_query_plan` (9 rejection codes incl. `INVALID_PLAN_SCHEMA` and `time_column`), metric lifecycle (`deprecation_date >= effective_date`), static FK topology audit in `c360 audit-metadata` (`tests/test_v1_2_metadata_plan.py`) |
 | v1.3 Engine Adaptation | SQLGlot transpilation (DuckDB <-> PostgreSQL), multi-engine gateways, dual timeout reapers, phase performance sampling (`plan_ms`/`guard_ms`/`exec_ms`/`e2e_ms`), `c360 transpile-sql` |
 | WP-01–WP-07 Delivery | WP-01 baseline unified, WP-02 release integrity dynamic digests & path escape protection, WP-03 PostgreSQL fail-closed gateway & live fixture fixed, WP-04 Dev stratified 90/18/12 quotas & full metric/join coverage, WP-05–07 regression all-green |
 | FastAPI / Remote Services / External Models | Out of scope for v1.0; network adapters fail-closed |

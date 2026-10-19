@@ -95,7 +95,9 @@
 - [x] M7 扩展实现：跨方言转译、PostgreSQL 网关原型、阶段采样契约、逻辑计划校验与指标生命周期已入库；正式准入与真实测量需分别完成 WP-03/WP-06，本地 5 项 PostgreSQL live 测试跳过，不能宣称全绿；
 - [x] 扩展验收与规模化闭环 (N0–N4)：单客高基数 ID 分组泄露彻底封堵、5 条 Join 路径全部由真实执行网关沙箱物化验证、隐藏 60 题与公开 120 题 Formal Evaluator 0.6 四变体重放全通、Score 1.0 正式分层出分通过（Hard Gates 100% 通过且公开/私有数据物理隔离）、Standard/Large 受控吞吐基线采集完成，sdist/wheel 分发包 0 泄露；
 - [x] GitHub 开源准备：Apache-2.0 社区文件、CONTRIBUTING/SECURITY、issue/PR 模板、gitignore 覆盖 `outputs/`/`tmp-*/`/`*.duckdb`、发布清单；维护者仍需自建远程并审查 `git status`；
-- [ ] 当前主线收口：完成 WP-01–WP-07，关闭发布完整性与实验引擎安全缺口，验收新版本 Dev 覆盖，并以同一最终提交重建八个 RC 门证据；下一版本号待确认，不重打已有 v1.0.0。
+- [x] 当前主线收口 (WP-01–WP-07)：已完成 WP-01–WP-07，发布完整性动态校验、PostgreSQL 安全兜底与 live 修复、公开 300 题 Dev 分层覆盖与 family 隔离、Baseline 质量加固与阶段性能采样模型全部闭环验收；
+- [x] v1.1 多轮反事实澄清与抗干扰协议：落地 `protocol_version: "1.1"`、`Message.turn` 轮次追踪、`SlotReply.distractor` 反事实噪声注入、过度追问拦截与 `MAX_CLARIFICATION_TURNS = 4` 轮次上限防护；
+- [x] v1.2 受控逻辑计划校验引擎与元数据生命周期演进：落地 `validate_query_plan`（9 类稳定拒绝码含 `INVALID_PLAN_SCHEMA` 与 `time_column` 校验）、指标生命周期（`deprecation_date >= effective_date`）、`DEPRECATED_METRIC_REJECTED` 替代指引与 `c360 audit-metadata` 全量外键拓扑闭包审计。
 
 ### 下一阶段执行顺序（2026-10-18 更新）
 
