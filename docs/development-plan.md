@@ -217,7 +217,7 @@ uv run --locked c360 audit-metadata
 
 发布可信性与覆盖质量稳定后，再按证据决定扩展：
 
-- 隐藏集从 60 扩到 100：先证明新增独立 family 和统计价值，并冻结任务版本、分层与私有 provenance；不把题量当质量门替代。
+- 隐藏集从 60 扩到 100：**已正式达成（2026-10-20）**。证明了 313 个独立语义 family 储备，落地 `count >= 100` 科学分层配额（Answer 61 / Clarification 23 / Refuse 16），覆盖 26 个独立业务指标与全部 8 类强制错误，100% compilable_answer 编译校验通过，并通过 `test_hidden_100_pack_stratified_and_isolated` 隔离与防泄漏回归。
 - 新指标、复合 Join、Top-K 或多指标 DSL：先补契约、独立 oracle、反例和执行能力矩阵；已有生命周期/计划校验实现优先补验收，不重复搭建。
 - PostgreSQL 正式执行与更完整阶段性能：只在 G3b 和真实测量完成后声明支持。
 - 外部模型、远程服务、不可信 Python OS 隔离：另立产品/安全决策和阶段计划；网络许可、成本记录与可信边界未确认前不启用。

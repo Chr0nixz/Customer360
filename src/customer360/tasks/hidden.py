@@ -94,7 +94,17 @@ def generate_hidden_pack(
     for cat_list in by_category.values():
         rng.shuffle(cat_list)
 
-    if count >= 60:
+    if count >= 100:
+        quotas = {
+            "join": 8,
+            "grouping": 8,
+            "time_window": 7,
+            "point_in_time": 10,
+            "null_handling": 10,
+            "clarification": 22,
+            "refuse": 15,
+        }
+    elif count >= 60:
         quotas = {
             "join": 6,
             "grouping": 6,

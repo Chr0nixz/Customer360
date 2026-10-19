@@ -175,6 +175,61 @@ def test_hidden_and_public_answer_specs_compile():
     assert compiled >= 260
 
 
+def test_hidden_100_pack_stratified_and_isolated(tmp_path):
+    from collections import Counter
+
+    public = generate_task_pack(seed=42, count=M6_PUBLIC_COUNT)
+    hidden = generate_hidden_pack(public, seed=42, count=100)
+    human = load_human_cases()
+    report = check_hidden_isolation(human, public, hidden)
+    assert report.passed is True
+    assert hidden.case_count == 100
+    assert len(hidden.cases) == 100
+    assert all(item.split == "private" for item in hidden.cases)
+
+    # 1. Action stratification: ~60% answer, ~23% clarification, ~16% refuse
+    actions = Counter(c.expected_action for c in hidden.cases)
+    assert actions["answer"] == 61
+    assert actions["clarification_needed"] == 23
+    assert actions["refuse"] == 16
+
+    # 2. Category depth: multi-table join, grouping, point in time, null handling
+    categories = Counter(c.category for c in hidden.cases)
+    assert categories["join"] >= 8
+    assert categories["grouping"] >= 8
+    assert categories["time_window"] >= 7
+    assert categories["point_in_time"] >= 10
+    assert categories["null_handling"] >= 10
+    assert categories["clarification"] >= 20
+    assert categories["refuse"] >= 15
+
+    # 3. 8 required error classes
+    assert ERROR_CLASSES_REQUIRED <= {item.intended_failure_class for item in hidden.cases}
+
+    # 4. Metric breadth: >= 25 independent business metrics
+    metrics = {c.metric for c in hidden.cases if c.metric}
+    assert len(metrics) >= 25
+
+    # 5. All compilable answers produce valid SQL
+    repository = MetadataRepository()
+    compilable_count = 0
+    for case in hidden.cases:
+        if case.material_status == "compilable_answer":
+            compiled = compile_semantic(case.semantic_spec(), repository)
+            assert compiled.sql
+            compilable_count += 1
+    assert compilable_count == 61
+
+    # 6. Public agent view leakage defense
+    out = tmp_path / "hidden-100"
+    summary = write_hidden_pack(out, hidden, public)
+    assert summary["isolation_passed"] is True
+    agent_text = (out / "agent_cases.yaml").read_text(encoding="utf-8")
+    for field in ("expected_action", "semantic_spec", "missing_slots", "reason_code"):
+        assert field not in agent_text
+    assert "C360_0001" not in agent_text
+
+
 def test_generate_hidden_cli_and_check_isolation(tmp_path):
     public_dir = tmp_path / "public"
     public = generate_task_pack(seed=42, count=120)

@@ -554,7 +554,7 @@ def debug_case_cmd(
 def generate_hidden(
     output: Annotated[Path, typer.Option(help="New hidden pack directory; must not exist")],
     public_pack: Annotated[Path, typer.Option(help="Public generated pack to isolate against")],
-    count: Annotated[int, typer.Option(min=8, help="Independent hidden semantic cases")] = 30,
+    count: Annotated[int, typer.Option(min=8, help="Independent hidden semantic cases")] = 100,
     seed: Annotated[int, typer.Option(min=0)] = 42,
     oracles: Annotated[
         Path, typer.Option(help="Trusted human oracles; not shipped in the wheel")

@@ -215,7 +215,7 @@ These are proposals, not frozen protocols. Maintainers record decisions before d
 
 After release assurance and coverage stabilize:
 
-- Expand hidden 60 to 100 only with new independent families, demonstrated statistical value, explicit versions/strata, and private provenance.
+- Expand hidden 60 to 100: **Formally completed (2026-10-20)**. Proved 313 remaining independent semantic families, implemented `count >= 100` scientific stratification quota (61 Answer / 23 Clarification / 16 Refuse), covering 26 distinct metrics and all 8 required error classes, 100% answer compilability verified, and enforced via `test_hidden_100_pack_stratified_and_isolated`.
 - New metrics, composite Joins, Top-K, or multi-metric DSL require contracts, independent oracles, discriminating negatives, and execution capabilities first. Qualify existing lifecycle/plan-validation features rather than rebuilding them.
 - Claim formal PostgreSQL or complete phase performance support only after G3b or real measurements pass.
 - External models, remote services, and untrusted Python OS isolation require separate product/security decisions and plans; no enablement before network/cost/trust boundaries are settled.
