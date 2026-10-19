@@ -24,7 +24,7 @@
 
 - 日期采用 DATE，不使用系统今天决定业务值。公共 smoke anchor 固定为 2025-06-30。
 - 日期型“近 N 天”为 [anchor-(N-1),anchor]，两端含；近90天从 2025-04-02 开始。
-- 服务关系为左闭右开区间；主服务经理在任一日期最多一个。后续生成器需为此补充检测。
+- 服务关系为左闭右开区间；主服务经理在任一日期最多一个（由 quality assertion `service_primary_no_overlap` 强制检验）。
 - 金额和当前数量用 DECIMAL(24,2)，不使用二进制 float；第一阶段生成数据统一 CNY。
 - amount 为非负交易金额；买卖/申赎由 transaction_type 表示。交易金额总和不是净流入或收益。
 - 客户状态编码 active / dormant / closed；客户等级 VIP / standard。
