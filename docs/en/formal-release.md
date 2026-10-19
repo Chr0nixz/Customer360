@@ -61,3 +61,14 @@ Legacy `prepare-release` / `check-release` commands continue to produce the cand
 ## Verification Notes
 
 All eight RC gates require cryptographic/content evidence validation. `prepare-formal-release` may write the manifest while `docker_runtime` is still unsigned, but `check-formal-release` will fail until all eight gates pass. Only when every formal gate passes can `v1.0.0` be officially tagged.
+
+## Automated GitHub Release Pipeline
+
+The repository provides an automated release workflow (`.github/workflows/release.yml`):
+1. **Triggering**: Automatically triggered when pushing a version tag (e.g. `git push origin v1.1.0`) or manually via `workflow_dispatch`;
+2. **Automated Steps**:
+   - Executes `public-tree` and `test_packaging` sanitization checks;
+   - Builds clean distribution packages (`.whl` and `.tar.gz`);
+   - Computes and records `SHA256SUMS`;
+   - Associates bilingual release notes from `docs/releases/<tag>.md`;
+   - Automatically publishes the official GitHub Release and uploads distribution packages and checksums as release assets.

@@ -61,3 +61,14 @@ python3 .github/scripts/record_docker_runtime.py --image c360:rc --output output
 ## 验证记录
 
 本轮把 RC 门从“文件存在”改为内容校验，并补充评分分母/P0/空证据回归。`prepare-formal-release` 在 `docker_runtime` 未签署时仍可写出 manifest，但 `check-formal-release` 必须失败。完整 pytest/RC 与远程 CI 的最终结果应作为发布门证据保存；不凭文档声明打标签。只有所有正式门通过才可打 `v1.0.0`，没有在线排名。
+
+## 自动化 GitHub Release 发布流水线
+
+仓库已配置自动发布工作流（`.github/workflows/release.yml`）：
+1. **触发方式**：当向远程仓库推送版本标签（如 `git push origin v1.1.0`）或通过 GitHub Actions 界面手动触发 `workflow_dispatch`；
+2. **自动化操作**：
+   - 自动执行 `public-tree` 与 `test_packaging` 防泄漏及打包验证；
+   - 自动构建干净的 `.whl` 与 `.tar.gz` 发布包；
+   - 自动计算并输出 `SHA256SUMS` 校验清单；
+   - 自动关联 `docs/releases/<tag>.md` 中的中英文 Release Notes；
+   - 自动在 GitHub 创建官方正式 Release，并将分发包和哈希清单作为 Release Assets 上传归档。
