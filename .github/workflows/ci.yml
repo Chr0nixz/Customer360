@@ -117,7 +117,7 @@ jobs:
         run: uv sync --locked
       - name: Full release regression (including slow 300-case and baseline tests)
         run: |
-          uv run pytest -q
+          uv run pytest -v -s --tb=short
 
   postgres-integration:
     runs-on: ubuntu-latest
@@ -132,7 +132,7 @@ jobs:
         ports:
           - 5432:5432
         options: >-
-          --health-cmd pg_isready
+          --health-cmd "pg_isready -U c360_tester -d customer360_test"
           --health-interval 10s
           --health-timeout 5s
           --health-retries 5
@@ -151,9 +151,9 @@ jobs:
           uv pip install "psycopg[binary]"
       - name: Live PostgreSQL multi-engine equivalence integration test
         env:
-          C360_TEST_PG_URI: "postgresql://c360_tester:c360_password@localhost:5432/customer360_test"
+          C360_TEST_PG_URI: "postgresql://c360_tester:c360_password@127.0.0.1:5432/customer360_test"
         run: |
-          uv run pytest -q tests/test_dialects.py tests/test_v1_3_engine_adaptation.py tests/test_postgres_live.py
+          uv run --no-sync pytest -v -s --tb=short tests/test_dialects.py tests/test_v1_3_engine_adaptation.py tests/test_postgres_live.py
 
   docker:
     runs-on: ubuntu-latest
