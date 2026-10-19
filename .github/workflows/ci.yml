@@ -153,7 +153,7 @@ jobs:
         env:
           C360_TEST_PG_URI: "postgresql://c360_tester:c360_password@localhost:5432/customer360_test"
         run: |
-          uv run pytest -q tests/test_dialects.py tests/test_postgres_live.py
+          uv run pytest -q tests/test_dialects.py tests/test_v1_3_engine_adaptation.py tests/test_postgres_live.py
 
   docker:
     runs-on: ubuntu-latest
