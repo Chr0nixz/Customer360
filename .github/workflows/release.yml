@@ -11,6 +11,10 @@ on:
         required: true
         default: "v1.1.0"
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: false
+
 permissions:
   contents: write
 
@@ -49,9 +53,11 @@ jobs:
           version: "latest"
           enable-cache: true
 
-      - name: Verify package reproducibility and packaging
+      - name: Verify package quality and reproducibility
         run: |
           uv sync --locked
+          uv run ruff check src tests
+          uv run c360 doctor
           uv run pytest -q tests/test_public_tree.py tests/test_packaging.py
 
       - name: Build distribution packages
@@ -92,5 +98,7 @@ jobs:
             dist/SHA256SUMS
           draft: false
           prerelease: false
+          generate_release_notes: true
+          fail_on_unmatched_files: true
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
