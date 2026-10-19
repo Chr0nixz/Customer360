@@ -1,4 +1,4 @@
-# Architecture and Formal Release Boundaries 1.0.0
+# Architecture and Formal Release Boundaries
 
 [English](architecture.md) | [简体中文](../architecture.md)
 

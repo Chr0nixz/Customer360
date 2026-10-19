@@ -79,7 +79,7 @@ wheel 只含运行代码和公开资源。sdist 用白名单，排除 `outputs`�
 | [数据字典](docs/data_dictionary.md) | 九表口径 |
 | [任务格式](docs/task_format.md) | 公开/私有契约 |
 | [决策记录](docs/decisions.md) | 工程默认值 |
-| [正式发布](docs/formal-release.md) | v1.0 RC 八个门 |
+| [正式发布](docs/formal-release.md) | 正式发版 RC 八个门 |
 | [后续开发计划](docs/development-plan.md) | 阶段计划 |
 | [Benchmark 扩展计划](docs/benchmark-expansion-plan.md) | 数据、题量、Join 和覆盖扩展顺序 |
 | [扩展验收与下一阶段计划](docs/acceptance-and-next-plan.md) | 验收结论、阻塞项和后续开发顺序 |

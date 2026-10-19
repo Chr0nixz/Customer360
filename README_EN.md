@@ -79,7 +79,7 @@ The wheel artifact contains only runtime code and public resources. The sdist is
 | [Data Dictionary](docs/en/data_dictionary.md) ([中文](docs/data_dictionary.md)) | Nine-table schema definitions and business metrics |
 | [Task Format](docs/en/task_format.md) ([中文](docs/task_format.md)) | Public/private schemas and DSL specifications |
 | [Decision Records](docs/en/decisions.md) ([中文](docs/decisions.md)) | Engineering defaults and rationale |
-| [Formal Release](docs/en/formal-release.md) ([中文](docs/formal-release.md)) | Eight RC gates for v1.0 release |
+| [Formal Release](docs/en/formal-release.md) ([中文](docs/formal-release.md)) | Eight RC gates for formal release |
 | [Development Plan](docs/en/development-plan.md) ([中文](docs/development-plan.md)) | Phased development plan |
 
 License: [Apache-2.0](LICENSE). Code of Conduct: [CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md). Hidden packs and generated database artifacts are not public distribution artifacts; `data/trusted` in the source repository only covers `C360_0001–0020`.

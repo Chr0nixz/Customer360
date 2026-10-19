@@ -117,7 +117,7 @@ Inspect `semantic_passed` in the public `summary.json`. Gold SQL, question defin
 Hidden tasks are **entirely new cases** (`C360_4001+`, `split=private`), not relabeled dev cases.
 
 ```bash
-uv run c360 generate-hidden --public-pack outputs/tasks-300 --count 30 --output outputs/hidden-pack
+uv run c360 generate-hidden --public-pack outputs/tasks-300 --count 100 --output outputs/hidden-pack
 uv run c360 generate-hidden-data --seed 1042 --output outputs/hidden-tiny
 uv run c360 check-isolation --pack outputs/tasks-300 --hidden outputs/hidden-pack
 uv run c360 verify-hidden --dataset outputs/hidden-tiny --pack outputs/hidden-pack --output outputs/verify-hidden-local

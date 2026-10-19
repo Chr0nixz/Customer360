@@ -15,7 +15,7 @@ Local verification on 2026-10-18:
 | Item | Verified state |
 |---|---|
 | Data and metadata | 9 tables, 72 columns, 30 metrics, 20 Join metadata paths, 5 executable Joins; three data scales implemented |
-| Tasks | 20 fixed human dev cases; public 300 = 180 train / 120 generated-dev; existing independent hidden 60-case artifacts |
+| Tasks | 20 fixed human dev cases; public 300 = 180 train / 120 generated-dev; formally expanded independent hidden 100-case stability artifacts (61 Answer / 23 Clarification / 16 Refusal) |
 | Tests | Complete Tiny suite: `466 passed, 5 skipped` in 1048.74s; all five skips are unconfigured PostgreSQL live tests |
 | Checks | Ruff check/format, doctor, metadata audit, 60/60 Tiny quality assertions, and architecture smoke passed |
 | Versions | Package 1.0.0, Agent protocol 0.1, formal evaluator 0.6, score 1.0, metrics 0.4, join_paths 0.2, generated/hidden tasks 0.2 |

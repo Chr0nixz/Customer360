@@ -15,7 +15,7 @@
 | 项目 | 核实状态 |
 |---|---|
 | 工程与数据 | 9 表、72 列、30 指标、20 条 Join 元数据、5 条可执行 Join；三档数据生成实现已存在 |
-| 任务 | 20 道固定 human dev 题；公开 300 题为 180 train / 120 generated-dev；已有独立隐藏 60 题制品 |
+| 任务 | 20 道固定 human dev 题；公开 300 题为 180 train / 120 generated-dev；已正式扩容并达成独立隐藏 100 题稳定性目标制品（61 Answer / 23 Clarification / 16 Refusal） |
 | 验证 | 完整 Tiny 回归 `466 passed, 5 skipped`，耗时 1048.74s；5 项跳过均为 PostgreSQL live 环境未配置 |
 | 自检 | Ruff check/format、doctor、audit-metadata 通过；Tiny 60/60 质量检查和架构 smoke 通过 |
 | 版本 | package 1.0.0、Agent protocol 0.1、formal evaluator 0.6、score 1.0、metrics 0.4、join_paths 0.2、generated/hidden tasks 0.2 |

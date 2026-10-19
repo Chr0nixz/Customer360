@@ -1,4 +1,4 @@
-# 架构与正式发布边界 1.0.0
+# 架构与正式发布边界
 
 [English](en/architecture.md) | [简体中文](architecture.md)
 
