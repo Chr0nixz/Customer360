@@ -19,9 +19,16 @@ class ComparisonPolicy:
 
 
 def compare_results(
-    actual: QueryResult, expected: QueryResult, policy: ComparisonPolicy | None = None
+    actual: QueryResult,
+    expected: QueryResult,
+    policy: ComparisonPolicy | None = None,
+    *,
+    tolerance: Decimal | None = None,
 ) -> bool:
-    policy = policy or ComparisonPolicy()
+    if policy is None and tolerance is not None:
+        policy = ComparisonPolicy(absolute_tolerance=tolerance)
+    else:
+        policy = policy or ComparisonPolicy()
     if actual.truncated or expected.truncated or actual.columns != expected.columns:
         return False
 

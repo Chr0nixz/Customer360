@@ -4,7 +4,7 @@ from decimal import Decimal
 import pytest
 
 from customer360.contracts.execution import AccessPolicy, SqlLimits, TableGrant
-from customer360.evaluator.compare import compare_results
+from customer360.evaluator.compare import ComparisonPolicy, compare_results
 from customer360.runtime.gateway import (
     DuckDBExecutionGateway,
     PostgreSQLExecutionGateway,
@@ -219,6 +219,7 @@ class TestPostgresLiveIntegration:
         # Compare columns count
         assert len(duck_receipt.result.columns) == len(pg_receipt.result.columns)
         # Compare numerical & row-level content with tolerance
-        assert compare_results(duck_receipt.result, pg_receipt.result, tolerance=Decimal("0.01")), (
+        cmp_policy = ComparisonPolicy(absolute_tolerance=Decimal("0.01"))
+        assert compare_results(duck_receipt.result, pg_receipt.result, cmp_policy), (
             f"Mismatch between DuckDB and PostgreSQL for query: {query_sql}"
         )
