@@ -118,7 +118,7 @@ Customer360 uses DuckDB as the official benchmark referee engine. v1.3 implement
    - Decomposes end-to-end evaluation latency into four explainable phases: `plan_ms` (Agent planning), `guard_ms` (SQL Guard static AST check), `exec_ms` (engine query execution), and `e2e_ms` (total turn latency);
    - Propagated through `QueryReceipt` and `ReceiptAudit`, and summarized into P50/P90/P95/P99 percentile distributions in performance reports.
 2. **Read-Only AST Defense Hardening & Dedicated Tests**:
-   - Expanded `_FORBIDDEN_AST_NODES` in `transpile_sql` to forbid `exp.Alter`, `exp.TruncateTable`, `exp.Merge`, and `exp.Transaction`;
+   - `transpile_sql` uses statement-level AST parsing to prevent string semicolon false-positives and expanded `_FORBIDDEN_AST_NODES` to forbid `exp.Alter`, `exp.TruncateTable`, `exp.Merge`, `exp.Transaction`, `exp.Grant`, `exp.Revoke`, and `exp.Set`;
    - Established `tests/test_v1_3_engine_adaptation.py` covering AST equivalence, dialect defense, PostgreSQL gateway fail-closed behavior, pre-connection SQL Guard, and CLI command contracts.
 
 ---

@@ -43,7 +43,7 @@ No staffing or release dates have been agreed. Schedule against dependencies and
 
 G1–G7 are development exit conditions, not new scoring hard gates or additions to the existing eight RC gates. WP-02 and WP-03 may be implemented independently once shared contracts are clear. Freeze tasks before final Baseline comparisons, and freeze code/documents before final RC builds.
 
-> **Implementation Progress Confirmation (2026-10-19)**: Work packages WP-01 through WP-07 have achieved their developer exit criteria (G1 through G7) on the current local baseline, alongside v1.1 multi-turn clarification protocols and v1.2 query plan validation & metadata lifecycle governance. See [HANDOFF_EN.md](../HANDOFF_EN.md) for details.
+> **Implementation Progress Confirmation (2026-10-19)**: Work packages WP-01 through WP-07 have achieved their developer exit criteria (G1 through G7) on the current local baseline, alongside v1.1 multi-turn clarification protocols, v1.2 query plan validation & metadata lifecycle governance, and v1.3 cross-engine adaptation & phase-split performance profiling. See [HANDOFF_EN.md](../HANDOFF_EN.md) for details.
 
 ## 3. Work packages
 

@@ -119,7 +119,7 @@
    - 将评测端到端耗时拆解为四个可归因阶段：`plan_ms`（Agent 规划耗时）、`guard_ms`（SQL Guard 静态 AST 校验耗时）、`exec_ms`（底层数据库执行耗时）、`e2e_ms`（总耗时）；
    - 由 `QueryReceipt` 和 `ReceiptAudit` 在执行与审计链路中透出，并在性能基准工具中统一计算 `plan`、`guard`、`exec`、`e2e` 的 P50/P90/P95/P99 分位数分布。
 2. **只读 AST 防御加固与专属测试集**：
-   - `transpile_sql` 扩充 `_FORBIDDEN_AST_NODES`（包含 `exp.Alter`、`exp.TruncateTable`、`exp.Merge`、`exp.Transaction` 等非只读 AST 节点），杜绝跨方言时的操作越权；
+   - `transpile_sql` 采用语句级 AST 解析，杜绝字符串内分号误杀，并扩充 `_FORBIDDEN_AST_NODES`（包含 `exp.Alter`、`exp.TruncateTable`、`exp.Merge`、`exp.Transaction`、`exp.Grant`、`exp.Revoke`、`exp.Set` 等非只读 AST 节点），杜绝跨方言时的操作与权限越权；
    - 建立 `tests/test_v1_3_engine_adaptation.py` 专属测试套件，全面覆盖方言转译等价性、非只读防御、PostgreSQL 网关 Fail-Closed 兜底与阶段性能采样数据模型。
 
 ---

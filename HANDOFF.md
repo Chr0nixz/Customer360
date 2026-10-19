@@ -82,7 +82,7 @@
 - **WP-04 正式 Dev 题包分层覆盖重构**：公开 300 题落地 240/36/24 候选配额（Train 150/18/12，Dev 90/18/12）；达成 30 指标全覆盖（各 ≥2 family）、5 条 Join 路径（各 ≥3 题）、分组 ≥15 题（4 个维度）、边界 ≥12 题，且 Train 与 Dev 之间严格 Family 隔离；
 - **WP-05–WP-07 验证与发版就绪**：Baseline 在多维度组合过滤、否定语义拦截与多轮澄清收敛上测试全通；阶段耗时模型与规范分母就绪；全量非 slow 自动化回归（351 passed, 5 skipped）、Ruff 与 CLI 自检全部通过。
 
-**2026-10-19 协议升级与元数据加固 (v1.1–v1.2)**：
+**2026-10-19 协议升级与引擎加固 (v1.1–v1.3)**：
 - **v1.1 多轮动态澄清与反事实干扰抵抗协议**（Commit `6517c34`, `a73b47c`）：
   1. `AgentRequest` 支持 `protocol_version: "1.1"`，`Message` 扩充 `turn` 可选轮次字段；
   2. `SlotReply` 扩充 `distractor` 与 `distractor_role`（`noise` / `counterfactual` / `irrelevant`），模拟真实交互场景下的背景叙述与反事实噪声；
@@ -94,8 +94,8 @@
   3. `BaselineAgent._refusal` 针对 `DEPRECATED_METRIC_REJECTED` 提供 `replaced_by` 替代指引；
   4. `c360 audit-metadata` 补齐全量表 `foreign_keys` 外键表与列关联一致性审计（`BROKEN_FOREIGN_KEY_TABLE` / `BROKEN_FOREIGN_KEY_COLUMN`）；
   5. 新增 `tests/test_v1_2_metadata_plan.py`，全量 153 个 Python 文件规范与 363 项非 slow 测试全部绿灯通过。
-- **v1.3 跨引擎方言转译、网关抽象与阶段性能采样加固**：
-  1. `transpile_sql` 防御加固：扩充 `_FORBIDDEN_AST_NODES`（包含 `exp.Alter`、`exp.TruncateTable`、`exp.Merge`、`exp.Transaction`），严密拦截任何非只读 AST 结构；
+- **v1.3 跨引擎方言转译、网关抽象与阶段性能采样加固**（Commit `983851e`, `dfd2287`）：
+  1. `transpile_sql` 防御与语句级 AST 解析加固：扩充 `_FORBIDDEN_AST_NODES`（包含 `exp.Alter`、`exp.TruncateTable`、`exp.Merge`、`exp.Transaction`、`exp.Grant`、`exp.Revoke`、`exp.Set`），并采用语句级 AST 解析杜绝字符串内分号误杀，严格拦截多语句注入；
   2. 阶段耗时采样模型闭环：`QueryReceipt` 与 `ReceiptAudit` 补齐 `guard_ms` 与 `exec_ms` 字段，`collect_evaluate` 与 `collect_gold_execute` 真实计算 `plan_ms`、`guard_ms`、`exec_ms`、`e2e_ms` 及四阶段分位数分布；
   3. PostgreSQL 网关防护验证：严格验证未准入（`admitted=False`）时 Fail-Closed 抛出 `ENGINE_UNAVAILABLE`，以及准入且带 Mock 驱动时在连接数据库前由 SQL Guard 拦截危险操作；
   4. 新增 `tests/test_v1_3_engine_adaptation.py` 专属测试套件，全量 154 个 Python 文件规范与 369 项非 slow 测试全部通过。
