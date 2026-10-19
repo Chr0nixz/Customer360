@@ -147,9 +147,15 @@ jobs:
           version: "0.8.x"
       - name: Install locked environment
         run: uv sync --locked
+      - name: Verify PostgreSQL connection
+        env:
+          C360_TEST_PG_URI: "postgresql://c360_tester:c360_password@127.0.0.1:${{ job.services.postgres.ports[5432] }}/customer360_test"
+        run: |
+          echo "Connecting to PostgreSQL at port ${{ job.services.postgres.ports[5432] }}"
+          uv run --with "psycopg[binary]" python -c "import os, psycopg; conn = psycopg.connect(os.environ['C360_TEST_PG_URI']); print('Successfully connected to PG server version:', conn.info.server_version); conn.close()"
       - name: Live PostgreSQL multi-engine equivalence integration test
         env:
-          C360_TEST_PG_URI: "postgresql://c360_tester:c360_password@127.0.0.1:5432/customer360_test"
+          C360_TEST_PG_URI: "postgresql://c360_tester:c360_password@127.0.0.1:${{ job.services.postgres.ports[5432] }}/customer360_test"
         run: |
           uv run --with "psycopg[binary]" pytest -v -s --tb=short tests/test_dialects.py tests/test_v1_3_engine_adaptation.py tests/test_postgres_live.py
 
