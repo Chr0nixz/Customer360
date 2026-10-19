@@ -114,6 +114,14 @@
 | **安全执行与超时** | 独立子进程启动 DuckDB，进程超时强制 kill | 连接级 `statement_timeout` + 线程级取消信号 | 双重超时守护：引擎层超时 + 评测进程超时回收 |
 | **权限与行级限制** | 在临时只读 DuckDB 连接中前置物化视图/表 | 独立只读 Session 用户 + 临时只读 Schema | 确保测试数据库无写权限，物理防穿透 |
 
+### 4.3 阶段耗时采样模型与专属测试套件
+1. **阶段耗时采样模型（Phase Breakdown Profiling）**：
+   - 将评测端到端耗时拆解为四个可归因阶段：`plan_ms`（Agent 规划耗时）、`guard_ms`（SQL Guard 静态 AST 校验耗时）、`exec_ms`（底层数据库执行耗时）、`e2e_ms`（总耗时）；
+   - 由 `QueryReceipt` 和 `ReceiptAudit` 在执行与审计链路中透出，并在性能基准工具中统一计算 `plan`、`guard`、`exec`、`e2e` 的 P50/P90/P95/P99 分位数分布。
+2. **只读 AST 防御加固与专属测试集**：
+   - `transpile_sql` 扩充 `_FORBIDDEN_AST_NODES`（包含 `exp.Alter`、`exp.TruncateTable`、`exp.Merge`、`exp.Transaction` 等非只读 AST 节点），杜绝跨方言时的操作越权；
+   - 建立 `tests/test_v1_3_engine_adaptation.py` 专属测试套件，全面覆盖方言转译等价性、非只读防御、PostgreSQL 网关 Fail-Closed 兜底与阶段性能采样数据模型。
+
 ---
 
 ## 5. Split 泛化审计与多轮交互协议 (v1.1 已落地)

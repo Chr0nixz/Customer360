@@ -76,7 +76,10 @@ class DuckDBExecutionGateway(BaseExecutionGateway):
         return "duckdb"
 
     def execute(self, sql: str) -> QueryReceipt:
+        started = perf_counter()
+        guard_start = perf_counter()
         guarded = validate_sql(sql, self.catalog, self.policy, self.limits)
+        guard_ms = (perf_counter() - guard_start) * 1000
         context = multiprocessing.get_context("spawn")
         receive, send = context.Pipe(duplex=False)
         process = context.Process(
@@ -84,8 +87,8 @@ class DuckDBExecutionGateway(BaseExecutionGateway):
             args=(send, str(self.database), guarded, self.policy, self.limits),
             daemon=True,
         )
-        started = perf_counter()
         try:
+            exec_start = perf_counter()
             process.start()
             send.close()
             # Dual-level timeout check
@@ -97,6 +100,7 @@ class DuckDBExecutionGateway(BaseExecutionGateway):
                 raise ExecutionFailure(
                     "WORKER_CRASH", "query worker exited without a result"
                 ) from exc
+            exec_ms = (perf_counter() - exec_start) * 1000
             if "rejected" in payload:
                 raise QueryRejected(payload["rejected"], payload["message"])
             if "error" in payload:
@@ -107,6 +111,8 @@ class DuckDBExecutionGateway(BaseExecutionGateway):
                 query_id=uuid4().hex,
                 result=result,
                 elapsed_ms=(perf_counter() - started) * 1000,
+                guard_ms=guard_ms,
+                exec_ms=exec_ms,
             )
         finally:
             try:
@@ -132,9 +138,13 @@ class DuckDBExecutionGateway(BaseExecutionGateway):
         External/eval calls must strictly invoke `execute()` to maintain OS-level
         process isolation, wall-clock timeout killing, and resource fencing.
         """
-        guarded = validate_sql(sql, self.catalog, self.policy, self.limits)
         started = perf_counter()
+        guard_start = perf_counter()
+        guarded = validate_sql(sql, self.catalog, self.policy, self.limits)
+        guard_ms = (perf_counter() - guard_start) * 1000
+        exec_start = perf_counter()
         payload = execute_worker_query(str(self.database), guarded, self.policy, self.limits)
+        exec_ms = (perf_counter() - exec_start) * 1000
         if "rejected" in payload:
             raise QueryRejected(payload["rejected"], payload["message"])
         if "error" in payload:
@@ -145,6 +155,8 @@ class DuckDBExecutionGateway(BaseExecutionGateway):
             query_id=uuid4().hex,
             result=result,
             elapsed_ms=(perf_counter() - started) * 1000,
+            guard_ms=guard_ms,
+            exec_ms=exec_ms,
         )
 
     # Explicit trusted alias for verify scripts
@@ -230,7 +242,10 @@ class PostgreSQLExecutionGateway(BaseExecutionGateway):
                 "PostgreSQL driver (psycopg or psycopg2) is not installed in the environment.",
             )
 
+        started = perf_counter()
+        guard_start = perf_counter()
         guarded = validate_sql(sql, self.catalog, self.policy, self.limits)
+        guard_ms = (perf_counter() - guard_start) * 1000
 
         transpile_res = transpile_sql(sql, source_dialect="duckdb", target_dialect="postgres")
         if not transpile_res.ast_valid:
@@ -240,7 +255,7 @@ class PostgreSQLExecutionGateway(BaseExecutionGateway):
             )
         pg_sql = transpile_res.transpiled_sql
 
-        started = perf_counter()
+        exec_start = perf_counter()
         timeout_ms = int(self.limits.timeout_seconds * 1000)
         try:
             with pg.connect(self.connection_uri) as conn:
@@ -268,11 +283,14 @@ class PostgreSQLExecutionGateway(BaseExecutionGateway):
                         rows=receipt_rows,
                         truncated=truncated,
                     )
+                    exec_ms = (perf_counter() - exec_start) * 1000
                     validate_result(result, guarded, self.limits)
                     return QueryReceipt(
                         query_id=uuid4().hex,
                         result=result,
                         elapsed_ms=(perf_counter() - started) * 1000,
+                        guard_ms=guard_ms,
+                        exec_ms=exec_ms,
                     )
         except Exception as exc:
             err_str = str(exc)

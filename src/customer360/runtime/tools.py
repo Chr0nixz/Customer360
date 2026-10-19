@@ -98,6 +98,9 @@ class ToolSession:
             entry["truncated"] = receipt.result.truncated
             entry["row_count"] = len(receipt.result.rows)
             entry["result"] = receipt.result
+            entry["elapsed_ms"] = receipt.elapsed_ms
+            entry["guard_ms"] = receipt.guard_ms
+            entry["exec_ms"] = receipt.exec_ms
         self.calls.append(entry)
         return result
 

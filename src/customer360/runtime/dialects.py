@@ -66,6 +66,10 @@ _FORBIDDEN_AST_NODES = (
     exp.Command,
     exp.Copy,
     exp.Pragma,
+    exp.Alter,
+    exp.TruncateTable,
+    exp.Merge,
+    exp.Transaction,
 )
 
 

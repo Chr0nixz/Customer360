@@ -68,6 +68,8 @@ class QueryReceipt(Contract):
     query_id: Text
     result: QueryResult
     elapsed_ms: float = Field(ge=0)
+    guard_ms: float = Field(default=0.0, ge=0)
+    exec_ms: float = Field(default=0.0, ge=0)
 
 
 class Success(Contract):

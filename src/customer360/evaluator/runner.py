@@ -101,6 +101,9 @@ def evaluate_case(
                         truncated=bool(call.get("truncated")),
                         row_count=int(call.get("row_count") or 0),
                         result=call.get("result"),
+                        elapsed_ms=float(call.get("elapsed_ms") or 0.0),
+                        guard_ms=float(call.get("guard_ms") or 0.0),
+                        exec_ms=float(call.get("exec_ms") or 0.0),
                     )
                 )
         requested_slots = ()

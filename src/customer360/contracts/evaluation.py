@@ -85,6 +85,9 @@ class ReceiptAudit(Contract):
     truncated: bool = False
     row_count: int = Field(ge=0)
     result: QueryResult | None = None
+    elapsed_ms: float = Field(default=0.0, ge=0)
+    guard_ms: float = Field(default=0.0, ge=0)
+    exec_ms: float = Field(default=0.0, ge=0)
 
 
 class RoundAudit(Contract):

@@ -220,6 +220,12 @@ def collect_gold_execute(
             if receipt.result.truncated:
                 status = "execution_error"
                 reason = "TRUNCATED"
+            phases = PerfPhaseBreakdown(
+                plan_ms=0.0,
+                guard_ms=round(receipt.guard_ms, 2),
+                exec_ms=round(receipt.exec_ms, 2),
+                e2e_ms=round(elapsed, 2),
+            )
             record = PerfQueryRecord(
                 case_id=case.case_id,
                 status=status,  # type: ignore[arg-type]
@@ -227,6 +233,7 @@ def collect_gold_execute(
                 elapsed_ms=elapsed,
                 truncated=receipt.result.truncated,
                 row_count=len(receipt.result.rows),
+                phases=phases,
             )
             private.append(
                 {
@@ -287,6 +294,12 @@ def collect_gold_execute(
     skipped = sum(item.status == "skipped" for item in queries)
     failure = len(queries) - success - skipped
     reasons = tuple(item.reason_code for item in queries if item.reason_code is not None)
+    phase_stats = {
+        "plan": _compute_phase_summary([q.phases.plan_ms for q in queries if q.phases]),
+        "guard": _compute_phase_summary([q.phases.guard_ms for q in queries if q.phases]),
+        "exec": _compute_phase_summary([q.phases.exec_ms for q in queries if q.phases]),
+        "e2e": _compute_phase_summary([q.phases.e2e_ms for q in queries if q.phases]),
+    }
     report = PerfBaselineReport(
         workload="gold_execute",
         budget_profile=budget,
@@ -303,6 +316,7 @@ def collect_gold_execute(
         reason_codes=reasons,
         environment=collect_environment(),
         limitations=LIMITATIONS,
+        phase_stats=phase_stats,
         queries=tuple(queries),
         **_targets(p95),
     )
@@ -356,15 +370,18 @@ def collect_evaluate(
             status = "execution_error"
 
         exec_ms = sum(
-            receipt.elapsed_ms
+            receipt.exec_ms for round_audit in evaluation.rounds for receipt in round_audit.receipts
+        )
+        guard_ms = sum(
+            receipt.guard_ms
             for round_audit in evaluation.rounds
             for receipt in round_audit.receipts
         )
         e2e_ms = evaluation.elapsed_ms
-        plan_ms = max(0.0, e2e_ms - exec_ms)
+        plan_ms = max(0.0, e2e_ms - exec_ms - guard_ms)
         phases = PerfPhaseBreakdown(
             plan_ms=round(plan_ms, 2),
-            guard_ms=0.0,
+            guard_ms=round(guard_ms, 2),
             exec_ms=round(exec_ms, 2),
             e2e_ms=round(e2e_ms, 2),
         )

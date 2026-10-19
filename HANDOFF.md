@@ -94,6 +94,11 @@
   3. `BaselineAgent._refusal` 针对 `DEPRECATED_METRIC_REJECTED` 提供 `replaced_by` 替代指引；
   4. `c360 audit-metadata` 补齐全量表 `foreign_keys` 外键表与列关联一致性审计（`BROKEN_FOREIGN_KEY_TABLE` / `BROKEN_FOREIGN_KEY_COLUMN`）；
   5. 新增 `tests/test_v1_2_metadata_plan.py`，全量 153 个 Python 文件规范与 363 项非 slow 测试全部绿灯通过。
+- **v1.3 跨引擎方言转译、网关抽象与阶段性能采样加固**：
+  1. `transpile_sql` 防御加固：扩充 `_FORBIDDEN_AST_NODES`（包含 `exp.Alter`、`exp.TruncateTable`、`exp.Merge`、`exp.Transaction`），严密拦截任何非只读 AST 结构；
+  2. 阶段耗时采样模型闭环：`QueryReceipt` 与 `ReceiptAudit` 补齐 `guard_ms` 与 `exec_ms` 字段，`collect_evaluate` 与 `collect_gold_execute` 真实计算 `plan_ms`、`guard_ms`、`exec_ms`、`e2e_ms` 及四阶段分位数分布；
+  3. PostgreSQL 网关防护验证：严格验证未准入（`admitted=False`）时 Fail-Closed 抛出 `ENGINE_UNAVAILABLE`，以及准入且带 Mock 驱动时在连接数据库前由 SQL Guard 拦截危险操作；
+  4. 新增 `tests/test_v1_3_engine_adaptation.py` 专属测试套件，全量 154 个 Python 文件规范与 369 项非 slow 测试全部通过。
 
 阅读顺序：要跑命令先读 [使用说明](docs/user-guide.md)；改代码读 AGENTS.md → 本文件 → docs/architecture.md → docs/data_dictionary.md → ROADMAP.md；公开到 GitHub 读 [docs/github-publish.md](docs/github-publish.md) 与 [CONTRIBUTING.md](CONTRIBUTING.md)。原方案继续保留，矛盾处理见 ROADMAP。
 
@@ -135,7 +140,7 @@
 | 正式 RC 发布关卡 | 工具链已落地：Apache-2.0、Dockerfile、SHA256/SBOM、`prepare-formal-release`/`check-formal-release`。八个 RC 门为严格内容校验（D057）。当前 7/8 门已就绪，本机因无 Linux/Docker 环境，`docker_runtime` 留待 CI/Linux 运行签署，不打 `v1.0.0` |
 | v1.1 多轮协议与反事实抵抗 | 已实现：`protocol_version: "1.1"`、`Message.turn` 轮次追踪、`SlotReply.distractor` 反事实噪声注入、过度追问拦截与 `MAX_CLARIFICATION_TURNS = 4` 轮次上限防护（`tests/test_v1_1_multiturn.py`） |
 | v1.2 计划校验与元数据演化 | 已实现：受控计划校验引擎 `validate_query_plan`（9 类稳定拒绝码含 `INVALID_PLAN_SCHEMA` 与 `time_column` 校验）、指标生命周期（deprecation_date >= effective_date）、`c360 audit-metadata` 全量外键拓扑闭包审计（`tests/test_v1_2_metadata_plan.py`） |
-| v1.3 引擎适配与性能采样 | 已实现：SQLGlot 跨方言转译（DuckDB <-> Postgres）、多引擎网关抽象（`BaseExecutionGateway`/`PostgreSQLExecutionGateway`）、双重超时物理回收、阶段拆分性能采样（`phase_stats` P50/P90/P95/P99）、`c360 transpile-sql` |
+| v1.3 引擎适配与性能采样 | 已实现：SQLGlot 跨方言转译（DuckDB <-> Postgres）、多引擎网关抽象（`BaseExecutionGateway`/`PostgreSQLExecutionGateway`）、只读 AST 安全防御（ALTER/TRUNCATE/MERGE 拦截）、双重超时物理回收、阶段拆分性能采样（`plan_ms`/`guard_ms`/`exec_ms`/`e2e_ms` P50/P90/P95/P99）、`c360 transpile-sql`（`tests/test_v1_3_engine_adaptation.py`） |
 | FastAPI、任意插件沙箱、私有竞赛部署、外部模型 | 未实现；网络 adapter 仍 fail-closed |
 
 本地使用 uv 管理的 Python 3.11.15 和项目 .venv；代码库已对齐远程 main 分支，八项门全过前保持干净未打标签状态。
