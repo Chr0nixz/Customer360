@@ -92,6 +92,36 @@ def test_plan_validator_is_null_and_in_operators(repository) -> None:
     assert res_in_empty.is_valid is False
     assert any(i.code == "INVALID_PREDICATE_LITERAL" for i in res_in_empty.issues)
 
+    # 5. Invalid time_column (column does not exist)
+    req_bad_time_col = QueryPlanValidationRequest(
+        source_table="dim_customer",
+        operation="count_distinct",
+        measure_column="customer_id",
+        output_column="cnt",
+        time_column="non_existent_time",
+    )
+    res_bad_time_col = validate_query_plan(req_bad_time_col, repository, policy)
+    assert res_bad_time_col.is_valid is False
+    assert any(
+        i.code == "DISALLOWED_FILTER_COLUMN" and i.field == "non_existent_time"
+        for i in res_bad_time_col.issues
+    )
+
+    # 6. Invalid time_column (column exists but is not DATE)
+    req_bad_time_type = QueryPlanValidationRequest(
+        source_table="dim_customer",
+        operation="count_distinct",
+        measure_column="customer_id",
+        output_column="cnt",
+        time_column="customer_id",
+    )
+    res_bad_time_type = validate_query_plan(req_bad_time_type, repository, policy)
+    assert res_bad_time_type.is_valid is False
+    assert any(
+        i.code == "DISALLOWED_FILTER_COLUMN" and "must be date" in i.message
+        for i in res_bad_time_type.issues
+    )
+
 
 def test_metric_date_chronology_validation() -> None:
     """deprecation_date cannot precede effective_date."""

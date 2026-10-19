@@ -58,6 +58,7 @@
 ### 2.3 稳定拒绝码矩阵
 | 拒绝码 | 触发条件 | 说明 |
 |---|---|---|
+| `INVALID_PLAN_SCHEMA` | plan 数据结构缺失必须字段、类型畸形或无法解析 | 优雅降级返回错误而不抛出未捕获异常 |
 | `UNKNOWN_SOURCE_TABLE` | `source_table` 不在 catalog 或未授权 | 保护未授权表名 |
 | `UNSUPPORTED_OPERATION` | 聚合非 `count` / `count_distinct` / `sum` | 限制在支持的聚合算子 |
 | `INVALID_MEASURE_COLUMN` | 度量列不存在、类型不匹配或未授权 | 防止非数值列求和 |

@@ -121,6 +121,39 @@ def validate_query_plan(
                 )
             )
 
+    # 3b. Check time column
+    if request.time_column is not None and table_def is not None:
+        try:
+            time_col = table_def.column(request.time_column)
+            if granted_columns is not None:
+                if request.time_column not in granted_columns.get(request.source_table, set()):
+                    issues.append(
+                        QueryPlanIssue(
+                            code="DISALLOWED_FILTER_COLUMN",
+                            field=request.time_column,
+                            message=f"Time column '{request.time_column}' is not granted.",
+                        )
+                    )
+            if time_col.kind != "date":
+                issues.append(
+                    QueryPlanIssue(
+                        code="DISALLOWED_FILTER_COLUMN",
+                        field=request.time_column,
+                        message=(
+                            f"Time column '{request.time_column}' must be date, "
+                            f"got '{time_col.kind}'."
+                        ),
+                    )
+                )
+        except KeyError:
+            issues.append(
+                QueryPlanIssue(
+                    code="DISALLOWED_FILTER_COLUMN",
+                    field=request.time_column,
+                    message=f"Time column '{request.time_column}' not in '{request.source_table}'.",
+                )
+            )
+
     # 4. Check join path
     join_target_def = None
     right_table_name = None

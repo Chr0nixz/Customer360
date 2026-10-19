@@ -58,6 +58,7 @@ When agents lack pre-execution validation tools, they frequently submit syntacti
 ### 2.3 Rejection Code Matrix
 | Rejection Code | Trigger Condition | Description |
 |---|---|---|
+| `INVALID_PLAN_SCHEMA` | Plan structure missing mandatory fields, malformed, or unparseable | Gracefully returns issues without unhandled exceptions |
 | `UNKNOWN_SOURCE_TABLE` | `source_table` not in catalog or unauthorized | Protects unauthorized table names |
 | `UNSUPPORTED_OPERATION` | Aggregation not `count`, `count_distinct`, or `sum` | Enforces supported aggregation operators |
 | `INVALID_MEASURE_COLUMN` | Measure column missing, type mismatched, or unauthorized | Prevents summing non-numeric columns |
