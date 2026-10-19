@@ -56,13 +56,14 @@ class JoinSpec(Contract):
         "customer_asset_snapshots",
         "customer_cash_flows",
         "customer_service_relations",
+        "customer_transactions_and_holdings",
     ]
     filters: tuple[Filter, ...] = ()
     time_window: RollingWindow | PointInTime | LatestSnapshot | None = None
 
 
 class SemanticSpec(Contract):
-    """v0.1 is intentionally single-metric. Grouping and latest-snapshot are explicit fields."""
+    """v0.1 is intentionally single-metric. Grouping, ordering, and latest-snapshot are explicit."""
 
     semantic_version: Literal["0.1"] = "0.1"
     metric: Identifier
@@ -70,6 +71,9 @@ class SemanticSpec(Contract):
     time_window: RollingWindow | PointInTime | LatestSnapshot | None = None
     join: JoinSpec | None = None
     group_by: tuple[Identifier, ...] = ()
+    limit: int | None = Field(default=None, ge=1, le=1000)
+    order_by: tuple[Identifier, ...] = ()
+    order_direction: Literal["asc", "desc"] = "desc"
 
     @model_validator(mode="after")
     def grouping_and_join_are_exclusive(self) -> "SemanticSpec":
@@ -79,4 +83,8 @@ class SemanticSpec(Contract):
             raise ValueError("join queries cannot declare group_by")
         if self.group_by and isinstance(self.time_window, LatestSnapshot):
             raise ValueError("latest-snapshot queries cannot declare group_by")
+        if len(set(self.order_by)) != len(self.order_by):
+            raise ValueError("duplicate order_by dimension")
+        if self.limit is not None and not self.order_by and not self.group_by:
+            raise ValueError("limit queries require explicit order_by or group_by")
         return self

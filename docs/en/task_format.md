@@ -41,7 +41,9 @@ Four frozen Tiny data variants are supported: `tiny_seed_43_distribution`, `tiny
 }
 ~~~
 
-The default query pattern is single-metric, single-table. Five executable Join paths are supported (`customer_transactions`, `customer_holdings`, `customer_asset_snapshots`, `customer_cash_flows`, `customer_service_relations`), all joining on `dim_customer.customer_id` and performing authorized aggregations. `group_by` supports whitelisted categorical dimensions (`region`, `customer_level`, `risk_level`, `channel`, `transaction_type`), strictly rejecting single-customer identifier keys such as `customer_id`. The execution gateway enforces group-level aggregation defenses (`COALESCE(MIN(cnt), 0) >= 3`), and multiset comparison is used.
+The default query pattern is single-metric, single-table. Five executable Join paths are supported (`customer_transactions`, `customer_holdings`, `customer_asset_snapshots`, `customer_cash_flows`, `customer_service_relations`), all joining on `dim_customer.customer_id` and performing authorized aggregations. `group_by` supports whitelisted categorical dimensions (`region`, `customer_level`, `risk_level`, `channel`, `transaction_type`), strictly rejecting single-customer identifier keys such as `customer_id`. The execution gateway enforces group-level aggregation defenses (`COALESCE(MIN(cnt), 0) >= 3`), and multiset comparison is used by default.
+
+Top-K and explicit ordering syntax are supported (`limit`, `order_by`, `order_direction`). Queries specifying `limit` require explicit ordering criteria. To eliminate evaluation nondeterminism caused by ties across database engines, the compiler and independent Oracle follow deterministic total ordering tie-breaking (primary sort column + group dimensions ASC). The evaluator uses `ComparisonPolicy(ordered=True)` to verify strict ordered row parity.
 
 `time_window` supports three distinct modes:
 1. `rolling`: Rolling day window backwards from an anchor date.

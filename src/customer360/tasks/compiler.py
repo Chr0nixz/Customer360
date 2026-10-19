@@ -321,9 +321,17 @@ def compile_semantic(spec: SemanticSpec, repository: MetadataRepository) -> Comp
     if spec.group_by:
         key_select = ", ".join(f'"{name}" AS "{name}"' for name in spec.group_by)
         group_clause = " GROUP BY " + ", ".join(f'"{name}"' for name in spec.group_by)
+        order_clause = ""
+        if spec.order_by or spec.limit is not None:
+            direction = spec.order_direction.upper()
+            primary = spec.order_by[0] if spec.order_by else alias
+            tie_breakers = [f'"{dim}" ASC' for dim in spec.group_by if dim != primary]
+            order_items = [f'"{primary}" {direction}'] + tie_breakers
+            order_clause = " ORDER BY " + ", ".join(order_items)
+        limit_clause = f" LIMIT {spec.limit}" if spec.limit is not None else ""
         sql = (
             f'SELECT {key_select}, {expression} AS "{alias}" '
-            f'FROM "{metric.source_table}"{where}{group_clause}'
+            f'FROM "{metric.source_table}"{where}{group_clause}{order_clause}{limit_clause}'
         )
         key_columns = tuple(
             Column(name=name, kind=table.column(name).kind) for name in spec.group_by

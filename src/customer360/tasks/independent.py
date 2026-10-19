@@ -194,6 +194,31 @@ def compute_independent(
         for key, rows in groups.items():
             cell, output_kind = _aggregate(rows)
             result_rows.append((*key, cell))
+
+        if spec.order_by or spec.limit is not None:
+            reverse = spec.order_direction.lower() == "desc"
+            measure_index = len(spec.group_by)
+            primary_name = spec.order_by[0] if spec.order_by else metric.output_column
+
+            # Two-pass stable sort to ensure primary sort direction while
+            # tie-breakers remain strictly ASC
+            result_rows.sort(key=lambda r: tuple(str(r[i]) for i in range(len(spec.group_by))))
+            if primary_name == metric.output_column:
+                result_rows.sort(
+                    key=lambda r: (
+                        Decimal(r[measure_index])
+                        if r[measure_index] is not None
+                        else Decimal("-Infinity")
+                    ),
+                    reverse=reverse,
+                )
+            else:
+                dim_idx = spec.group_by.index(primary_name)
+                result_rows.sort(key=lambda r: r[dim_idx], reverse=reverse)
+
+            if spec.limit is not None:
+                result_rows = result_rows[: spec.limit]
+
         columns = tuple(
             Column(name=name, kind=kind) for name, kind in zip(spec.group_by, kinds, strict=True)
         ) + (Column(name=metric.output_column, kind=output_kind),)

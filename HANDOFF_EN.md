@@ -53,6 +53,11 @@ The current implementation encompasses:
   1. Release pipeline: added `.github/workflows/release.yml` triggered on `v*.*.*` tag push and `workflow_dispatch`;
   2. Automatic build & checksum generation: builds distribution packages (`.whl`, `.tar.gz`) and computes `SHA256SUMS`;
   3. GitHub Release publication: uses `softprops/action-gh-release@v2` with `docs/releases/v1.1.0.md` release notes and uploaded distribution assets; first workflow run `39310579161` completed with 100% success ([Release Page](https://github.com/Chr0nixz/Customer360/releases/tag/v1.1.0)).
+- **2026-10-20 v1.4 DSL Semantic Extensions & Deterministic Total Ordering for Ties (Top-K, D066)**:
+  1. Contract extensions: extended `SemanticSpec` with `limit`, `order_by`, and `order_direction`, validating explicit ordering dependencies on limit queries;
+  2. Deterministic total ordering for ties: compiler `compile_semantic` and independent Oracle `compute_independent` strictly enforce the total ordering tie-breaker rule ("primary DESC/ASC + group dimensions ASC"), eliminating cross-engine nondeterminism;
+  3. Two-pass stable sorting: implemented two-pass stable sorting with decimal coercion in memory slices for exact limit truncation;
+  4. Strict ordered parity verification: evaluator uses `ComparisonPolicy(ordered=True)` for strict ordered row parity; added dedicated test suite `tests/test_v1_4_dsl_topk.py` (5/5 passed).
 
 ## 2. Completed vs. Uncompleted Status
 

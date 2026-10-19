@@ -128,6 +128,12 @@
 - **全自动制品构建与摘要生成**：自动执行 `uv build` 构建 `.whl` 与 `.tar.gz` 发布分发包，动态计算生成 `SHA256SUMS`；
 - **GitHub Release 官方发布**：利用 `softprops/action-gh-release@v2` 自动关联 `docs/releases/v1.1.0.md` 中英文 Release Notes，并自动上传分发包与校验和资产；首次运行 Run `39310579161` 100% 成功完成发布（[Release 页面](https://github.com/Chr0nixz/Customer360/releases/tag/v1.1.0)）。
 
+**2026-10-20 v1.4 DSL 语义扩展与确定性全序并列裁决 (Top-K & Ties Handling, D066)**：
+- **契约层扩展**：`SemanticSpec` 扩充 `limit`、`order_by`、`order_direction` 字段，模型校验强制要求 `limit` 查询具备明确排序依据；
+- **确定性全序 Tie-breaker 裁决规则**：为杜绝不同执行引擎在遇到并列度量时产生行顺序不确定性，编译器 `compile_semantic` 与独立 Oracle `compute_independent` 严格遵循“主排序列 DESC/ASC + 分组维度 ASC”的全序消歧规则；
+- **独立 Oracle 两阶段稳定排序**：在内存切片上实现度量值数值转换与两阶段稳定排序，截断至指定 Limit；
+- **严格有序全等比对**：比对器采用 `ComparisonPolicy(ordered=True)` 进行有序行比对与浮点容差校验；新增 `tests/test_v1_4_dsl_topk.py` 专属测试套件（5/5 全部通过）。
+
 阅读顺序：要跑命令先读 [使用说明](docs/user-guide.md)；改代码读 AGENTS.md → 本文件 → docs/architecture.md → docs/data_dictionary.md → ROADMAP.md；公开到 GitHub 读 [docs/github-publish.md](docs/github-publish.md) 与 [CONTRIBUTING.md](CONTRIBUTING.md)。原方案继续保留，矛盾处理见 ROADMAP。
 
 ## 2. 已完成与尚未完成
