@@ -14,6 +14,11 @@ Current protocol: package `1.1.0`, formal evaluator `0.6`, score protocol `1.0`.
 2. **Always use `uv run`.** Do not invoke system `python` or `pytest`, which might resolve to different environments.
 3. **Separate public inputs from trusted oracles.** Agents only receive the prompt, authorized public metadata YAML, and controlled tools. `pack.json`, `generated_oracles.yaml`, `hidden_oracles.yaml`, `data/trusted/`, Gold SQL, and hidden random seeds must never be provided to the evaluated Agent, nor packaged into wheels or images.
 
+Supported Agent Drivers (`--agent`):
+- `baseline` (default): Official local deterministic offline planner using public metadata; no network dependencies.
+- `local-model`: Local offline LLM adapter (configured via `C360_LOCAL_MODEL_URL` connecting to local Ollama / vLLM loopback endpoints; external network strictly fail-closed).
+- `template`: Protocol interaction test driver.
+
 CLI Exit Codes:
 
 | Code | Meaning |

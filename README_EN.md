@@ -43,7 +43,7 @@ For daily development workflows, 300-task evaluation packs, hidden test sets, of
 | Performance diagnostics (non-scoring) | `c360 perf-baseline` |
 | Formal release gates | `c360 prepare-formal-release`, `c360 check-formal-release` |
 
-Full CLI parameters can be viewed via `uv run c360 --help` or `uv run c360 <command> --help`. Unimplemented commands fail with explicit errors rather than silently pretending success. Unregistered external model agents fail-closed.
+Full CLI parameters can be viewed via `uv run c360 --help` or `uv run c360 <command> --help`. Supports the official `--agent baseline` and local offline models via `--agent local-model`; external commercial model networks are strictly fail-closed. Unimplemented commands fail with explicit errors rather than silently pretending success.
 
 ## Rules & Restrictions
 

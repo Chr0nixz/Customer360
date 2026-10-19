@@ -14,6 +14,11 @@
 2. **用 `uv run`。** 不要调用系统里可能指向别的环境的 `python` / `pytest`。
 3. **分清公开输入和可信侧。** 交给 Agent 的只有问题、公开 YAML 和受控工具。`pack.json`、`generated_oracles.yaml`、`hidden_oracles.yaml`、`data/trusted/`、Gold SQL、隐藏种子都不得发给被评对象，也不得打进 wheel。
 
+受支持的 Agent 驱动（`--agent`）：
+- `baseline`（默认）：官方本地离线规划器，基于公开元数据与确定性意图规划，无网络依赖；
+- `local-model`：本地离线开源大模型适配器（通过 `C360_LOCAL_MODEL_URL` 连接本地 Ollama / vLLM 回环端点，严格拒绝外网连接）；
+- `template`：协议交互测试驱动。
+
 退出码约定：
 
 | 码 | 含义 |

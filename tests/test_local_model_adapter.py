@@ -64,6 +64,7 @@ def test_assert_local_endpoint_blocks_external_addresses():
     assert_local_endpoint("http://localhost:8000/v1")
     assert_local_endpoint("http://0.0.0.0:8080/v1")
     assert_local_endpoint("http://[::1]:11434/v1")
+    assert_local_endpoint("https://127.0.0.1:8443/v1")
 
     # Prohibited external hosts
     for bad_url in (
@@ -72,9 +73,47 @@ def test_assert_local_endpoint_blocks_external_addresses():
         "http://192.168.1.50:8000/v1",
         "http://10.0.0.1:11434/v1",
         "https://example.com/api",
+        "ftp://127.0.0.1:21/v1",
+        "file:///etc/passwd",
     ):
-        with pytest.raises(ValueError, match="External network connection prohibited"):
+        with pytest.raises(ValueError):
             assert_local_endpoint(bad_url)
+
+
+def test_local_model_adapter_filters_out_customer_id_group_by(baseline):
+    # If the model emits customer_id in group_by, adapter should filter it out
+    model_json = json.dumps(
+        {
+            "action": "answer",
+            "metric_name": "active_customer_count",
+            "time_kind": "none",
+            "group_by": ["customer_id", "region"],
+            "filters": [],
+        }
+    )
+    mock_response = json.dumps(
+        {"choices": [{"message": {"content": f"```json\n{model_json}\n```"}}]}
+    )
+
+    agent = create_local_model_agent(http_poster=lambda url, body, timeout: mock_response)
+    repo = MetadataRepository()
+    db_path = baseline / "dataset.duckdb"
+    gateway = ExecutionGateway(db_path, tiny_eval_policy())
+    tools = ToolSession(gateway, repo)
+    request = AgentRequest(
+        case_id="C360_TEST_GROUP",
+        question="按地区统计活跃客户数",
+        anchor_date=date(2025, 6, 30),
+        metadata_version=repo.metrics.metrics_version,
+    )
+
+    response = agent.respond(request, tools)
+    assert isinstance(response, Success)
+    # customer_id must not appear in GROUP BY, but region remains
+    assert "GROUP BY" in response.sql
+    group_by_clause = response.sql.split("GROUP BY", 1)[1]
+    assert "customer_id" not in group_by_clause.lower()
+    assert '"region"' in group_by_clause
 
 
 def test_local_model_adapter_answer_end_to_end(baseline):

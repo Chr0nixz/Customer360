@@ -32,8 +32,13 @@ def assert_local_endpoint(endpoint_url: str) -> None:
     """Validate that the given endpoint resolves strictly to local loopback."""
     urllib_parse = importlib.import_module("urllib.parse")
     parsed = urllib_parse.urlparse(endpoint_url)
+    scheme = (parsed.scheme or "").lower()
+    if scheme not in {"http", "https"}:
+        raise ValueError(
+            f"Invalid URL scheme: '{scheme}'. Only http/https local loopback endpoints permitted."
+        )
     hostname = (parsed.hostname or "").lower()
-    if hostname not in ALLOWED_LOCAL_HOSTS:
+    if not hostname or hostname not in ALLOWED_LOCAL_HOSTS:
         raise ValueError(
             f"External network connection prohibited: '{hostname}' is not in local loopback "
             f"whitelist {sorted(ALLOWED_LOCAL_HOSTS)}. External models are strictly fail-closed."
@@ -79,7 +84,9 @@ def _build_user_prompt(packet: AdapterPacket) -> str:
     payload = {
         "question": packet.question,
         "anchor_date": packet.anchor_date.isoformat(),
-        "conversation": list(packet.conversation),
+        "conversation_history": [
+            {"role": role, "content": content} for role, content in packet.conversation
+        ],
         "candidate_metrics": [
             {
                 "metric_name": m.get("metric_name"),
@@ -195,13 +202,20 @@ class LocalModelAdapter(ModelAdapter):
     def _default_post(self, url: str, body: dict[str, Any], timeout: float) -> str:
         assert_local_endpoint(url)
         urllib_request = importlib.import_module("urllib.request")
+
+        class SafeLocalRedirectHandler(urllib_request.HTTPRedirectHandler):
+            def redirect_request(self, req, fp, code, msg, headers, newurl):
+                assert_local_endpoint(newurl)
+                return super().redirect_request(req, fp, code, msg, headers, newurl)
+
+        opener = urllib_request.build_opener(SafeLocalRedirectHandler)
         data = json.dumps(body).encode("utf-8")
         req = urllib_request.Request(
             url,
             data=data,
             headers={"Content-Type": "application/json", "User-Agent": "Customer360-LocalModel"},
         )
-        with urllib_request.urlopen(req, timeout=timeout) as resp:
+        with opener.open(req, timeout=timeout) as resp:
             return resp.read().decode("utf-8")
 
     def _parse_response(self, raw_text: str, packet: AdapterPacket) -> Intent:
@@ -253,7 +267,11 @@ class LocalModelAdapter(ModelAdapter):
                     )
                 )
 
-        group_by = tuple(str(g) for g in data.get("group_by") or ())
+        # Pre-execution defense: discard single customer identifiers from group_by
+        forbidden_groups = frozenset({"customer_id", "id", "cust_id", "customer_name"})
+        group_by = tuple(
+            str(g) for g in data.get("group_by") or () if str(g).lower() not in forbidden_groups
+        )
         return Intent(
             action="answer",
             metric_name=metric_name,

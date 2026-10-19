@@ -43,7 +43,7 @@ uv run c360 smoke --output outputs/smoke-local
 | 性能（非分数） | `c360 perf-baseline` |
 | 发布门 | `c360 prepare-formal-release`、`c360 check-formal-release` |
 
-完整参数：`uv run c360 --help` 或 `uv run c360 <命令> --help`。未实现的命令会报错，不会假装成功。外部模型 agent 标识会 fail-closed。
+完整参数：`uv run c360 --help` 或 `uv run c360 <命令> --help`。支持官方 `--agent baseline` 与本地离线大模型 `--agent local-model`；外部商业云端模型网络请求严格 fail-closed。未实现的命令会报错，不会假装成功。
 
 ## 不要做的事
 
