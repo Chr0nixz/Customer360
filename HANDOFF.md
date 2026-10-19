@@ -117,6 +117,12 @@
 - **语义验收与 Oracle 闭环**：全部 61 道 Answer 在隔离 Tiny 数据集上 100% 匹配独立 Python Oracle，全部改写槽位通过，全部 8 类错误 SQL 100% 区分；
 - **契约与测试加固**：`HIDDEN_DEFAULT_COUNT` 默认提升至 100，CLI 默认生成 100 题；新增 `test_hidden_100_pack_stratified_and_isolated` 端到端语义与隔离回归。
 
+**2026-10-20 本地离线大模型适配器落地与严格回环网络防御 (D065)**：
+- **本地大模型推理端点支持**：实现 `LocalModelAdapter` 与 `create_local_model_agent`，适配 Ollama/vLLM/llama.cpp 等本地 OpenAI 兼容服务（默认 `http://127.0.0.1:11434/v1`）；
+- **严格本地回环与公网阻断**：`assert_local_endpoint` 实施严格的主机白名单校验（仅允许 `localhost`, `127.0.0.1`, `::1`, `0.0.0.0`），坚守对外部公网 IP/域名的 Fail-Closed 拦截；
+- **纯净性与优雅降级**：采用延迟动态导入消除 `agent` 模块的静态网络库依赖（满足 `_denied_imports` 纯净度检查）；支持结构化 Prompt 注入与 JSON 意图抽取，具备超时/网络故障自动降级为安全拒绝；CLI 与矩阵评测原生支持 `--agent local-model`；
+- **专属测试套件**：新增 `tests/test_local_model_adapter.py`，覆盖外网拦截、Answer 端到端、Clarify、Refuse、网络降级与 Agent 解析 6 大场景。
+
 阅读顺序：要跑命令先读 [使用说明](docs/user-guide.md)；改代码读 AGENTS.md → 本文件 → docs/architecture.md → docs/data_dictionary.md → ROADMAP.md；公开到 GitHub 读 [docs/github-publish.md](docs/github-publish.md) 与 [CONTRIBUTING.md](CONTRIBUTING.md)。原方案继续保留，矛盾处理见 ROADMAP。
 
 ## 2. 已完成与尚未完成

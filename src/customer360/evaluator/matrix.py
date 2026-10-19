@@ -51,6 +51,14 @@ def resolve_eval_agent(agent_id: str) -> Agent:
         return TemplateAgent()
     if agent_id == "baseline":
         return BaselineAgent()
+    if agent_id in {"local-model", "local_model"}:
+        import os
+
+        from customer360.agent.local_model import create_local_model_agent
+
+        endpoint = os.getenv("C360_LOCAL_MODEL_URL", "http://127.0.0.1:11434/v1")
+        model = os.getenv("C360_LOCAL_MODEL_NAME", "local-model")
+        return create_local_model_agent(endpoint=endpoint, model=model)
     if agent_id in NETWORK_AGENT_IDS:
         raise ValueError("external model network is not permitted")
     raise ValueError(f"unknown agent: {agent_id}")

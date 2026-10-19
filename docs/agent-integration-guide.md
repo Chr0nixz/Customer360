@@ -272,6 +272,34 @@ uv run c360 evaluate --dataset outputs/tiny-local --distribution-variant outputs
 uv run c360 report --input outputs/matrix-eval --format html
 ```
 
+### 4.3 接入本地离线大模型 (Local Offline LLM)
+
+Customer360 原生支持通过标准 OpenAI 兼容接口连接**本地离线大模型**（如通过 Ollama、vLLM、llama.cpp 或 SGLang 部署的开源大模型）。
+
+#### 1. 严格安全红线与回环防御
+- **完全本地离线**：系统仅允许连接本地回环主机（`localhost`、`127.0.0.1`、`::1`、`0.0.0.0`），任何连接外部公网 IP 或域名的行为将被物理拦截并 Fail-Closed；
+- **物理沙箱受控不变**：大模型生成的所有 SQL 仍须严格通过单条只读、高基数 ID 拦截、授权行列前置物化以及组粒度防御（`min_group_size`）。
+
+#### 2. 启动本地推理引擎
+以 Ollama 为例启动本地兼容服务：
+```bash
+ollama run qwen2.5-coder:7b
+# Ollama 默认监听 http://127.0.0.1:11434/v1
+```
+
+#### 3. CLI 指定本地模型评测
+通过环境变量指定本地端点与模型名，传入 `--agent local-model`：
+```bash
+export C360_LOCAL_MODEL_URL="http://127.0.0.1:11434/v1"
+export C360_LOCAL_MODEL_NAME="qwen2.5-coder:7b"
+
+# 调试单题
+uv run c360 run-case --case-id C360_0001 --agent local-model --dataset outputs/tiny-local --output outputs/run-local-model
+
+# 评测公开题包
+uv run c360 evaluate --dataset outputs/tiny-local --distribution-variant outputs/var-dist --duplicate-variant outputs/var-dup --null-variant outputs/var-null --date-variant outputs/var-date --agent local-model --mode same_sql --output outputs/eval-local-model
+```
+
 ---
 
 ## 5. 评测判定与常见错误分类

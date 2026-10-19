@@ -44,6 +44,11 @@ The current implementation encompasses:
   2. Scientific stratification quota: established `count >= 100` stratification quota (61 Answer / 23 Clarification / 16 Refusal), covering 26 distinct metrics and 100% of 8 required error classes;
   3. Semantic verification & Oracle closure: all 61 compilable answers pass 1:1 cross-checking with independent Python oracles on isolated Tiny data, 100% rewrites pass, all 8 error classes distinguished;
   4. Contract & testing hardening: `HIDDEN_DEFAULT_COUNT` and CLI default count updated to 100; added end-to-end regression `test_hidden_100_pack_stratified_and_isolated`.
+- **2026-10-20 Local Offline Model Adapter & Strict Loopback Network Defense (D065)**:
+  1. Local LLM endpoint support: implemented `LocalModelAdapter` and `create_local_model_agent` for local OpenAI-compatible inference servers (defaulting to `http://127.0.0.1:11434/v1`);
+  2. Strict loopback defense: `assert_local_endpoint` enforces local loopback host whitelisting (`localhost`, `127.0.0.1`, `::1`, `0.0.0.0`), rejecting external network connections fail-closed;
+  3. Purity & graceful degradation: in-method dynamic imports avoid static network dependencies in `agent` modules (preserving `_denied_imports` pureness); supports structured prompt injection and JSON intent extraction with graceful fallback; CLI and matrix evaluation accept `--agent local-model`;
+  4. Dedicated test suite: added `tests/test_local_model_adapter.py` covering external blocking, Answer end-to-end, Clarify, Refusal, network fallback, and Agent resolution.
 
 ## 2. Completed vs. Uncompleted Status
 

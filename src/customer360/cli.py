@@ -492,7 +492,9 @@ def run_case(
     case_id: Annotated[str, typer.Option(help="Human pack case id such as C360_0001")],
     dataset: Annotated[Path, typer.Option(help="Canonical Tiny dataset directory (seed 42)")],
     output: Annotated[Path, typer.Option(help="New output directory; must not exist")],
-    agent: Annotated[str, typer.Option(help="Local driver: baseline or template")] = "baseline",
+    agent: Annotated[
+        str, typer.Option(help="Local driver: baseline, local-model, or template")
+    ] = "baseline",
     oracles: Annotated[
         Path, typer.Option(help="Trusted human oracles; not shipped in the wheel")
     ] = DEFAULT_TRUSTED_ORACLES,
@@ -520,7 +522,9 @@ def run_case(
 def debug_case_cmd(
     case_id: Annotated[str, typer.Option(help="Human pack case id such as C360_0001")],
     dataset: Annotated[Path, typer.Option(help="Canonical Tiny dataset directory (seed 42)")],
-    agent: Annotated[str, typer.Option(help="Local driver: baseline or template")] = "baseline",
+    agent: Annotated[
+        str, typer.Option(help="Local driver: baseline, local-model, or template")
+    ] = "baseline",
     oracles: Annotated[
         Path, typer.Option(help="Trusted human oracles; not shipped in the wheel")
     ] = DEFAULT_TRUSTED_ORACLES,
@@ -656,7 +660,9 @@ def evaluate_hidden(
     dataset: Annotated[Path, typer.Option(help="Hidden Tiny directory with hidden_profile.json")],
     pack: Annotated[Path, typer.Option(help="Independent hidden pack directory")],
     output: Annotated[Path, typer.Option(help="New output directory; must not exist")],
-    agent: Annotated[str, typer.Option(help="Local driver: baseline or template")] = "baseline",
+    agent: Annotated[
+        str, typer.Option(help="Local driver: baseline, local-model, or template")
+    ] = "baseline",
     variant: Annotated[
         list[Path] | None,
         typer.Option(
@@ -767,9 +773,9 @@ def perf_baseline(
         typer.Option(help="Required for generate: tiny, standard, or large"),
     ] = None,
     seed: Annotated[int, typer.Option(min=0, help="Generation seed; ignored otherwise")] = 42,
-    agent: Annotated[str, typer.Option(help="Local driver for evaluate: baseline or template")] = (
-        "baseline"
-    ),
+    agent: Annotated[
+        str, typer.Option(help="Local driver for evaluate: baseline, local-model, or template")
+    ] = "baseline",
     config: Annotated[Path, typer.Option(help="YAML generation config path")] = Path(
         "configs/data_generation.yaml"
     ),

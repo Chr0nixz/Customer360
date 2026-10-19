@@ -269,6 +269,34 @@ uv run c360 evaluate --dataset outputs/tiny-local --distribution-variant outputs
 uv run c360 report --input outputs/matrix-eval --format html
 ```
 
+### 4.3 Integrating Local Offline LLMs
+
+Customer360 natively supports connecting **local offline LLMs** via standard OpenAI-compatible endpoints (e.g., open-source models deployed via Ollama, vLLM, llama.cpp, or SGLang).
+
+#### 1. Security Boundaries and Loopback Defense
+- **Strictly Local Loopback**: Network access is restricted to loopback addresses (`localhost`, `127.0.0.1`, `::1`, `0.0.0.0`). Any attempt to connect to external public domains or non-local IPs is fail-closed;
+- **Uncompromised Physical Sandbox**: All model-generated SQL must still pass single-statement read-only checks, high-cardinality ID blocking, pre-aggregation authorized projection, and group-size defense (`min_group_size`).
+
+#### 2. Start a Local Inference Engine
+Start a local inference server, for example with Ollama:
+```bash
+ollama run qwen2.5-coder:7b
+# Default OpenAI-compatible endpoint: http://127.0.0.1:11434/v1
+```
+
+#### 3. CLI Evaluation with Local Model
+Configure the endpoint via environment variables and specify `--agent local-model`:
+```bash
+export C360_LOCAL_MODEL_URL="http://127.0.0.1:11434/v1"
+export C360_LOCAL_MODEL_NAME="qwen2.5-coder:7b"
+
+# Single-case debugging
+uv run c360 run-case --case-id C360_0001 --agent local-model --dataset outputs/tiny-local --output outputs/run-local-model
+
+# Full public matrix evaluation
+uv run c360 evaluate --dataset outputs/tiny-local --distribution-variant outputs/var-dist --duplicate-variant outputs/var-dup --null-variant outputs/var-null --date-variant outputs/var-date --agent local-model --mode same_sql --output outputs/eval-local-model
+```
+
 ---
 
 ## 5. Failure Attribution and Error Codes
