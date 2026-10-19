@@ -51,7 +51,7 @@ FORMAL_LIMITATIONS = (
     "Scores are local audit artifacts; ranking_enabled is permanently false",
     "Hidden data, trusted Gold and private evaluator inputs are not public artifacts",
     "Token count and scan volume remain unavailable rather than reported as zero",
-    "v1.0.0 is unsigned until every RC evidence gate passes, including docker_runtime",
+    "Release is unsigned until every RC evidence gate passes, including docker_runtime",
 )
 ARCHIVE_FORBIDDEN_PARTS = frozenset(
     {"outputs", ".venv", ".private", "hidden", "trusted", "secrets"}
@@ -98,18 +98,24 @@ def distribution_leaks(path: Path) -> tuple[str, ...]:
 
 
 def _formal_distributions(root: Path) -> tuple[Path, Path]:
+    from customer360 import __version__
+
     dist = root / "dist"
-    wheels = sorted(dist.glob("customer360_agent_benchmark-1.0.0-*.whl"))
-    sdists = sorted(dist.glob("customer360_agent_benchmark-1.0.0.tar.gz"))
+    wheels = sorted(dist.glob(f"customer360_agent_benchmark-{__version__}-*.whl"))
+    sdists = sorted(dist.glob(f"customer360_agent_benchmark-{__version__}.tar.gz"))
     if not wheels or not sdists:
-        raise ValueError("formal release requires the 1.0.0 wheel and sdist in dist/")
+        raise ValueError(f"formal release requires the {__version__} wheel and sdist in dist/")
     return wheels[-1], sdists[-1]
 
 
 def _sbom_document(root: Path) -> dict:
+    from customer360 import __version__
+
     lock = tomllib.loads((root / "uv.lock").read_text(encoding="utf-8"))
-    components = [{"type": "library", "name": "customer360-agent-benchmark", "version": "1.0.0"}]
-    seen: set[tuple[str, str]] = {("customer360-agent-benchmark", "1.0.0")}
+    components = [
+        {"type": "library", "name": "customer360-agent-benchmark", "version": __version__}
+    ]
+    seen: set[tuple[str, str]] = {("customer360-agent-benchmark", __version__)}
     for package in lock.get("package", []):
         name = package.get("name")
         version = package.get("version")
@@ -322,10 +328,14 @@ def bind_reproducible_build(
 
 
 def _distributions_in(directory: Path) -> tuple[Path, Path]:
-    wheels = sorted(directory.glob("customer360_agent_benchmark-1.0.0-*.whl"))
-    sdists = sorted(directory.glob("customer360_agent_benchmark-1.0.0.tar.gz"))
+    from customer360 import __version__
+
+    wheels = sorted(directory.glob(f"customer360_agent_benchmark-{__version__}-*.whl"))
+    sdists = sorted(directory.glob(f"customer360_agent_benchmark-{__version__}.tar.gz"))
     if not wheels or not sdists:
-        raise ValueError(f"reproducible build directory missing 1.0.0 wheel/sdist: {directory}")
+        raise ValueError(
+            f"reproducible build directory missing {__version__} wheel/sdist: {directory}"
+        )
     return wheels[-1], sdists[-1]
 
 
@@ -359,6 +369,8 @@ def license_evidence(root: Path) -> LicenseEvidence:
 
 
 def public_artifacts_evidence(root: Path) -> PublicArtifactsEvidence:
+    from customer360 import __version__
+
     try:
         wheel, sdist = _formal_distributions(root)
     except ValueError:
@@ -367,7 +379,7 @@ def public_artifacts_evidence(root: Path) -> PublicArtifactsEvidence:
             wheel_present=False,
             sdist_present=False,
             leak_count=1,
-            limitations=("1.0.0 wheel and sdist must exist in dist/",),
+            limitations=(f"{__version__} wheel and sdist must exist in dist/",),
         )
     leaks = distribution_leaks(wheel) + distribution_leaks(sdist)
     return PublicArtifactsEvidence(
@@ -682,7 +694,10 @@ def check_formal_release(manifest_dir: Path, *, root: Path | None = None) -> dic
         raise ValueError("formal_release_manifest.json not found")
     manifest = FormalReleaseManifest.model_validate_json(path.read_text(encoding="utf-8"))
     issues: list[str] = []
-    if manifest.package_version != "1.0.0" or manifest.score_protocol_version != "1.0":
+    if (
+        manifest.package_version not in {"1.0.0", "1.1.0"}
+        or manifest.score_protocol_version != "1.0"
+    ):
         issues.append("formal protocol versions are not frozen")
     if not (root / "LICENSE").is_file() or not (root / "NOTICE").is_file():
         issues.append("Apache-2.0 license files are missing")

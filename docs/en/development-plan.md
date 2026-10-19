@@ -206,7 +206,7 @@ These are proposals, not frozen protocols. Maintainers record decisions before d
 
 | ID | Decision | Recommendation and progress before confirmation |
 |---|---|---|
-| P-01 | Next mainline release version | Recommend v1.1.0; prepare reproducers/contracts without changing package version or tags |
+| P-01 | Next mainline release version | Confirmed and locked as v1.1.0 (distinct from historical v1.0.0 at 09d5c64, containing WP-01–WP-07 and v1.1–v1.3 evolutions) |
 | P-02 | Action quotas and Dev quality checks | Recommend WP-04 targets; prove family-pool feasibility/migration before producing new formal packs |
 | P-03 | PostgreSQL in this formal release | Default to G3a and DuckDB-only formal evaluation; G3b requires separate scope approval and live qualification |
 | P-04 | Evidence trust and custody | Designate trusted CI/maintainer and private storage; implement local integrity tests now, confirm provenance before signing |

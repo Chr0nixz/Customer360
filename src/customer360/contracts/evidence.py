@@ -185,7 +185,7 @@ class DockerRuntimeEvidence(RcEvidence):
 
 class ReproducibleBuildEvidence(RcEvidence):
     gate: Literal["reproducible_build"] = "reproducible_build"
-    package_version: Literal["1.0.0"] = "1.0.0"
+    package_version: Literal["1.0.0", "1.1.0"] = "1.1.0"
     uv_lock_digest: Text
     member_names_match: bool
     byte_identical: bool

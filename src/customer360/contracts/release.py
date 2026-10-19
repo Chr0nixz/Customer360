@@ -53,11 +53,11 @@ class ReleaseManifest(Contract):
 
 
 class FormalReleaseManifest(Contract):
-    """Public v1.0 release manifest; private evaluator inputs are referenced only by digest."""
+    """Public release manifest; private evaluator inputs are referenced only by digest."""
 
     artifact_kind: Literal["formal_release_manifest"] = "formal_release_manifest"
-    release_id: Literal["c360-1.0.0"] = "c360-1.0.0"
-    package_version: Literal["1.0.0"] = "1.0.0"
+    release_id: Literal["c360-1.0.0", "c360-1.1.0"] = "c360-1.1.0"
+    package_version: Literal["1.0.0", "1.1.0"] = "1.1.0"
     protocol_version: Text
     score_protocol_version: Literal["1.0"] = "1.0"
     evaluator_version: Literal["0.6"] = "0.6"

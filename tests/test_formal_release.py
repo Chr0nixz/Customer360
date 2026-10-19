@@ -1,4 +1,4 @@
-"""v1.0 formal score and RC evidence boundaries."""
+"""v1.0/v1.1 formal score and RC evidence boundaries."""
 
 import json
 import shutil
@@ -7,6 +7,7 @@ from pathlib import Path
 
 import pytest
 
+from customer360 import __version__
 from customer360.artifacts import write_json_new
 from customer360.contracts.evidence import (
     DockerRuntimeEvidence,
@@ -33,18 +34,18 @@ REPO = Path(__file__).resolve().parents[1]
 
 def _formal_dist_present(root: Path) -> bool:
     dist = root / "dist"
-    wheels = sorted(dist.glob("customer360_agent_benchmark-1.0.0-*.whl"))
-    sdists = sorted(dist.glob("customer360_agent_benchmark-1.0.0.tar.gz"))
+    wheels = sorted(dist.glob(f"customer360_agent_benchmark-{__version__}-*.whl"))
+    sdists = sorted(dist.glob(f"customer360_agent_benchmark-{__version__}.tar.gz"))
     return bool(wheels and sdists)
 
 
 @pytest.fixture(scope="module")
 def formal_distributions() -> None:
-    """CI checkouts do not commit dist/; build 1.0.0 artifacts when missing."""
+    """CI checkouts do not commit dist/; build artifacts when missing."""
     if _formal_dist_present(REPO):
         return
     uv = shutil.which("uv")
-    assert uv, "uv executable is required to build 1.0.0 wheel/sdist"
+    assert uv, "uv executable is required to build wheel/sdist"
     dest = REPO / "dist"
     dest.mkdir(parents=True, exist_ok=True)
     completed = subprocess.run(
