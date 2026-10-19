@@ -38,12 +38,17 @@ class Agent(Protocol):
 每次调用 `respond` 时，Agent 会收到一个不可变的 `AgentRequest`：
 
 ```python
+class Message:
+    role: Literal["user", "assistant"]
+    content: str
+    turn: int | None = None  # v1.1 协议新增多轮交互轮次标识
+
 class AgentRequest:
     case_id: str                   # 评测用例唯一标识 (如 "C360_0001")
     question: str                  # 用户自然语言提问
     anchor_date: date              # 业务时间锚点 (如 2025-06-30)，所有“近 N 天”均以此为基准
     metadata_version: str          # 元数据版本 (如 "0.3")
-    protocol_version: str = "0.1"  # 协议版本
+    protocol_version: str = "0.1"  # 协议版本（支持 "0.1" 与 "1.1"）
     conversation: tuple[Message]   # 历史对话记录，多轮澄清时包含往轮提问与回复
 ```
 
@@ -60,7 +65,7 @@ class AgentRequest:
 | `get_table_schema(table_name: str)` | `table_name: str` | `tuple[dict, ...]` | 获取指定授权表的字段元数据定义 |
 | `get_metric_definition(metric_name: str)` | `metric_name: str` | `dict` | 获取指标的技术口径、度量字段、固定过滤、支持维度等 |
 | `get_business_glossary(term: str)` | `term: str` | `tuple[dict, ...]` | 检索业务术语词典及关联指标 |
-| `get_join_paths(query: str)` | `query: str` | `tuple[dict, ...]` | 检索经过安全审查的表关联路径（v1.0 仅 `customer_transactions` 可编译） |
+| `get_join_paths(query: str)` | `query: str` | `tuple[dict, ...]` | 检索经过安全审查的表关联路径（含 5 条白名单可执行路径） |
 | `validate_query_plan(plan: dict)` | `plan: dict` | `dict` | 在执行前对逻辑查询计划进行自检，返回合法性与问题列表 |
 
 #### `execute_sql` 返回的 `QueryReceipt`
@@ -68,7 +73,9 @@ class AgentRequest:
 receipt = tools.execute_sql("SELECT COUNT(*) AS customer_count FROM dim_customer WHERE status = 'active'")
 print(receipt.query_id)     # 唯一执行凭证，用于在 Success 中回填
 print(receipt.result.rows)  # 结构化结果集: (('6',),)
-print(receipt.elapsed_ms)   # 物理执行耗时
+print(receipt.elapsed_ms)   # 端到端执行耗时 (ms)
+print(receipt.guard_ms)     # SQL Guard 静态校验耗时 (ms, v1.3)
+print(receipt.exec_ms)      # 物理执行耗时 (ms, v1.3)
 ```
 
 ### 2.4 AgentResponse 输出状态

@@ -38,12 +38,17 @@ class Agent(Protocol):
 On every `respond` invocation, the Agent receives an immutable `AgentRequest`:
 
 ```python
+class Message:
+    role: Literal["user", "assistant"]
+    content: str
+    turn: int | None = None  # Turn index for multi-turn clarification (v1.1)
+
 class AgentRequest:
     case_id: str                   # Unique case identifier (e.g. "C360_0001")
     question: str                  # Natural language prompt from the user
     anchor_date: date              # Business time anchor (e.g. 2025-06-30); all "last N days" derive from this
     metadata_version: str          # Metadata version (e.g. "0.3")
-    protocol_version: str = "0.1"  # Protocol version
+    protocol_version: str = "0.1"  # Protocol version (supports "0.1" and "1.1")
     conversation: tuple[Message]   # Conversation history for multi-turn clarification rounds
 ```
 
@@ -60,7 +65,7 @@ The execution gateway injects an `AgentTools` instance containing 9 controlled m
 | `get_table_schema(table_name: str)` | `table_name: str` | `tuple[dict, ...]` | Retrieves column definitions for a specified authorized table |
 | `get_metric_definition(metric_name: str)` | `metric_name: str` | `dict` | Retrieves technical specification, measure column, fixed filters, and supported dimensions |
 | `get_business_glossary(term: str)` | `term: str` | `tuple[dict, ...]` | Searches business glossary terms and associated metrics |
-| `get_join_paths(query: str)` | `query: str` | `tuple[dict, ...]` | Searches audited table join paths (only `customer_transactions` is executable in v1.0) |
+| `get_join_paths(query: str)` | `query: str` | `tuple[dict, ...]` | Searches audited table join paths (5 vetted executable paths) |
 | `validate_query_plan(plan: dict)` | `plan: dict` | `dict` | Pre-validates a logical query plan before execution, returning validity and issues |
 
 #### `execute_sql` and `QueryReceipt`
@@ -68,7 +73,9 @@ The execution gateway injects an `AgentTools` instance containing 9 controlled m
 receipt = tools.execute_sql("SELECT COUNT(*) AS customer_count FROM dim_customer WHERE status = 'active'")
 print(receipt.query_id)     # Unique receipt token, required in Success response
 print(receipt.result.rows)  # Structured results: (('6',),)
-print(receipt.elapsed_ms)   # Execution latency in milliseconds
+print(receipt.elapsed_ms)   # Total execution latency in milliseconds
+print(receipt.guard_ms)     # SQL Guard static validation latency (v1.3)
+print(receipt.exec_ms)      # Engine physical execution latency (v1.3)
 ```
 
 ### 2.4 AgentResponse Status Variants
