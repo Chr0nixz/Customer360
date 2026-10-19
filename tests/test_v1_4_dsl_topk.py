@@ -33,12 +33,25 @@ def test_topk_semantic_spec_contract_validation():
             order_by=("region", "region"),
         )
 
-    # Reject limit without group_by or order_by
-    with pytest.raises(ValueError, match="limit queries require explicit order_by or group_by"):
+    # Reject limit on scalar queries without group_by
+    with pytest.raises(
+        ValueError, match="ordering and limit are only valid on multi-row group_by queries"
+    ):
         SemanticSpec(
             metric="active_customer_count",
             limit=5,
         )
+
+
+def test_compiler_and_oracle_reject_invalid_order_by():
+    repo = MetadataRepository()
+    spec = SemanticSpec(
+        metric="active_customer_count",
+        group_by=("region",),
+        order_by=("unauthorized_column",),
+    )
+    with pytest.raises(Exception, match="order_by column 'unauthorized_column' is not allowed"):
+        compile_semantic(spec, repo)
 
 
 def test_compile_topk_sql_with_deterministic_tie_breaker():

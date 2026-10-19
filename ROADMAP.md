@@ -98,7 +98,8 @@
 - [x] 当前主线收口 (WP-01–WP-07)：已完成 WP-01–WP-07，发布完整性动态校验、PostgreSQL 安全兜底与 live 修复、公开 300 题 Dev 分层覆盖与 family 隔离、Baseline 质量加固与阶段性能采样模型全部闭环验收；
 - [x] v1.1 多轮反事实澄清与抗干扰协议：落地 `protocol_version: "1.1"`、`Message.turn` 轮次追踪、`SlotReply.distractor` 反事实噪声注入、过度追问拦截与 `MAX_CLARIFICATION_TURNS = 4` 轮次上限防护；
 - [x] v1.2 受控逻辑计划校验引擎与元数据生命周期演进：落地 `validate_query_plan`（9 类稳定拒绝码含 `INVALID_PLAN_SCHEMA` 与 `time_column` 校验）、指标生命周期（`deprecation_date >= effective_date`）、`DEPRECATED_METRIC_REJECTED` 替代指引与 `c360 audit-metadata` 全量外键拓扑闭包审计；
-- [x] v1.3 跨引擎方言转译、执行网关抽象与阶段性能采样加固：落地 `transpile_sql`（含 ALTER/TRUNCATE/MERGE 只读防御）、PostgreSQL 网关 Fail-Closed 准入隔离与前置 SQL Guard 防御、端到端阶段耗时采样模型（plan_ms / guard_ms / exec_ms / e2e_ms 及其 P50/P90/P95/P99 分位数）与 `tests/test_v1_3_engine_adaptation.py` 专属测试套件。
+- [x] v1.3 跨引擎方言转译、执行网关抽象与阶段性能采样加固：落地 `transpile_sql`（含 ALTER/TRUNCATE/MERGE 只读防御）、PostgreSQL 网关 Fail-Closed 准入隔离与前置 SQL Guard 防御、端到端阶段耗时采样模型（plan_ms / guard_ms / exec_ms / e2e_ms 及其 P50/P90/P95/P99 分位数）与 `tests/test_v1_3_engine_adaptation.py` 专属测试套件；
+- [x] v1.4 DSL Top-K 聚合查询与确定性全序并列裁决：落地 `limit`、`order_by`、`order_direction` 契约，实施排序列白名单校验与多行分组约束，构建确定性全序并列 Tie-breaker 消除数据库引擎底层随机差异，独立 Oracle 两阶段稳定排序与 `ComparisonPolicy(ordered=True)` 有序比对（D066）。
 
 ### 下一阶段执行顺序（2026-10-18 更新）
 

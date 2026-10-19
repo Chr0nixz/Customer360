@@ -323,6 +323,10 @@ def compile_semantic(spec: SemanticSpec, repository: MetadataRepository) -> Comp
         group_clause = " GROUP BY " + ", ".join(f'"{name}"' for name in spec.group_by)
         order_clause = ""
         if spec.order_by or spec.limit is not None:
+            valid_order_cols = set(spec.group_by) | {alias, metric.output_column}
+            for col in spec.order_by:
+                if col not in valid_order_cols:
+                    raise C360Error("SCHEMA_ERROR", f"order_by column '{col}' is not allowed")
             direction = spec.order_direction.upper()
             primary = spec.order_by[0] if spec.order_by else alias
             tie_breakers = [f'"{dim}" ASC' for dim in spec.group_by if dim != primary]

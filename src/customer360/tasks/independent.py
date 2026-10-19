@@ -196,13 +196,22 @@ def compute_independent(
             result_rows.append((*key, cell))
 
         if spec.order_by or spec.limit is not None:
+            valid_order_cols = set(spec.group_by) | {metric.output_column}
+            for col in spec.order_by:
+                if col not in valid_order_cols:
+                    raise C360Error("SCHEMA_ERROR", f"order_by column '{col}' is not allowed")
+
             reverse = spec.order_direction.lower() == "desc"
             measure_index = len(spec.group_by)
             primary_name = spec.order_by[0] if spec.order_by else metric.output_column
 
             # Two-pass stable sort to ensure primary sort direction while
             # tie-breakers remain strictly ASC
-            result_rows.sort(key=lambda r: tuple(str(r[i]) for i in range(len(spec.group_by))))
+            result_rows.sort(
+                key=lambda r: tuple(
+                    str(r[i]) if r[i] is not None else "" for i in range(len(spec.group_by))
+                )
+            )
             if primary_name == metric.output_column:
                 result_rows.sort(
                     key=lambda r: (
@@ -214,7 +223,10 @@ def compute_independent(
                 )
             else:
                 dim_idx = spec.group_by.index(primary_name)
-                result_rows.sort(key=lambda r: r[dim_idx], reverse=reverse)
+                result_rows.sort(
+                    key=lambda r: str(r[dim_idx]) if r[dim_idx] is not None else "",
+                    reverse=reverse,
+                )
 
             if spec.limit is not None:
                 result_rows = result_rows[: spec.limit]

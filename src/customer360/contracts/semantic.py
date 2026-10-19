@@ -85,6 +85,6 @@ class SemanticSpec(Contract):
             raise ValueError("latest-snapshot queries cannot declare group_by")
         if len(set(self.order_by)) != len(self.order_by):
             raise ValueError("duplicate order_by dimension")
-        if self.limit is not None and not self.order_by and not self.group_by:
-            raise ValueError("limit queries require explicit order_by or group_by")
+        if (self.limit is not None or self.order_by) and not self.group_by:
+            raise ValueError("ordering and limit are only valid on multi-row group_by queries")
         return self
