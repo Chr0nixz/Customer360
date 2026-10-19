@@ -12,7 +12,7 @@
 **怎么改代码：** 请读 [AGENTS.md](AGENTS.md)、[CONTRIBUTING.md](CONTRIBUTING.md) 和 [HANDOFF.md](HANDOFF.md)。  
 **怎么公开到 GitHub：** 请读 [GitHub 发布清单](docs/github-publish.md)。
 
-当前协议：package `1.0.0`，formal evaluator `0.6`，score protocol `1.0`。八个 RC 门按证据内容签署；`docker_runtime` 未签过就不能打 `v1.0.0`。`ranking_enabled` 永久为 false。
+当前协议：package `1.1.0`，formal evaluator `0.6`，score protocol `1.0`。八个 RC 门按证据内容签署；已完成 `v1.1.0` 正式发版。`ranking_enabled` 永久为 false。
 
 ## 最短验证
 

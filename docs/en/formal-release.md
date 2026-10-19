@@ -8,13 +8,13 @@ For day-to-day installation, evaluation, and scoring, see the [User Guide](user-
 
 ## Frozen Boundaries
 
-- Package 1.0.0, formal evaluator 0.6, score protocol 1.0, pack verification 0.2.
+- Package 1.1.0, formal evaluator 0.6, score protocol 1.0, pack verification 0.2.
 - Only reproducible local benchmarks are published; Public Dev and Private Hidden are reported separately, with `ranking_enabled=false` permanently.
 - Apache-2.0 license. Hidden data, trusted Gold, and private traces must never enter public tarballs, wheels, sdists, or Docker images. The source Git tree may retain `data/trusted` (covering only `C360_0001–0020`), but never hidden packs or `outputs/`.
 - Timeouts, worker crashes, execution errors, and invalid/missing responses count as failures; policy-incompatible cases are audited separately.
 - Token consumption and scan volume are marked `unavailable`, never reported as 0.
 - All eight RC evidence gates strictly validate evidence content. Empty files, legacy evaluator 0.5 reports, or placeholder digests (e.g., `sha256:abc123`) fail immediately. File presence does not imply gate satisfaction.
-- An unsigned `docker_runtime` gate must not carry a dummy digest, and `v1.0.0` cannot be tagged until it is signed with valid evidence.
+- An unsigned `docker_runtime` gate must not carry a dummy digest, and release tags cannot be created until all gates are verified.
 
 ## Hidden Set Replay
 

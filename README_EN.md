@@ -12,7 +12,7 @@ A local, offline, secure-by-default Agent benchmark featuring synthetic 9-table 
 **Development Conventions:** Read [AGENTS.md](AGENTS.md), [CONTRIBUTING.md](CONTRIBUTING.md), and [HANDOFF.md](HANDOFF.md).  
 **GitHub Publishing Checklist:** Read [GitHub Publishing Checklist](docs/en/github-publish.md) ([中文](docs/github-publish.md)).
 
-Current protocol baseline: package `1.0.0`, formal evaluator `0.6`, score protocol `1.0`. All eight RC gates are verified by cryptographic evidence; `v1.0.0` cannot be tagged without a signed `docker_runtime`. `ranking_enabled` is permanently set to `false`.
+Current protocol baseline: package `1.1.0`, formal evaluator `0.6`, score protocol `1.0`. All eight RC gates are verified by cryptographic evidence; `v1.1.0` formal release achieved. `ranking_enabled` is permanently set to `false`.
 
 ## Quick Verification
 

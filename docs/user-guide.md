@@ -6,7 +6,7 @@
 
 这是一套可复现、默认可安全执行的**本地离线** Agent benchmark，不是在线问数服务，也不是排行榜。
 
-当前协议：package `1.0.0`，formal evaluator `0.6`，score protocol `1.0`。`v1.0.0` 标签还要等八个 RC 门全部签署（本仓库的 `docker_runtime` 可能仍未签署）。没有在线排名。
+当前协议：package `1.1.0`，formal evaluator `0.6`，score protocol `1.0`。已完成 `v1.1.0` 正式发布。没有在线排名。
 
 ## 1. 三条硬规则
 

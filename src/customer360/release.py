@@ -632,7 +632,7 @@ def prepare_formal_release(
     elif gates["docker_runtime"]:
         docker_digest = resolved_digest
     if not artifacts.passed:
-        raise ValueError("public 1.0.0 artifacts leaked private paths or are missing")
+        raise ValueError(f"public {__version__} artifacts leaked private paths or are missing")
     output_dir.mkdir(parents=True, exist_ok=False)
     public_dir = output_dir / "public"
     public_dir.mkdir()
