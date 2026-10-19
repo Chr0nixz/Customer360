@@ -100,6 +100,12 @@
   3. PostgreSQL 网关防护验证：严格验证未准入（`admitted=False`）时 Fail-Closed 抛出 `ENGINE_UNAVAILABLE`，以及准入且带 Mock 驱动时在连接数据库前由 SQL Guard 拦截危险操作；
   4. 新增 `tests/test_v1_3_engine_adaptation.py` 专属测试套件，全量 154 个 Python 文件规范与 369 项非 slow 测试全部通过。
 
+**2026-10-19 远端 CI 验收与全流水线绿灯闭环 (Run ID: 39257741810, Commit `6ba59a9`)**：
+- **题包草案与改写规则解耦**：在 `infer_template_id` 中将缺失指标槽位的澄清草案精确映射为 `t_clarify_metric`（时间槽位澄清为 `t_clarify_time`），为 `latest_total_asset` 构建无日历日期、无非法过滤条件的独立草案家族，完全达成 Dev 分层 30 指标全覆盖，同时严格遵循 `latest-snapshot` 改写无日期不变式；
+- **PostgreSQL 活体跨引擎等价性验证**：修复 `tests/test_postgres_live.py` 调用签名，传入显式 `ComparisonPolicy`；网关列类型复用 `guarded.output_kinds` 达成 1:1 Schema 严格一致；
+- **CI 真实服务容器端口与驱动适配**：在 GitHub Actions 流水线中针对服务容器绑定动态端口 `${{ job.services.postgres.ports[5432] }}`，并采用 `uv run --with "psycopg[binary]"` 保证官方驱动动态注入与连通性自检；
+- **全流水线绿灯通过**：`public-tree`（防泄漏）、`fast-gate-windows`、`fast-gate-linux`、`postgres-integration`（活体容器跨引擎等价集成）、`docker`（只读无网非 root 沙箱验证并签署产出 `docker-runtime-evidence`）、`full-release-gate-linux`（全量慢速与变体题包验收，耗时 12m 30s）共 6 项作业全部通过，达成发布就绪。
+
 阅读顺序：要跑命令先读 [使用说明](docs/user-guide.md)；改代码读 AGENTS.md → 本文件 → docs/architecture.md → docs/data_dictionary.md → ROADMAP.md；公开到 GitHub 读 [docs/github-publish.md](docs/github-publish.md) 与 [CONTRIBUTING.md](CONTRIBUTING.md)。原方案继续保留，矛盾处理见 ROADMAP。
 
 ## 2. 已完成与尚未完成
@@ -137,7 +143,7 @@
 | M4 矩阵评测 | `c360 evaluate --agent template --mode same_sql`：一次提交的候选 SQL 在 Tiny baseline+四变体上重放；`--mode scoring` 拒绝；公开报告不含 Gold/spec/候选 SQL；不是加权总分 |
 | M5 官方 Baseline | `c360 run-case --agent baseline` 与 `evaluate --agent baseline`：公开元数据检索→本地 adapter 规划→候选 SQL→网关；记录参数/重试/缓存/network_used；TemplateAgent 仍可选用但不是官方；外部 gpt/openai/network 标识 fail-closed |
 | 正式评分协议 1.0 | 已实现：`c360 evaluate-public` / `evaluate-hidden --formal` 写 evaluator 0.6 `formal_input`；`c360 score` 分别输出 public_dev / private_hidden；`ranking_enabled=false`。历史 `evaluate --mode scoring` 仍拒绝 |
-| 正式 RC 发布关卡 | 工具链已落地：Apache-2.0、Dockerfile、SHA256/SBOM、`prepare-formal-release`/`check-formal-release`。八个 RC 门为严格内容校验（D057）。当前 7/8 门已就绪，本机因无 Linux/Docker 环境，`docker_runtime` 留待 CI/Linux 运行签署，不打 `v1.0.0` |
+| 正式 RC 发布关卡 | 工具链已落地：Apache-2.0、Dockerfile、SHA256/SBOM、`prepare-formal-release`/`check-formal-release`。八个 RC 门为严格内容校验（D057）。当前本地签署 7/8 门，远端 CI Docker 作业已成功在隔离环境生成并归档 `docker-runtime-evidence` 制品（Run 39257741810），待发版打标时统一归档闭环 |
 | v1.1 多轮协议与反事实抵抗 | 已实现：`protocol_version: "1.1"`、`Message.turn` 轮次追踪、`SlotReply.distractor` 反事实噪声注入、过度追问拦截与 `MAX_CLARIFICATION_TURNS = 4` 轮次上限防护（`tests/test_v1_1_multiturn.py`） |
 | v1.2 计划校验与元数据演化 | 已实现：受控计划校验引擎 `validate_query_plan`（9 类稳定拒绝码含 `INVALID_PLAN_SCHEMA` 与 `time_column` 校验）、指标生命周期（deprecation_date >= effective_date）、`c360 audit-metadata` 全量外键拓扑闭包审计（`tests/test_v1_2_metadata_plan.py`） |
 | v1.3 引擎适配与性能采样 | 已实现：SQLGlot 跨方言转译（DuckDB <-> Postgres）、多引擎网关抽象（`BaseExecutionGateway`/`PostgreSQLExecutionGateway`）、只读 AST 安全防御（ALTER/TRUNCATE/MERGE 拦截）、双重超时物理回收、阶段拆分性能采样（`plan_ms`/`guard_ms`/`exec_ms`/`e2e_ms` P50/P90/P95/P99）、`c360 transpile-sql`（`tests/test_v1_3_engine_adaptation.py`） |
