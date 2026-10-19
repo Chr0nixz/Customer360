@@ -83,5 +83,6 @@ wheel 只含运行代码和公开资源。sdist 用白名单，排除 `outputs`�
 | [后续开发计划](docs/development-plan.md) | 阶段计划 |
 | [Benchmark 扩展计划](docs/benchmark-expansion-plan.md) | 数据、题量、Join 和覆盖扩展顺序 |
 | [扩展验收与下一阶段计划](docs/acceptance-and-next-plan.md) | 验收结论、阻塞项和后续开发顺序 |
+| [v1.1.0 发行说明](docs/releases/v1.1.0.md) | 架构演进与制品摘要 |
 
 许可证：[Apache-2.0](LICENSE)。行为准则：[CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md)。隐藏 pack 和生成库不是 GitHub 公开制品；源码树中的 `data/trusted` 只覆盖 C360_0001–0020。
