@@ -70,6 +70,9 @@ _FORBIDDEN_AST_NODES = (
     exp.TruncateTable,
     exp.Merge,
     exp.Transaction,
+    exp.Grant,
+    exp.Revoke,
+    exp.Set,
 )
 
 
@@ -83,9 +86,6 @@ def transpile_sql(
     if not stripped_sql:
         raise ValueError("SQL query cannot be empty")
 
-    if ";" in stripped_sql.rstrip(";"):
-        raise ValueError("multi-statement queries are forbidden")
-
     source_key = str(source_dialect).lower()
     target_key = str(target_dialect).lower()
 
@@ -95,16 +95,20 @@ def transpile_sql(
         raise ValueError(f"unsupported target dialect: {target_dialect}")
 
     try:
-        ast = sqlglot.parse_one(stripped_sql, read=source_key)
-    except sqlglot.errors.ParseError as exc:
+        raw_statements = sqlglot.parse(stripped_sql, read=source_key)
+    except (sqlglot.errors.ParseError, sqlglot.errors.TokenError) as exc:
         raise ValueError(f"SQL parsing failed for dialect '{source_key}': {exc}") from exc
 
-    if ast is None or any(isinstance(ast, node_type) for node_type in _FORBIDDEN_AST_NODES):
-        raise ValueError("only read-only queries can be transpiled")
+    statements = [s for s in raw_statements if s is not None and not isinstance(s, exp.Semicolon)]
+    if not statements:
+        raise ValueError("SQL query cannot be empty")
+    if len(statements) > 1:
+        raise ValueError("multi-statement queries are forbidden")
 
-    # Also search sub-nodes for forbidden commands (e.g. inside script blocks)
+    ast = statements[0]
+
     for node_type in _FORBIDDEN_AST_NODES:
-        if any(ast.find_all(node_type)):
+        if isinstance(ast, node_type) or any(ast.find_all(node_type)):
             raise ValueError("only read-only queries can be transpiled")
 
     differences: list[str] = []

@@ -108,6 +108,22 @@ def test_v1_3_transpile_ddl_dml_and_injection_defense() -> None:
     with pytest.raises(ValueError, match="only read-only queries can be transpiled"):
         transpile_sql('UPDATE "dim_customer" SET "status" = \'inactive\'')
 
+    # 4. Privilege and session control operations
+    with pytest.raises(ValueError, match="only read-only queries can be transpiled"):
+        transpile_sql('GRANT ALL ON "dim_customer" TO public')
+
+    with pytest.raises(ValueError, match="only read-only queries can be transpiled"):
+        transpile_sql('REVOKE ALL ON "dim_customer" FROM public')
+
+    with pytest.raises(ValueError, match="only read-only queries can be transpiled"):
+        transpile_sql("SET statement_timeout = 1000")
+
+    # 5. Semicolon inside string literals must NOT be falsely flagged as multi-statement
+    safe_semi_sql = 'SELECT \'val1;val2\' AS "tag" FROM "dim_customer"'
+    res_semi = transpile_sql(safe_semi_sql, source_dialect="duckdb", target_dialect="postgres")
+    assert res_semi.ast_valid is True
+    assert "tag" in res_semi.transpiled_sql
+
 
 def test_v1_3_gateway_fail_closed_and_pre_connection_guard(monkeypatch) -> None:
     """PostgreSQL gateway must fail closed when unadmitted and enforce SQL Guard."""
