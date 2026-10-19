@@ -49,6 +49,10 @@ The current implementation encompasses:
   2. Strict loopback defense: `assert_local_endpoint` enforces local loopback host whitelisting (`localhost`, `127.0.0.1`, `::1`, `0.0.0.0`), rejecting external network connections fail-closed;
   3. Purity & graceful degradation: in-method dynamic imports avoid static network dependencies in `agent` modules (preserving `_denied_imports` pureness); supports structured prompt injection and JSON intent extraction with graceful fallback; CLI and matrix evaluation accept `--agent local-model`;
   4. Dedicated test suite: added `tests/test_local_model_adapter.py` covering external blocking, Answer end-to-end, Clarify, Refusal, network fallback, and Agent resolution.
+- **2026-10-20 Automated GitHub Release Pipeline & v1.1.0 Formal Publication**:
+  1. Release pipeline: added `.github/workflows/release.yml` triggered on `v*.*.*` tag push and `workflow_dispatch`;
+  2. Automatic build & checksum generation: builds distribution packages (`.whl`, `.tar.gz`) and computes `SHA256SUMS`;
+  3. GitHub Release publication: uses `softprops/action-gh-release@v2` with `docs/releases/v1.1.0.md` release notes and uploaded distribution assets; first workflow run `39310579161` completed with 100% success ([Release Page](https://github.com/Chr0nixz/Customer360/releases/tag/v1.1.0)).
 
 ## 2. Completed vs. Uncompleted Status
 

@@ -123,6 +123,11 @@
 - **纯净性与优雅降级**：采用延迟动态导入消除 `agent` 模块的静态网络库依赖（满足 `_denied_imports` 纯净度检查）；支持结构化 Prompt 注入与 JSON 意图抽取，具备超时/网络故障自动降级为安全拒绝；CLI 与矩阵评测原生支持 `--agent local-model`；
 - **专属测试套件**：新增 `tests/test_local_model_adapter.py`，覆盖外网拦截、Answer 端到端、Clarify、Refuse、网络降级与 Agent 解析 6 大场景。
 
+**2026-10-20 自动化 GitHub Release 发布流水线与 v1.1.0 发行闭环**：
+- **CI/CD 流水线扩充**：创建 `.github/workflows/release.yml`，监听 `v*.*.*` 标签推送与 `workflow_dispatch`；
+- **全自动制品构建与摘要生成**：自动执行 `uv build` 构建 `.whl` 与 `.tar.gz` 发布分发包，动态计算生成 `SHA256SUMS`；
+- **GitHub Release 官方发布**：利用 `softprops/action-gh-release@v2` 自动关联 `docs/releases/v1.1.0.md` 中英文 Release Notes，并自动上传分发包与校验和资产；首次运行 Run `39310579161` 100% 成功完成发布（[Release 页面](https://github.com/Chr0nixz/Customer360/releases/tag/v1.1.0)）。
+
 阅读顺序：要跑命令先读 [使用说明](docs/user-guide.md)；改代码读 AGENTS.md → 本文件 → docs/architecture.md → docs/data_dictionary.md → ROADMAP.md；公开到 GitHub 读 [docs/github-publish.md](docs/github-publish.md) 与 [CONTRIBUTING.md](CONTRIBUTING.md)。原方案继续保留，矛盾处理见 ROADMAP。
 
 ## 2. 已完成与尚未完成
