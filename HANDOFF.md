@@ -106,6 +106,17 @@
 - **CI 真实服务容器端口与驱动适配**：在 GitHub Actions 流水线中针对服务容器绑定动态端口 `${{ job.services.postgres.ports[5432] }}`，并采用 `uv run --with "psycopg[binary]"` 保证官方驱动动态注入与连通性自检；
 - **全流水线绿灯通过**：`public-tree`（防泄漏）、`fast-gate-windows`、`fast-gate-linux`、`postgres-integration`（活体容器跨引擎等价集成）、`docker`（只读无网非 root 沙箱验证并签署产出 `docker-runtime-evidence`）、`full-release-gate-linux`（全量慢速与变体题包验收，耗时 12m 30s）共 6 项作业全部通过，达成发布就绪。
 
+**2026-10-20 正式发版 v1.1.0 与发布契约加固 (Commit `e2b71c3`, `d181e7c`)**：
+- **正式发版与版本演进**：`pyproject.toml`、`src/customer360/__init__.py` 与 `uv.lock` 升级至 `1.1.0`；`FormalReleaseManifest` 与 `ReproducibleBuildEvidence` 支持并锁定 `1.1.0`，正式打标并推送带注释 Git 标签 `v1.1.0`；
+- **发布制品检查器参数化**：`src/customer360/release.py`（`_formal_distributions`、`_distributions_in`、`_sbom_document`、`public_artifacts_evidence`）基于 `__version__` 动态识别制品；
+- **文档全量对齐**：`README.md`、`docs/user-guide.md`、`docs/formal-release.md` 及对应英文文档全面对齐 `package 1.1.0` 与发布状态。
+
+**2026-10-20 隐藏评测集扩容至 100 题与科学分层配额 (Commit `3e5b62a`, D064)**：
+- **候选池容量证明**：在阻断 Public 300 题与 Human 20 题（320 个 Family）后，独立候选池具备 313 个独立 Family，充足支持 100 题扩展；
+- **科学分层配额与动态缩放**：落地 `count >= 100` 科学配额（61 Answer / 23 Clarification / 16 Refusal），覆盖 26 个独立业务指标与全部 8 类强制错误类；
+- **语义验收与 Oracle 闭环**：全部 61 道 Answer 在隔离 Tiny 数据集上 100% 匹配独立 Python Oracle，全部改写槽位通过，全部 8 类错误 SQL 100% 区分；
+- **契约与测试加固**：`HIDDEN_DEFAULT_COUNT` 默认提升至 100，CLI 默认生成 100 题；新增 `test_hidden_100_pack_stratified_and_isolated` 端到端语义与隔离回归。
+
 阅读顺序：要跑命令先读 [使用说明](docs/user-guide.md)；改代码读 AGENTS.md → 本文件 → docs/architecture.md → docs/data_dictionary.md → ROADMAP.md；公开到 GitHub 读 [docs/github-publish.md](docs/github-publish.md) 与 [CONTRIBUTING.md](CONTRIBUTING.md)。原方案继续保留，矛盾处理见 ROADMAP。
 
 ## 2. 已完成与尚未完成

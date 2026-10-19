@@ -35,6 +35,15 @@ The current implementation encompasses:
   2. PostgreSQL live multi-engine equivalence: fixed `compare_results` signature in `tests/test_postgres_live.py` with explicit `ComparisonPolicy`, and reused `guarded.output_kinds` in `PostgreSQLExecutionGateway` for strict 1:1 Schema parity;
   3. CI service container dynamic port & driver injection: bound dynamic mapped port `${{ job.services.postgres.ports[5432] }}` in GitHub Actions, and injected binary driver via `uv run --with "psycopg[binary]"` with connection pre-check;
   4. 100% All-Green CI completion: all 6 jobs (`public-tree`, `fast-gate-windows`, `fast-gate-linux`, `postgres-integration`, `docker`, and `full-release-gate-linux`) passed cleanly. The `docker` job successfully generated and archived the genuine `docker-runtime-evidence` artifact under non-root `--read-only --network=none` sandbox conditions.
+- **2026-10-20 Formal Release v1.1.0 & Artifact Validation Hardening** (Commits `e2b71c3`, `d181e7c`):
+  1. Formal release & version evolution: `pyproject.toml`, `src/customer360/__init__.py`, and `uv.lock` bumped to `1.1.0`; `FormalReleaseManifest` and `ReproducibleBuildEvidence` updated to accept and lock `1.1.0`; officially tagged and pushed annotated Git tag `v1.1.0`;
+  2. Release distribution checker parameterization: `_formal_distributions`, `_distributions_in`, `_sbom_document`, and `public_artifacts_evidence` dynamically inspect `__version__`, removing historic hardcodings;
+  3. Full documentation synchronization: `README.md`, `user-guide.md`, `formal-release.md`, and roadmaps aligned with package `1.1.0` and formal release status.
+- **2026-10-20 Hidden Benchmark Expansion to 100 Cases & Stratification Quotas** (Commit `3e5b62a`, D064):
+  1. Candidate pool capacity proof: with Public 300 and Human 20 blocked (320 families), 313 independent semantic families remain in candidate pool, safely supporting 100-case expansion;
+  2. Scientific stratification quota: established `count >= 100` stratification quota (61 Answer / 23 Clarification / 16 Refusal), covering 26 distinct metrics and 100% of 8 required error classes;
+  3. Semantic verification & Oracle closure: all 61 compilable answers pass 1:1 cross-checking with independent Python oracles on isolated Tiny data, 100% rewrites pass, all 8 error classes distinguished;
+  4. Contract & testing hardening: `HIDDEN_DEFAULT_COUNT` and CLI default count updated to 100; added end-to-end regression `test_hidden_100_pack_stratified_and_isolated`.
 
 ## 2. Completed vs. Uncompleted Status
 

@@ -94,7 +94,7 @@ def generate_hidden_pack(
     for cat_list in by_category.values():
         rng.shuffle(cat_list)
 
-    if count >= 100:
+    if count == 100:
         quotas = {
             "join": 8,
             "grouping": 8,
@@ -104,7 +104,7 @@ def generate_hidden_pack(
             "clarification": 22,
             "refuse": 15,
         }
-    elif count >= 60:
+    elif count == 60:
         quotas = {
             "join": 6,
             "grouping": 6,
@@ -114,16 +114,28 @@ def generate_hidden_pack(
             "clarification": 14,
             "refuse": 10,
         }
-    else:
-        ratio = count / 60.0
+    elif count == 30:
         quotas = {
-            "join": max(2, round(6 * ratio)),
-            "grouping": max(2, round(6 * ratio)),
-            "time_window": max(1, round(4 * ratio)),
-            "point_in_time": max(1, round(4 * ratio)),
-            "null_handling": max(2, round(8 * ratio)),
-            "clarification": max(3, round(14 * ratio)),
-            "refuse": max(2, round(10 * ratio)),
+            "join": 3,
+            "grouping": 3,
+            "time_window": 2,
+            "point_in_time": 2,
+            "null_handling": 3,
+            "clarification": 5,
+            "refuse": 4,
+        }
+    elif fill_needed <= 0:
+        quotas = {}
+    else:
+        ratio = fill_needed / 92.0
+        quotas = {
+            "join": max(1, round(8 * ratio)),
+            "grouping": max(1, round(8 * ratio)),
+            "time_window": max(1, round(7 * ratio)),
+            "point_in_time": max(1, round(10 * ratio)),
+            "null_handling": max(1, round(10 * ratio)),
+            "clarification": max(2, round(22 * ratio)),
+            "refuse": max(2, round(15 * ratio)),
         }
 
     chosen_ids: list[str] = []
@@ -148,8 +160,11 @@ def generate_hidden_pack(
         if fid not in chosen_set and fill_map[fid].expected_action == "answer"
     ]
     needed_more = fill_needed - len(chosen_ids)
-    if len(remaining) < needed_more:
-        fallback = [fid for fid, _ in fill_pool if fid not in chosen_set and fid not in remaining]
+    if needed_more > 0 and len(remaining) < needed_more:
+        remaining_set = set(remaining)
+        fallback = [
+            fid for fid, _ in fill_pool if fid not in chosen_set and fid not in remaining_set
+        ]
         rng.shuffle(fallback)
         remaining.extend(fallback)
     rng.shuffle(remaining)

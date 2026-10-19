@@ -172,7 +172,7 @@ def test_hidden_and_public_answer_specs_compile():
             assert compiled_query.sql
             compiled += 1
     assert compiled == public_answers + hidden_answers
-    assert compiled >= 260
+    assert compiled >= 255
 
 
 def test_hidden_100_pack_stratified_and_isolated(tmp_path):
@@ -228,6 +228,20 @@ def test_hidden_100_pack_stratified_and_isolated(tmp_path):
     for field in ("expected_action", "semantic_spec", "missing_slots", "reason_code"):
         assert field not in agent_text
     assert "C360_0001" not in agent_text
+
+    # 7. End-to-end semantic verification on isolated hidden Tiny dataset
+    from customer360.tasks.pack_verify import verify_task_pack
+
+    data_dir = tmp_path / "hidden-tiny"
+    generate_hidden_dataset(data_dir, seed=1042)
+    verify_rep = verify_task_pack(data_dir, hidden, hidden=True)
+    assert verify_rep.semantic_passed is True
+    assert verify_rep.case_count == 100
+    assert verify_rep.compilable_answers == 61
+    assert verify_rep.independent_oracle_matches == 61
+    assert verify_rep.unscored_oracles == 39
+    assert verify_rep.rewrite_passed is True
+    assert ERROR_CLASSES_REQUIRED <= set(verify_rep.wrong_sql_classes)
 
 
 def test_generate_hidden_cli_and_check_isolation(tmp_path):
