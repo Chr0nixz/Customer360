@@ -190,3 +190,73 @@ def test_local_model_error_fallback(baseline: Path):
         resp = agent.respond(req, tools)
         assert isinstance(resp, Refusal)
         assert resp.reason_code == "UNSUPPORTED_QUERY"
+
+
+def test_local_model_adapter_hardened_parsing(baseline: Path):
+    from datetime import date
+
+    from customer360.agent.baseline import BaselineAgent
+    from customer360.agent.local_model import LocalModelAdapter, LocalModelConfig
+    from customer360.contracts.public import AgentRequest, Refusal
+
+    # 1. Non-dict JSON output from model -> graceful refusal
+    mock_choice_list = {"choices": [{"message": {"content": "```json\n[1, 2, 3]\n```"}}]}
+    adapter = LocalModelAdapter(
+        config=LocalModelConfig(endpoint="http://127.0.0.1:11434/v1"),
+        http_poster=lambda url, body, timeout: json.dumps(mock_choice_list),
+    )
+    agent = BaselineAgent(adapter=adapter)
+    repo = MetadataRepository()
+    gateway = ExecutionGateway(baseline / "dataset.duckdb", tiny_eval_policy())
+    tools = ToolSession(gateway, repo)
+    req = AgentRequest(
+        case_id="T1",
+        question="统计活跃客户数",
+        anchor_date=date(2025, 6, 30),
+        metadata_version=repo.metrics.metrics_version,
+    )
+    res = agent.respond(req, tools)
+    assert isinstance(res, Refusal)
+    assert res.reason_code == "UNSUPPORTED_QUERY"
+
+    # 2. String formatted 'days' -> converted to int
+    mock_payload = {
+        "action": "answer",
+        "metric_name": "successful_transaction_count",
+        "time_kind": "rolling",
+        "days": "90",
+        "filters": [],
+    }
+    mock_choice_str_days = {
+        "choices": [{"message": {"content": f"```json\n{json.dumps(mock_payload)}\n```"}}]
+    }
+    adapter2 = LocalModelAdapter(
+        config=LocalModelConfig(endpoint="http://127.0.0.1:11434/v1"),
+        http_poster=lambda url, body, timeout: json.dumps(mock_choice_str_days),
+    )
+    agent2 = BaselineAgent(adapter=adapter2)
+    res2 = agent2.respond(req, tools)
+    assert isinstance(res2, Success)
+    assert "fact_transaction" in res2.sql
+
+
+def test_local_server_cors_options(mock_server: LocalInferenceServer):
+    import urllib.request
+
+    req = urllib.request.Request(
+        f"{mock_server.endpoint_url}/chat/completions",
+        method="OPTIONS",
+    )
+    with urllib.request.urlopen(req) as resp:
+        assert resp.status == 204
+        assert resp.headers.get("Access-Control-Allow-Origin") == "*"
+        assert "POST" in resp.headers.get("Access-Control-Allow-Methods", "")
+
+
+def test_serve_local_mock_cli_prohibits_external_host():
+    from typer.testing import CliRunner
+
+    runner = CliRunner()
+    res = runner.invoke(app, ["serve-local-mock", "--host", "192.168.1.100"])
+    assert res.exit_code == 2
+    assert "Invalid host" in res.output or "External network connection prohibited" in res.output

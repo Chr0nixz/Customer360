@@ -1174,8 +1174,16 @@ def serve_local_mock_cmd(
     """Run an offline OpenAI-compatible mock inference server on local loopback."""
     from customer360.agent.local_server import LocalInferenceServer
 
-    server = LocalInferenceServer(host=host, port=port, model=model, quiet=quiet)
-    server.start()
+    try:
+        server = LocalInferenceServer(host=host, port=port, model=model, quiet=quiet)
+        server.start()
+    except OSError as exc:
+        typer.echo(f"Failed to bind local mock server on {host}:{port}: {exc}", err=True)
+        raise typer.Exit(2) from exc
+    except ValueError as exc:
+        typer.echo(f"Invalid host or configuration: {exc}", err=True)
+        raise typer.Exit(2) from exc
+
     typer.echo(
         json_text(
             {

@@ -135,10 +135,10 @@
 - **严格有序全等比对**：比对器采用 `ComparisonPolicy(ordered=True)` 进行有序行比对与浮点容差校验；新增 `tests/test_v1_4_dsl_topk.py` 专属测试套件（5/5 全部通过）。
 
 **2026-10-20 本地离线大模型实测、Mock 推理服务器与基准出分全链路 (Local Model Benchmark & Mock Server, D067)**：
-- **零依赖本地回环推断服务器**：落地 `LocalInferenceServer`，支持标准 OpenAI 格式 `/v1/chat/completions`、`/v1/models`、`/health` 接口；CLI 新增 `c360 serve-local-mock` 一键启动命令；
-- **大模型适配器 Prompt 与解析加固**：`LocalModelAdapter` 增强 Prompt 候选指标注入（补齐 `allowed_filter_columns`、`fixed_filters`、`source_table`），加固日期字符串反序列化并支持基于快照锚点兜底；
+- **零依赖本地回环推断服务器**：落地 `LocalInferenceServer`，支持标准 OpenAI 格式 `/v1/chat/completions`、`/v1/models`、`/health` 与 OPTIONS 预检跨域；CLI 新增 `c360 serve-local-mock` 一键启动命令（具备端口冲突拦截）；
+- **大模型适配器 Prompt 与解析加固**：`LocalModelAdapter` 增强 Prompt 候选指标注入（补齐 `allowed_filter_columns`、`fixed_filters`、`source_table`），加固非字典结构、字符串天数安全转换与日期反序列化锚点降级；
 - **评测引擎 Agent 标识归一化**：在 `evaluate_matrix`、`evaluate_formal`、`evaluate_hidden_pack` 中自动将 `local-model` 归一化为 `local_model` 满足 Pydantic `Identifier` 命名契约；
-- **全链路端到端评测闭环**：新增 `tests/test_local_model_benchmark.py`，打通 CLI 单题运行、20 题四变体矩阵评测（`same_sql`）、Markdown/HTML 出分报告与异常熔断回退，测试 100% 绿灯。
+- **全链路端到端评测闭环**：新增 `tests/test_local_model_benchmark.py`（8 项专项测试全部通过），打通 CLI 单题运行、20 题四变体矩阵评测（`same_sql`）、Markdown/HTML 出分报告、CORS 与异常熔断回退。
 
 阅读顺序：要跑命令先读 [使用说明](docs/user-guide.md)；改代码读 AGENTS.md → 本文件 → docs/architecture.md → docs/data_dictionary.md → ROADMAP.md；公开到 GitHub 读 [docs/github-publish.md](docs/github-publish.md) 与 [CONTRIBUTING.md](CONTRIBUTING.md)。原方案继续保留，矛盾处理见 ROADMAP。
 

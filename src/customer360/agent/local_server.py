@@ -30,6 +30,15 @@ class _MockOpenAIHandler(BaseHTTPRequestHandler):
         if server and not server.quiet:
             super().log_message(format, *args)
 
+    def do_OPTIONS(self) -> None:
+        self.send_response(204)
+        self.send_header("Access-Control-Allow-Origin", "*")
+        self.send_header("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
+        self.send_header("Access-Control-Allow-Headers", "Content-Type, Authorization")
+        self.send_header("Connection", "close")
+        self.end_headers()
+        self.close_connection = True
+
     def do_GET(self) -> None:
         if self.path in {"/health", "/healthz"}:
             self._send_json(200, {"status": "ok", "service": "c360-local-mock"})
@@ -117,26 +126,46 @@ class _MockOpenAIHandler(BaseHTTPRequestHandler):
         except Exception:
             payload = {"question": user_content, "anchor_date": "2025-06-30"}
 
-        question = payload.get("question", "")
-        anchor_str = payload.get("anchor_date", "2025-06-30")
+        if not isinstance(payload, dict):
+            payload = {"question": str(user_content), "anchor_date": "2025-06-30"}
+
+        question = str(payload.get("question") or "")
+        anchor_str = str(payload.get("anchor_date") or "2025-06-30")
         try:
             anchor_date = date.fromisoformat(anchor_str)
         except Exception:
             anchor_date = date(2025, 6, 30)
 
         history_items = []
-        for h in payload.get("conversation_history", []):
-            role = h.get("role", "user")
-            content = h.get("content", "")
-            history_items.append((role, content))
+        raw_history = payload.get("conversation_history")
+        if isinstance(raw_history, list):
+            for h in raw_history:
+                if isinstance(h, dict):
+                    role = h.get("role", "user")
+                    content = h.get("content", "")
+                    history_items.append((role, content))
+
+        raw_metrics = payload.get("candidate_metrics")
+        candidate_metrics = (
+            tuple(m for m in raw_metrics if isinstance(m, dict))
+            if isinstance(raw_metrics, list)
+            else ()
+        )
+
+        raw_joins = payload.get("available_join_paths")
+        available_joins = (
+            tuple(j for j in raw_joins if isinstance(j, dict))
+            if isinstance(raw_joins, list)
+            else ()
+        )
 
         packet = AdapterPacket(
             question=question,
             conversation=tuple(history_items),
             anchor_date=anchor_date,
-            metrics=tuple(payload.get("candidate_metrics", ())),
+            metrics=candidate_metrics,
             columns=(),
-            joins=tuple(payload.get("available_join_paths", ())),
+            joins=available_joins,
             glossary=(),
         )
 
@@ -182,6 +211,7 @@ class _MockOpenAIHandler(BaseHTTPRequestHandler):
         body = json.dumps(data, ensure_ascii=False).encode("utf-8")
         self.send_response(status)
         self.send_header("Content-Type", "application/json; charset=utf-8")
+        self.send_header("Access-Control-Allow-Origin", "*")
         self.send_header("Content-Length", str(len(body)))
         self.send_header("Connection", "close")
         self.end_headers()

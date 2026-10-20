@@ -59,10 +59,10 @@ The current implementation encompasses:
   3. Two-pass stable sorting: implemented two-pass stable sorting with decimal coercion in memory slices for exact limit truncation;
   4. Strict ordered parity verification: evaluator uses `ComparisonPolicy(ordered=True)` for strict ordered row parity; added dedicated test suite `tests/test_v1_4_dsl_topk.py` (5/5 passed).
 - **2026-10-20 Local Offline LLM Evaluation, Mock Server & Benchmark Reporting (D067)**:
-  1. Zero-dependency mock inference server: implemented `LocalInferenceServer` serving OpenAI-compatible `/v1/chat/completions`, `/v1/models`, `/health`; CLI command `c360 serve-local-mock` added;
-  2. Model prompt & parser hardening: enriched `LocalModelAdapter` prompt with filter columns, fixed filters, and source table metadata; robust date string deserialization with anchor fallback;
+  1. Zero-dependency mock inference server: implemented `LocalInferenceServer` serving OpenAI-compatible `/v1/chat/completions`, `/v1/models`, `/health`, and CORS OPTIONS preflights; added CLI command `c360 serve-local-mock` with clean port error handling;
+  2. Model prompt & parser hardening: enriched `LocalModelAdapter` prompt with filter columns, fixed filters, and source table metadata; added non-dict validation, safe string-digit coercion for `days`, and date deserialization with anchor fallback;
   3. Agent ID normalization: evaluator normalizes `local-model` to `local_model` conforming to Pydantic `Identifier` contract;
-  4. End-to-end benchmark suite: added `tests/test_local_model_benchmark.py` validating CLI run-case, 20-case 4-variant matrix evaluation, HTML/Markdown report generation, and error fallback.
+  4. End-to-end benchmark suite: added `tests/test_local_model_benchmark.py` (8/8 tests passed) validating CLI run-case, 20-case 4-variant matrix evaluation, HTML/Markdown report generation, CORS, and error fallback.
 
 ## 2. Completed vs. Uncompleted Status
 

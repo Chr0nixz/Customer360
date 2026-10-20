@@ -242,6 +242,13 @@ class LocalModelAdapter(ModelAdapter):
         json_match = re.search(r"```(?:json)?\s*([\s\S]*?)\s*```", content)
         json_str = json_match.group(1) if json_match else content.strip()
         data = json.loads(json_str)
+        if not isinstance(data, dict):
+            return Intent(
+                action="refuse",
+                reason_code="UNSUPPORTED_QUERY",
+                reason="本地模型返回的JSON结构非字典对象。",
+                alternative="请检查大模型返回格式。",
+            )
 
         action = str(data.get("action", "refuse")).lower()
         if action == "refuse":
@@ -252,8 +259,18 @@ class LocalModelAdapter(ModelAdapter):
                 alternative=data.get("alternative"),
             )
         if action == "clarify":
-            missing = tuple(data.get("missing_slots") or ("time_window",))
-            questions = tuple(data.get("questions") or ("请补充缺失的查询条件。",))
+            raw_missing = data.get("missing_slots")
+            missing = (
+                tuple(str(s) for s in raw_missing if s)
+                if isinstance(raw_missing, (list, tuple)) and raw_missing
+                else ("time_window",)
+            )
+            raw_questions = data.get("questions")
+            questions = (
+                tuple(str(q) for q in raw_questions if q)
+                if isinstance(raw_questions, (list, tuple)) and raw_questions
+                else ("请补充缺失的查询条件。",)
+            )
             return Intent(
                 action="clarify",
                 metric_name=data.get("metric_name"),
@@ -264,21 +281,41 @@ class LocalModelAdapter(ModelAdapter):
         # Action: answer
         metric_name = data.get("metric_name")
         filters_list = []
-        for f in data.get("filters") or ():
-            if isinstance(f, dict) and "field" in f and "operator" in f:
-                filters_list.append(
-                    IntentFilter(
-                        field=str(f["field"]),
-                        operator=str(f["operator"]),
-                        values=tuple(f.get("values", ())),
+        raw_filters = data.get("filters")
+        if isinstance(raw_filters, (list, tuple)):
+            for f in raw_filters:
+                if isinstance(f, dict) and "field" in f and "operator" in f:
+                    vals = f.get("values", ())
+                    values_tuple = tuple(vals) if isinstance(vals, (list, tuple)) else (vals,)
+                    filters_list.append(
+                        IntentFilter(
+                            field=str(f["field"]),
+                            operator=str(f["operator"]),
+                            values=values_tuple,
+                        )
                     )
-                )
 
         # Pre-execution defense: discard single customer identifiers from group_by
         forbidden_groups = frozenset({"customer_id", "id", "cust_id", "customer_name"})
-        group_by = tuple(
-            str(g) for g in data.get("group_by") or () if str(g).lower() not in forbidden_groups
+        raw_group = data.get("group_by")
+        group_by = (
+            tuple(str(g) for g in raw_group if str(g).lower() not in forbidden_groups)
+            if isinstance(raw_group, (list, tuple))
+            else ()
         )
+
+        days_val = data.get("days")
+        days: int | None = None
+        if isinstance(days_val, int):
+            days = days_val
+        elif isinstance(days_val, str) and days_val.strip().isdigit():
+            days = int(days_val.strip())
+        elif isinstance(days_val, float):
+            days = int(days_val)
+
+        time_kind = data.get("time_kind") or "none"
+        if time_kind not in {"rolling", "point_in_time", "latest_snapshot", "none"}:
+            time_kind = "none"
 
         # Parse time_date into datetime.date object if it's a string,
         # or fallback to packet anchor_date
@@ -299,8 +336,8 @@ class LocalModelAdapter(ModelAdapter):
             action="answer",
             metric_name=metric_name,
             filters=tuple(filters_list),
-            time_kind=data.get("time_kind", "none"),
-            days=data.get("days"),
+            time_kind=time_kind,
+            days=days,
             time_date=time_date_obj,
             join_path=data.get("join_path"),
             group_by=group_by,
