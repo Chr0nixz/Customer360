@@ -49,7 +49,9 @@ M3 生成包与 20 题包分离：`c360 generate-tasks --count 120 --seed 42` �
 
 支持 Top-K 与有序排序语法（`limit`、`order_by`、`order_direction`）：声明 `limit` 时必须具有排序依据；为彻底消除底层数据库引擎在遇到度量并列（Ties）时的随机性，编译器与独立 Oracle 共同遵循确定性全序消歧规则（主排序列 + 分组维度 ASC 全序 Tie-breaker），比对器采用 `ComparisonPolicy(ordered=True)` 进行严格顺序与数值容差校验。
 
-支持 HAVING 聚合后过滤语法（`having`）：仅允许在声明了分组维度（`group_by`）的多行聚合查询中使用；支持对已聚合的目标度量按比较操作符（`eq`、`ne`、`gt`、`gte`、`lt`、`lte`）与数值阈值进行筛选；SQL Guard 网关对 HAVING 条件实施严格静态 AST 审计（一侧必须为目标聚合度量或其别名，另一侧必须为数字字面量，且仅限 AND 组合，严禁裸列与未授权列）；单表标量查询与 Join 查询中的 HAVING 保持 Fail-Closed 拦截。`time_window` 可以是 rolling、point_in_time 或 latest_snapshot（仅 `latest_total_asset`：逐客户 `MAX(snapshot_date) <= anchor` 再 SUM）。窗口函数与未声明 Join 仍拒绝。Filter 指定 field、operator、values；支持 eq/ne/gte/lte/in/is_null/is_not_null。NULL 使用专用操作，IN 非空，类型必须与字段匹配。三种时间语义不能互换。
+支持 HAVING 聚合后过滤语法（`having`）：仅允许在声明了分组维度（`group_by`）的多行聚合查询中使用；支持对已聚合的目标度量按比较操作符（`eq`、`ne`、`gt`、`gte`、`lt`、`lte`）与数值阈值进行筛选；SQL Guard 网关对 HAVING 条件实施严格静态 AST 审计（一侧必须为目标聚合度量或其别名，另一侧必须为数字字面量，且仅限 AND 组合，严禁裸列与未授权列）；单表标量查询与 Join 查询中的 HAVING 保持 Fail-Closed 拦截。
+
+支持派生复合比率语法（`ratio`）：支持在同表基础度量之间进行安全的除法比率计算（如笔均交易金额/客单价、客户活跃率），显式指定保留小数位数（`precision`）与输出别名（`output_alias`）；编译器强制注入 `NULLIF(denominator, 0)` 除零防护与 `ROUND(CAST(... AS DECIMAL(18, p)), p)` 精度约束，对分子专有条件自动生成 `CASE WHEN` 条件聚合；SQL Guard 网关严格审计除法结构与列授权，未带除零防护的裸除法将被坚决拦截。`time_window` 可以是 rolling、point_in_time 或 latest_snapshot（仅 `latest_total_asset`：逐客户 `MAX(snapshot_date) <= anchor` 再 SUM）。窗口函数与未声明 Join 仍拒绝。Filter 指定 field、operator、values；支持 eq/ne/gte/lte/in/is_null/is_not_null。NULL 使用专用操作，IN 非空，类型必须与字段匹配。三种时间语义不能互换。
 
 latest_snapshot 示例：
 
@@ -103,6 +105,23 @@ HAVING 聚合后过滤示例：
   "having": [
     {"operator": "gte", "value": 10}
   ]
+}
+~~~
+
+派生复合比率示例：
+
+~~~json
+{
+  "semantic_version": "0.1",
+  "metric": "active_customer_count",
+  "filters": [],
+  "group_by": ["region"],
+  "ratio": {
+    "numerator_metric": "active_customer_count",
+    "denominator_metric": "distinct_customer_count",
+    "precision": 4,
+    "output_alias": "active_rate"
+  }
 }
 ~~~
 

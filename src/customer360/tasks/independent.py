@@ -2,7 +2,7 @@
 
 from dataclasses import dataclass
 from datetime import date
-from decimal import Decimal, InvalidOperation
+from decimal import ROUND_HALF_UP, Decimal, InvalidOperation
 
 from customer360.contracts.public import Column, QueryResult
 from customer360.contracts.semantic import (
@@ -135,16 +135,32 @@ def compute_independent(
     elif spec.time_window is not None:
         raise C360Error("TIME_RANGE_ERROR", "metric does not accept a time window")
 
+    if spec.ratio is not None:
+        den_metric = repository.get_metric_definition(spec.ratio.denominator_metric)
+        shared_fixed = {
+            k: v
+            for k, v in metric.fixed_filters.items()
+            if k in den_metric.fixed_filters and den_metric.fixed_filters[k] == v
+        }
+        fixed_filters_to_apply = shared_fixed
+        fixed_nulls_to_apply = [
+            c for c in metric.fixed_null_columns if c in den_metric.fixed_null_columns
+        ]
+    else:
+        shared_fixed = {}
+        fixed_filters_to_apply = metric.fixed_filters
+        fixed_nulls_to_apply = list(metric.fixed_null_columns)
+
     matched = []
     for row in slice_.rows:
         keep = True
-        for key, value in metric.fixed_filters.items():
+        for key, value in fixed_filters_to_apply.items():
             if row[slice_.index(key)] != value:
                 keep = False
                 break
         if not keep:
             continue
-        if any(row[slice_.index(column)] is not None for column in metric.fixed_null_columns):
+        if any(row[slice_.index(column)] is not None for column in fixed_nulls_to_apply):
             continue
         if metric.time_column is not None and not _in_time_window(
             row[slice_.index(metric.time_column)], metric, spec
@@ -170,18 +186,66 @@ def compute_independent(
                 latest[row[customer_id]] = row
         matched = list(latest.values())
 
-    measure = slice_.index(metric.measure_column)
+    if spec.ratio is not None:
+        den_metric = repository.get_metric_definition(spec.ratio.denominator_metric)
+        num_measure = slice_.index(metric.measure_column)
+        den_measure = slice_.index(den_metric.measure_column)
 
-    def _aggregate(rows: list[tuple[object, ...]]) -> tuple[object, str]:
-        if metric.operation == "count_distinct":
-            return len({row[measure] for row in rows if row[measure] is not None}), "integer"
-        if metric.operation == "count":
-            return sum(1 for row in rows if row[measure] is not None), "integer"
-        amounts = [row[measure] for row in rows if row[measure] is not None]
-        if not amounts:
-            return None, "decimal"
-        total = sum((Decimal(amount) for amount in amounts), Decimal("0"))
-        return format(total, "f"), "decimal"
+        def _filter_metric_rows(
+            m: MetricDef, r_list: list[tuple[object, ...]]
+        ) -> list[tuple[object, ...]]:
+            res = r_list
+            for col, val in m.fixed_filters.items():
+                if col not in shared_fixed:
+                    c_idx = slice_.index(col)
+                    res = [r for r in res if r[c_idx] == val]
+            for col in m.fixed_null_columns:
+                if col not in fixed_nulls_to_apply:
+                    c_idx = slice_.index(col)
+                    res = [r for r in res if r[c_idx] is None]
+            return res
+
+        def _metric_val(
+            m: MetricDef, m_idx: int, r_list: list[tuple[object, ...]]
+        ) -> Decimal | None:
+            m_rows = _filter_metric_rows(m, r_list)
+            if m.operation == "count_distinct":
+                return Decimal(len({r[m_idx] for r in m_rows if r[m_idx] is not None}))
+            if m.operation == "count":
+                return Decimal(sum(1 for r in m_rows if r[m_idx] is not None))
+            amounts = [r[m_idx] for r in m_rows if r[m_idx] is not None]
+            if not amounts:
+                return None
+            return sum((Decimal(str(a)) for a in amounts), Decimal("0"))
+
+        def _aggregate(rows: list[tuple[object, ...]]) -> tuple[object, str]:
+            num_val = _metric_val(metric, num_measure, rows)
+            den_val = _metric_val(den_metric, den_measure, rows)
+            if den_val is None or den_val == Decimal("0"):
+                return None, "decimal"
+            if num_val is None:
+                num_val = Decimal("0")
+            prec = spec.ratio.precision
+            quant = Decimal(10) ** -prec
+            res_val = (num_val / den_val).quantize(quant, rounding=ROUND_HALF_UP)
+            return format(res_val, "f"), "decimal"
+
+        out_col_name = spec.ratio.output_alias
+    else:
+        measure = slice_.index(metric.measure_column)
+
+        def _aggregate(rows: list[tuple[object, ...]]) -> tuple[object, str]:
+            if metric.operation == "count_distinct":
+                return len({row[measure] for row in rows if row[measure] is not None}), "integer"
+            if metric.operation == "count":
+                return sum(1 for row in rows if row[measure] is not None), "integer"
+            amounts = [row[measure] for row in rows if row[measure] is not None]
+            if not amounts:
+                return None, "decimal"
+            total = sum((Decimal(amount) for amount in amounts), Decimal("0"))
+            return format(total, "f"), "decimal"
+
+        out_col_name = metric.output_column
 
     if spec.group_by:
         groups: dict[tuple[object, ...], list[tuple[object, ...]]] = {}
@@ -229,14 +293,14 @@ def compute_independent(
             result_rows = filtered_rows
 
         if spec.order_by or spec.limit is not None:
-            valid_order_cols = set(spec.group_by) | {metric.output_column}
+            valid_order_cols = set(spec.group_by) | {out_col_name}
             for col in spec.order_by:
                 if col not in valid_order_cols:
                     raise C360Error("SCHEMA_ERROR", f"order_by column '{col}' is not allowed")
 
             reverse = spec.order_direction.lower() == "desc"
             measure_index = len(spec.group_by)
-            primary_name = spec.order_by[0] if spec.order_by else metric.output_column
+            primary_name = spec.order_by[0] if spec.order_by else out_col_name
 
             # Two-pass stable sort to ensure primary sort direction while
             # tie-breakers remain strictly ASC
@@ -245,7 +309,7 @@ def compute_independent(
                     str(r[i]) if r[i] is not None else "" for i in range(len(spec.group_by))
                 )
             )
-            if primary_name == metric.output_column:
+            if primary_name == out_col_name:
                 result_rows.sort(
                     key=lambda r: (
                         Decimal(r[measure_index])
@@ -266,11 +330,11 @@ def compute_independent(
 
         columns = tuple(
             Column(name=name, kind=kind) for name, kind in zip(spec.group_by, kinds, strict=True)
-        ) + (Column(name=metric.output_column, kind=output_kind),)
+        ) + (Column(name=out_col_name, kind=output_kind),)
         return QueryResult(columns=columns, rows=tuple(result_rows))
     cell, kind = _aggregate(matched)
     return QueryResult(
-        columns=(Column(name=metric.output_column, kind=kind),),
+        columns=(Column(name=out_col_name, kind=kind),),
         rows=((cell,),),
     )
 

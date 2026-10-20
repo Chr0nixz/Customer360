@@ -117,7 +117,22 @@ def check_generated_rewrite(
             issues.append(_issue(case_id, text, "SCHEMA_ERROR", "permission rewrite drops 姓名"))
         return tuple(issues)
     if case.material_status == "compilable_answer":
-        if case.metric is not None:
+        if getattr(case, "ratio", None) is not None:
+            ratio_obj = case.ratio
+            ratio_names = {
+                "avg_ticket": ("笔均", "客单价", "平均交易", "均额"),
+                "active_rate": ("活跃率", "活跃占比", "活跃比例"),
+            }.get(ratio_obj.output_alias, (ratio_obj.output_alias,))
+            if not any(item in text for item in ratio_names):
+                issues.append(
+                    _issue(
+                        case_id,
+                        text,
+                        "METRIC_ERROR",
+                        f"rewrite drops ratio name for {ratio_obj.output_alias}",
+                    )
+                )
+        elif case.metric is not None:
             business = repository.get_metric_definition(case.metric).business_name
             aliases = METRIC_ALIASES.get(case.metric, ())
             if business not in text and not any(item in text for item in aliases):
@@ -345,6 +360,28 @@ def check_generated_rewrite(
                                 "having rewrite drops less-than comparison direction",
                             )
                         )
+        if getattr(case, "ratio", None) is not None:
+            ratio_obj = case.ratio
+            if ratio_obj.output_alias == "avg_ticket":
+                if not any(t in text for t in ("笔均", "客单价", "平均交易", "均额")):
+                    issues.append(
+                        _issue(
+                            case_id,
+                            text,
+                            "AGGREGATION_ERROR",
+                            "ratio rewrite drops average ticket / 笔均 keyword",
+                        )
+                    )
+            elif ratio_obj.output_alias == "active_rate":
+                if not any(t in text for t in ("活跃率", "活跃占比", "活跃比例")):
+                    issues.append(
+                        _issue(
+                            case_id,
+                            text,
+                            "AGGREGATION_ERROR",
+                            "ratio rewrite drops active rate / 活跃率 keyword",
+                        )
+                    )
     return tuple(issues)
 
 

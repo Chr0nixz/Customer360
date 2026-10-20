@@ -78,6 +78,21 @@ class HavingCondition(Contract):
         return self
 
 
+class RatioSpec(Contract):
+    """Derived compound ratio metric computed as numerator / denominator."""
+
+    numerator_metric: Identifier
+    denominator_metric: Identifier
+    precision: int = Field(default=4, ge=0, le=8)
+    output_alias: Identifier = "ratio"
+
+    @model_validator(mode="after")
+    def validate_ratio(self) -> "RatioSpec":
+        if self.numerator_metric == self.denominator_metric:
+            raise ValueError("numerator and denominator cannot be the same metric")
+        return self
+
+
 class SemanticSpec(Contract):
     """v0.1 is intentionally single-metric. Grouping, ordering, and latest-snapshot are explicit."""
 
@@ -91,6 +106,7 @@ class SemanticSpec(Contract):
     order_by: tuple[Identifier, ...] = ()
     order_direction: Literal["asc", "desc"] = "desc"
     having: tuple[HavingCondition, ...] = ()
+    ratio: RatioSpec | None = None
 
     @model_validator(mode="after")
     def grouping_and_join_are_exclusive(self) -> "SemanticSpec":
@@ -108,7 +124,21 @@ class SemanticSpec(Contract):
             raise ValueError("having conditions are only valid on multi-row group_by queries")
         for cond in self.having:
             if cond.metric is not None and cond.metric != self.metric:
-                raise ValueError(
-                    f"having metric '{cond.metric}' does not match query metric '{self.metric}'"
+                if self.ratio is None or cond.metric != self.ratio.output_alias:
+                    raise ValueError(
+                        f"having metric '{cond.metric}' does not match query metric '{self.metric}'"
+                    )
+        if self.ratio is not None:
+            if self.metric != self.ratio.numerator_metric:
+                msg = (
+                    f"primary metric '{self.metric}' must match "
+                    f"ratio numerator '{self.ratio.numerator_metric}'"
                 )
+                raise ValueError(msg)
+            if self.join is not None:
+                raise ValueError(
+                    "ratio metrics are currently only supported for single table queries"
+                )
+            if isinstance(self.time_window, LatestSnapshot):
+                raise ValueError("ratio metrics are not supported for latest-snapshot queries")
         return self

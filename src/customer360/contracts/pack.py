@@ -20,6 +20,7 @@ from customer360.contracts.semantic import (
     JoinSpec,
     LatestSnapshot,
     PointInTime,
+    RatioSpec,
     RollingWindow,
     SemanticSpec,
 )
@@ -98,6 +99,7 @@ class TrustedGeneratedOracle(Contract):
     order_by: tuple[Identifier, ...] = ()
     order_direction: Literal["asc", "desc"] = "desc"
     having: tuple[HavingCondition, ...] = ()
+    ratio: RatioSpec | None = None
 
     @model_validator(mode="after")
     def consistent(self) -> "TrustedGeneratedOracle":
@@ -119,6 +121,7 @@ class TrustedGeneratedOracle(Contract):
             limit=self.limit,
             order_by=self.order_by,
             having=self.having,
+            ratio=self.ratio,
         )
         if self.family.expected_action != self.expected_action:
             raise ValueError("family action must match oracle action")
@@ -139,6 +142,7 @@ class TrustedGeneratedOracle(Contract):
             order_by=self.order_by,
             order_direction=self.order_direction,
             having=self.having,
+            ratio=self.ratio,
         )
 
 
@@ -183,6 +187,7 @@ class GeneratedCaseBlueprint(Contract):
     order_by: tuple[Identifier, ...] = ()
     order_direction: Literal["asc", "desc"] = "desc"
     having: tuple[HavingCondition, ...] = ()
+    ratio: RatioSpec | None = None
 
     @model_validator(mode="after")
     def consistent(self) -> "GeneratedCaseBlueprint":
@@ -204,6 +209,7 @@ class GeneratedCaseBlueprint(Contract):
             limit=self.limit,
             order_by=self.order_by,
             having=self.having,
+            ratio=self.ratio,
         )
         if self.family.expected_action != self.expected_action:
             raise ValueError("family action must match generated case action")
@@ -224,6 +230,7 @@ class GeneratedCaseBlueprint(Contract):
             order_by=self.order_by,
             order_direction=self.order_direction,
             having=self.having,
+            ratio=self.ratio,
         )
 
 

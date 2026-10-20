@@ -306,6 +306,23 @@ def distinguish_wrong_sql(
                 return hit
         return WrongSqlContrast(False, None)
     if intended == "AGGREGATION_ERROR":
+        if spec.ratio is not None:
+            swapped_ratio = spec.ratio.model_copy(
+                update={
+                    "numerator_metric": spec.ratio.denominator_metric,
+                    "denominator_metric": spec.ratio.numerator_metric,
+                }
+            )
+            hit = try_spec(
+                spec.model_copy(
+                    update={
+                        "metric": spec.ratio.denominator_metric,
+                        "ratio": swapped_ratio,
+                    }
+                )
+            )
+            if hit is not None:
+                return hit
         if spec.having:
             hit = try_spec(spec.model_copy(update={"having": ()}))
             if hit is not None:

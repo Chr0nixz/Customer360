@@ -8,7 +8,7 @@ from sqlglot import exp
 
 from customer360.contracts.execution import AccessPolicy, SqlLimits
 from customer360.errors import QueryRejected
-from customer360.metadata.models import Catalog
+from customer360.metadata.models import Catalog, TableDef
 
 _ALLOWED_PREDICATES = (exp.EQ, exp.NEQ, exp.GT, exp.GTE, exp.LT, exp.LTE)
 _DENIED = (exp.Insert, exp.Update, exp.Delete, exp.Drop, exp.Create, exp.Command, exp.Copy)
@@ -47,6 +47,14 @@ _ALLOWED_NODES = {
     exp.Order,
     exp.Ordered,
     exp.Limit,
+    exp.Div,
+    exp.Nullif,
+    exp.Round,
+    exp.Cast,
+    exp.DataType,
+    exp.DataTypeParam,
+    exp.Case,
+    exp.When,
     exp.Subquery,
 }
 _ALLOWED_SELECT_KEYS = frozenset(
@@ -434,6 +442,41 @@ def _validate_limit_clause(limit: exp.Limit, max_rows: int) -> None:
         _fail("UNSAFE_SQL", f"LIMIT {limit_int} exceeds max allowed rows ({max_rows})")
 
 
+def _validate_ratio_aggregate(
+    node: exp.Expression, catalog: Catalog, table_def: TableDef
+) -> tuple[set[str], str]:
+    if not isinstance(node, exp.Round):
+        _fail("UNSUPPORTED_QUERY", "ratio expression must be wrapped in ROUND")
+    div = node.this
+    if not isinstance(div, exp.Div):
+        _fail("UNSUPPORTED_QUERY", "ROUND must enclose a division operator")
+    num_node = div.left
+    den_node = div.right
+
+    if isinstance(num_node, exp.Cast):
+        num_agg = num_node.this
+    else:
+        num_agg = num_node
+
+    if not isinstance(den_node, exp.Nullif):
+        _fail("UNSAFE_SQL", "ratio denominator must be protected with NULLIF(..., 0)")
+    den_agg = den_node.this
+    den_null_val = den_node.expression
+    if not (isinstance(den_null_val, exp.Literal) and str(den_null_val.this) == "0"):
+        _fail("UNSAFE_SQL", "ratio NULLIF must check against 0")
+
+    referenced = set()
+    for agg in (num_agg, den_agg):
+        if not any(isinstance(agg, cls) for cls in (exp.Count, exp.Sum)):
+            _fail("UNSUPPORTED_QUERY", "ratio components must be COUNT or SUM aggregates")
+        cols = {c.name for c in agg.find_all(exp.Column)}
+        for c_name in cols:
+            if c_name not in {col.column_name for col in table_def.columns}:
+                _fail("UNKNOWN_FIELD", f"unknown column in ratio aggregate: {c_name}")
+        referenced |= cols
+    return referenced, "decimal"
+
+
 def _validate_grouped_query(
     tree: exp.Select, catalog: Catalog, policy: AccessPolicy, sql: str, limits: SqlLimits
 ) -> GuardedQuery:
@@ -488,30 +531,40 @@ def _validate_grouped_query(
         _fail("UNSAFE_SQL", "unsafe output alias")
 
     aggregate = aggregate_proj.this
-    if isinstance(aggregate, exp.Count) and isinstance(aggregate.this, exp.Distinct):
+    if isinstance(aggregate, exp.Round):
+        referenced, output_kind = _validate_ratio_aggregate(aggregate, catalog, table_def)
+        referenced.add(group_name)
+    elif isinstance(aggregate, exp.Count) and isinstance(aggregate.this, exp.Distinct):
         values = aggregate.this.expressions
         if len(values) != 1:
             _fail("UNSUPPORTED_QUERY", "distinct count requires one column")
         measure_name = _column(values[0])
         output_kind = "integer"
+        try:
+            table_def.column(measure_name)
+        except KeyError:
+            _fail("UNKNOWN_FIELD", f"unknown measure column {measure_name}")
+        referenced = {group_name, measure_name}
     elif isinstance(aggregate, exp.Count):
         measure_name = _column(aggregate.this)
         output_kind = "integer"
+        try:
+            table_def.column(measure_name)
+        except KeyError:
+            _fail("UNKNOWN_FIELD", f"unknown measure column {measure_name}")
+        referenced = {group_name, measure_name}
     elif isinstance(aggregate, exp.Sum):
         measure_name = _column(aggregate.this)
         output_kind = "decimal"
+        try:
+            measure_col = table_def.column(measure_name)
+        except KeyError:
+            _fail("UNKNOWN_FIELD", f"unknown measure column {measure_name}")
+        if measure_col.kind not in {"decimal", "integer"}:
+            _fail("UNSUPPORTED_QUERY", "sum requires decimal or integer column")
+        referenced = {group_name, measure_name}
     else:
-        _fail("UNSUPPORTED_QUERY", "only COUNT, COUNT DISTINCT, and SUM are supported")
-
-    try:
-        measure_col = table_def.column(measure_name)
-    except KeyError:
-        _fail("UNKNOWN_FIELD", f"unknown measure column {measure_name}")
-
-    if output_kind == "decimal" and measure_col.kind not in {"decimal", "integer"}:
-        _fail("UNSUPPORTED_QUERY", "sum requires decimal or integer column")
-
-    referenced = {group_name, measure_name}
+        _fail("UNSUPPORTED_QUERY", "only COUNT, COUNT DISTINCT, SUM, and ratio ROUND are supported")
     where = tree.args.get("where")
     if where:
         referenced |= _validate_condition(where.this, catalog, table.name)
@@ -720,9 +773,12 @@ def _validate_single_table(
     if not re.fullmatch(r"[a-z][a-z0-9_]*", alias):
         _fail("UNSAFE_SQL", "unsafe output alias")
     aggregate = projections[0].this
-    if any(v for k, v in aggregate.args.items() if k not in {"this", "big_int"}):
-        _fail("UNSUPPORTED_QUERY", "aggregate modifiers are not supported")
-    if isinstance(aggregate, exp.Count):
+    if isinstance(aggregate, exp.Round):
+        referenced, output_kind = _validate_ratio_aggregate(aggregate, catalog, table_def)
+        source_name = None
+    elif isinstance(aggregate, exp.Count):
+        if any(v for k, v in aggregate.args.items() if k not in {"this", "big_int"}):
+            _fail("UNSUPPORTED_QUERY", "aggregate modifiers are not supported")
         source = aggregate.this
         if isinstance(source, exp.Distinct):
             values = source.expressions
@@ -738,7 +794,10 @@ def _validate_single_table(
         else:
             _fail("UNSUPPORTED_QUERY", "COUNT supports * or one DISTINCT column")
         output_kind = "integer"
+        referenced = set()
     elif isinstance(aggregate, exp.Sum) and isinstance(aggregate.this, exp.Column):
+        if any(v for k, v in aggregate.args.items() if k not in {"this", "big_int"}):
+            _fail("UNSUPPORTED_QUERY", "aggregate modifiers are not supported")
         source_name = _column(aggregate.this)
         output_kind = "decimal"
         try:
@@ -747,10 +806,10 @@ def _validate_single_table(
             _fail("UNKNOWN_FIELD", "unknown measure column")
         if source_def.kind != "decimal":
             _fail("UNSUPPORTED_QUERY", "SUM requires a decimal measure")
+        referenced = set()
     else:
-        _fail("UNSUPPORTED_QUERY", "only COUNT and SUM aggregates are supported")
-    referenced = set()
-    if source_name != "*":
+        _fail("UNSUPPORTED_QUERY", "only COUNT, SUM, and ratio ROUND aggregates are supported")
+    if source_name is not None and source_name != "*":
         referenced.add(source_name)
     where = tree.args.get("where")
     if where:

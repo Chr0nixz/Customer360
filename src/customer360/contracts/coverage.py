@@ -74,6 +74,7 @@ PRIVATE_ORACLE_FIELDS = frozenset(
         "order_by",
         "order_direction",
         "having",
+        "ratio",
         "unsupported_reason",
         "missing_slots",
         "slot_replies",
@@ -126,6 +127,7 @@ def validate_case_material(
     limit=None,
     order_by=(),
     having=(),
+    ratio=None,
 ) -> None:
     """Shared action/material constraints for public overlay and trusted blueprint."""
 
@@ -136,6 +138,11 @@ def validate_case_material(
             raise ValueError("limit requires an explicit order_by")
     if having and not group_by:
         raise ValueError("having requires a non-empty group_by")
+    if ratio is not None:
+        if join is not None:
+            raise ValueError("ratio spec cannot declare a join")
+        if expected_action != "answer":
+            raise ValueError("ratio spec requires answer action")
     if join is not None and category != "join":
         raise ValueError("join semantic specs must use the join category")
     if category == "join" and join is None and material_status == "compilable_answer":

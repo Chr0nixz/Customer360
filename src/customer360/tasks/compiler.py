@@ -47,6 +47,25 @@ def _fixed_predicates(metric: MetricDef) -> list[str]:
     return predicates
 
 
+def _metric_expression_for(m: MetricDef, shared_fixed: dict[str, object]) -> str:
+    extra_fixed = {k: v for k, v in m.fixed_filters.items() if k not in shared_fixed}
+    if not extra_fixed:
+        if m.operation == "count_distinct":
+            return f'COUNT(DISTINCT "{m.measure_column}")'
+        elif m.operation == "count":
+            return f'COUNT("{m.measure_column}")'
+        else:
+            return f'SUM("{m.measure_column}")'
+
+    conds = " AND ".join(f'"{k}" = {_quote(v)}' for k, v in extra_fixed.items())
+    if m.operation == "count_distinct":
+        return f'COUNT(DISTINCT CASE WHEN {conds} THEN "{m.measure_column}" END)'
+    elif m.operation == "count":
+        return f'COUNT(CASE WHEN {conds} THEN "{m.measure_column}" END)'
+    else:
+        return f'SUM(CASE WHEN {conds} THEN "{m.measure_column}" ELSE 0 END)'
+
+
 def _time_filters(metric: MetricDef, spec: SemanticSpec) -> list[Filter]:
     if metric.time_semantics == "rolling_required":
         if not isinstance(spec.time_window, RollingWindow):
@@ -331,8 +350,35 @@ def compile_semantic(spec: SemanticSpec, repository: MetadataRepository) -> Comp
     table = repository.catalog.table(metric.source_table)
     filters = list(spec.filters) + _time_filters(metric, spec)
     allowed = set(metric.allowed_filter_columns)
-    fixed = set(metric.fixed_filters) | set(metric.fixed_null_columns)
-    predicates = _fixed_predicates(metric)
+
+    if spec.ratio is not None:
+        try:
+            den_metric = repository.get_metric_definition(spec.ratio.denominator_metric)
+        except KeyError as exc:
+            raise C360Error(
+                "UNKNOWN_METRIC",
+                f"denominator metric is not defined: {spec.ratio.denominator_metric}",
+            ) from exc
+        if metric.source_table != den_metric.source_table:
+            raise C360Error(
+                "SCHEMA_ERROR", "numerator and denominator metrics must share the same source table"
+            )
+        if metric.time_semantics != den_metric.time_semantics:
+            raise C360Error(
+                "TIME_RANGE_ERROR",
+                "numerator and denominator metrics must share the same time semantics",
+            )
+        shared_fixed = {
+            k: v
+            for k, v in metric.fixed_filters.items()
+            if k in den_metric.fixed_filters and den_metric.fixed_filters[k] == v
+        }
+        predicates = [f'"{key}" = {_quote(value)}' for key, value in shared_fixed.items()]
+        fixed = set(shared_fixed)
+    else:
+        fixed = set(metric.fixed_filters) | set(metric.fixed_null_columns)
+        predicates = _fixed_predicates(metric)
+
     for item in filters:
         if item.field not in allowed or item.field in fixed:
             raise C360Error("METRIC_ERROR", f"filter is not allowed: {item.field}")
@@ -361,7 +407,17 @@ def compile_semantic(spec: SemanticSpec, repository: MetadataRepository) -> Comp
                 raise C360Error("METRIC_ERROR", "filter value does not match column type")
         predicates.append(_predicate(item))
     where = (" WHERE " + " AND ".join(predicates)) if predicates else ""
-    if metric.operation == "count_distinct":
+
+    if spec.ratio is not None:
+        num_expr = _metric_expression_for(metric, shared_fixed)
+        den_expr = _metric_expression_for(den_metric, shared_fixed)
+        prec = spec.ratio.precision
+        alias = spec.ratio.output_alias
+        kind = "decimal"
+        expression = (
+            f"ROUND(CAST({num_expr} AS DECIMAL(18, {prec})) / NULLIF({den_expr}, 0), {prec})"
+        )
+    elif metric.operation == "count_distinct":
         expression, alias, kind = (
             f'COUNT(DISTINCT "{metric.measure_column}")',
             metric.output_column,

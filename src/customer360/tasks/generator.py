@@ -31,6 +31,7 @@ from customer360.contracts.semantic import (
     JoinSpec,
     LatestSnapshot,
     PointInTime,
+    RatioSpec,
     RollingWindow,
 )
 from customer360.metadata.metrics import MetadataRepository, MetricDef
@@ -84,6 +85,7 @@ class Draft:
     order_by: tuple[str, ...] = ()
     order_direction: Literal["asc", "desc"] = "desc"
     having: tuple[HavingCondition, ...] = ()
+    ratio: RatioSpec | None = None
 
 
 def _window_for(
@@ -186,6 +188,7 @@ def fingerprint_draft(draft: Draft):
         order_by=draft.order_by,
         order_direction=draft.order_direction,
         having=draft.having,
+        ratio=draft.ratio,
     )
 
 
@@ -827,6 +830,51 @@ def _pool_drafts(repository: MetadataRepository, include_v1_4: bool = False) -> 
                             having=(HavingCondition(operator=op, value=thresh),),  # type: ignore[arg-type]
                         )
                     )
+        # 9. Ratio drafts (compound measures)
+        ratio_defs = (
+            ("successful_transaction_amount", "successful_transaction_count", 2, "avg_ticket"),
+            ("active_customer_count", "distinct_customer_count", 4, "active_rate"),
+        )
+        for num_m, den_m, prec, alias in ratio_defs:
+            try:
+                num_def = repository.get_metric_definition(num_m)
+            except KeyError:
+                continue
+            m_win = _window_for(num_def)
+            drafts.append(
+                Draft(
+                    expected_action="answer",
+                    category="time_window" if m_win else "aggregation",
+                    material_status="compilable_answer",
+                    intended_failure_class="AGGREGATION_ERROR",
+                    metric=num_m,
+                    time_window=m_win,
+                    ratio=RatioSpec(
+                        numerator_metric=num_m,
+                        denominator_metric=den_m,
+                        precision=prec,
+                        output_alias=alias,
+                    ),
+                )
+            )
+            for dim in num_def.allowed_group_dimensions:
+                drafts.append(
+                    Draft(
+                        expected_action="answer",
+                        category="grouping",
+                        material_status="compilable_answer",
+                        intended_failure_class="AGGREGATION_ERROR",
+                        metric=num_m,
+                        time_window=m_win,
+                        group_by=(dim,),
+                        ratio=RatioSpec(
+                            numerator_metric=num_m,
+                            denominator_metric=den_m,
+                            precision=prec,
+                            output_alias=alias,
+                        ),
+                    )
+                )
     return drafts
 
 
@@ -1083,6 +1131,65 @@ def _render(draft: Draft, repository: MetadataRepository) -> tuple[str, tuple[st
             f"给出各{dim_label}{prefix}{biz}{order_str}排名前{k}位。",
             f"请按{dim_label}汇总{prefix}{biz}，按{order_str}给出前{k}名。",
             f"统计各{dim_label}{prefix}{biz}并按{order_str}筛选前{k}名。",
+        )
+        return question, rewrites
+    if draft.ratio is not None:
+        prefix = f"{label}的" if label else ""
+        if draft.ratio.output_alias == "avg_ticket":
+            name = "笔均交易金额"
+        elif draft.ratio.output_alias == "active_rate":
+            name = "客户活跃率"
+        else:
+            name = f"{biz}比率"
+
+        if draft.group_by:
+            dim = draft.group_by[0]
+            dim_map = {
+                "region": "地区",
+                "customer_level": "客户等级",
+                "risk_level": "风险等级",
+                "gender": "性别",
+                "channel": "渠道",
+                "transaction_type": "交易类型",
+                "flow_type": "流向",
+            }
+            dim_label = dim_map.get(dim, dim)
+            if isinstance(draft.time_window, RollingWindow):
+                days = draft.time_window.days
+                anchor = draft.time_window.anchor_date
+                cn = f"{anchor.year}年{anchor.month}月{anchor.day}日"
+                iso = anchor.isoformat()
+                question = f"按{dim_label}统计截至{cn}近{days}天{prefix}{name}。"
+                rewrites = (
+                    f"请按{dim_label}查询截至{iso}近{days}天{prefix}{name}。",
+                    f"各{dim_label}截至{cn}近{days}天{prefix}{name}是多少？",
+                    f"计算截至{cn}近{days}天各{dim_label}的{prefix}{name}。",
+                )
+                return question, rewrites
+            question = f"按{dim_label}统计{prefix}{name}。"
+            rewrites = (
+                f"请按{dim_label}查询{prefix}{name}。",
+                f"各{dim_label}的{prefix}{name}是多少？",
+                f"计算各{dim_label}的{prefix}{name}。",
+            )
+            return question, rewrites
+        if isinstance(draft.time_window, RollingWindow):
+            days = draft.time_window.days
+            anchor = draft.time_window.anchor_date
+            cn = f"{anchor.year}年{anchor.month}月{anchor.day}日"
+            iso = anchor.isoformat()
+            question = f"统计截至{cn}近{days}天{prefix}{name}。"
+            rewrites = (
+                f"请给出截至{iso}近{days}天{prefix}{name}是多少。",
+                f"截至{cn}近{days}天{prefix}{name}是多少？",
+                f"计算截至{cn}近{days}天{prefix}{name}。",
+            )
+            return question, rewrites
+        question = f"统计{prefix}{name}。"
+        rewrites = (
+            f"请给出{prefix}{name}是多少。",
+            f"{prefix}{name}是多少？",
+            f"计算{prefix}{name}。",
         )
         return question, rewrites
     if draft.having:
@@ -1438,6 +1545,12 @@ def generate_task_pack(
                         dev_drafts.append(candidates[fid])
                         used_fids.add(fid)
                         break
+            while sum(1 for d in dev_drafts if d.ratio is not None) < 2:
+                for fid in cand_answers:
+                    if fid not in used_fids and candidates[fid].ratio is not None:
+                        dev_drafts.append(candidates[fid])
+                        used_fids.add(fid)
+                        break
 
         # 3e. Fill remaining Dev answers to exactly 90
         for fid in cand_answers:
@@ -1514,16 +1627,6 @@ def generate_task_pack(
                         covered_metrics.add(m.metric_name)
                         break
 
-        for cat, quota in quotas.items():
-            available = by_category.get(cat, [])
-            for fid in available:
-                cat_count = sum(1 for x in chosen_ids if candidates[x].category == cat)
-                if cat_count >= quota:
-                    break
-                if fid not in chosen_set:
-                    chosen_ids.append(fid)
-                    chosen_set.add(fid)
-
         if include_v1_4:
             for fid in candidates:
                 if (
@@ -1555,6 +1658,22 @@ def generate_task_pack(
                     chosen_set.add(fid)
                     if sum(1 for x in chosen_ids if candidates[x].having) >= 2:
                         break
+            for fid in candidates:
+                if candidates[fid].ratio is not None and fid not in chosen_set:
+                    chosen_ids.append(fid)
+                    chosen_set.add(fid)
+                    if sum(1 for x in chosen_ids if candidates[x].ratio is not None) >= 2:
+                        break
+
+        for cat, quota in quotas.items():
+            available = by_category.get(cat, [])
+            for fid in available:
+                cat_count = sum(1 for x in chosen_ids if candidates[x].category == cat)
+                if cat_count >= quota:
+                    break
+                if fid not in chosen_set:
+                    chosen_ids.append(fid)
+                    chosen_set.add(fid)
 
         remaining = [
             fid
@@ -1607,6 +1726,7 @@ def generate_task_pack(
                 order_by=draft.order_by,
                 order_direction=draft.order_direction,
                 having=draft.having,
+                ratio=draft.ratio,
             )
         )
     pack = GeneratedTaskPack(
@@ -1675,6 +1795,7 @@ def write_generated_pack(
                 order_by=item.order_by,
                 order_direction=item.order_direction,
                 having=item.having,
+                ratio=item.ratio,
             )
             for item in pack.cases
         )

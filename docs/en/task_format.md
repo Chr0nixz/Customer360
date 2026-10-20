@@ -105,6 +105,23 @@ HAVING post-aggregation filtering example:
 }
 ~~~
 
+Derived compound ratio example:
+
+~~~json
+{
+  "semantic_version": "0.1",
+  "metric": "active_customer_count",
+  "filters": [],
+  "group_by": ["region"],
+  "ratio": {
+    "numerator_metric": "active_customer_count",
+    "denominator_metric": "distinct_customer_count",
+    "precision": 4,
+    "output_alias": "active_rate"
+  }
+}
+~~~
+
 Three-table composite join example:
 
 ~~~json
