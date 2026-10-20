@@ -774,6 +774,55 @@ def _pool_drafts(repository: MetadataRepository, include_v1_4: bool = False) -> 
                     join=_join_spec_path("customer_transactions_and_holdings"),
                 )
             )
+        for risk in ("low", "medium", "high"):
+            drafts.append(
+                Draft(
+                    expected_action="answer",
+                    category="join",
+                    material_status="compilable_answer",
+                    intended_failure_class="JOIN_ERROR",
+                    metric="distinct_customer_count",
+                    filters=(Filter(field="risk_level", operator="eq", values=(risk,)),),
+                    join=_join_spec_path("customer_transactions_and_holdings"),
+                )
+            )
+        for g in ("M", "F"):
+            drafts.append(
+                Draft(
+                    expected_action="answer",
+                    category="join",
+                    material_status="compilable_answer",
+                    intended_failure_class="JOIN_ERROR",
+                    metric="distinct_customer_count",
+                    filters=(Filter(field="gender", operator="eq", values=(g,)),),
+                    join=_join_spec_path("customer_transactions_and_holdings"),
+                )
+            )
+        for days in (30, 180):
+            drafts.append(
+                Draft(
+                    expected_action="answer",
+                    category="join",
+                    material_status="compilable_answer",
+                    intended_failure_class="JOIN_ERROR",
+                    metric="distinct_customer_count",
+                    join=_join_spec_path("customer_transactions_and_holdings", days=days),
+                )
+            )
+        for prod in ("P001", "P002"):
+            drafts.append(
+                Draft(
+                    expected_action="answer",
+                    category="join",
+                    material_status="compilable_answer",
+                    intended_failure_class="JOIN_ERROR",
+                    metric="distinct_customer_count",
+                    join=_join_spec_path(
+                        "customer_transactions_and_holdings",
+                        extra=(Filter(field="product_id", operator="eq", values=(prod,)),),
+                    ),
+                )
+            )
         # 7. Top-K drafts across key grouping metrics
         topk_metrics = (
             "distinct_customer_count",

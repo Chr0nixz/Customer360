@@ -228,7 +228,7 @@ def verify_task_pack(
         compiled = compile_semantic(spec, repository)
         independent = compute_independent(spec, repository, slices)
         compiled_result = normalize_sql_result(database, compiled)
-        cmp_policy = ComparisonPolicy(ordered=spec.order_by is not None)
+        cmp_policy = ComparisonPolicy(ordered=bool(spec.order_by) or spec.limit is not None)
         baseline_match = compare_results(independent, compiled_result, policy=cmp_policy)
         policy_block = _policy_block_code(gateway, compiled.sql)
         policy_incompatible = policy_block == "AGGREGATION_TOO_SMALL"

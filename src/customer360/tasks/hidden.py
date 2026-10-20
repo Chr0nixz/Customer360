@@ -142,6 +142,45 @@ def generate_hidden_pack(
     chosen_ids: list[str] = []
     chosen_set: set[str] = set()
     seen_metrics = {draft.metric for draft in required if draft.metric}
+
+    if include_v1_4:
+        for fid, draft in fill_pool:
+            if (
+                draft.join
+                and draft.join.path == "customer_transactions_and_holdings"
+                and fid not in chosen_set
+            ):
+                chosen_ids.append(fid)
+                chosen_set.add(fid)
+                if (
+                    sum(
+                        1
+                        for x in chosen_ids
+                        if fill_map[x].join
+                        and fill_map[x].join.path == "customer_transactions_and_holdings"
+                    )
+                    >= 2
+                ):
+                    break
+        for fid, draft in fill_pool:
+            if draft.limit is not None and fid not in chosen_set:
+                chosen_ids.append(fid)
+                chosen_set.add(fid)
+                if sum(1 for x in chosen_ids if fill_map[x].limit is not None) >= 2:
+                    break
+        for fid, draft in fill_pool:
+            if draft.having and fid not in chosen_set:
+                chosen_ids.append(fid)
+                chosen_set.add(fid)
+                if sum(1 for x in chosen_ids if fill_map[x].having) >= 2:
+                    break
+        for fid, draft in fill_pool:
+            if draft.ratio is not None and fid not in chosen_set:
+                chosen_ids.append(fid)
+                chosen_set.add(fid)
+                if sum(1 for x in chosen_ids if fill_map[x].ratio is not None) >= 2:
+                    break
+
     for cat, quota in quotas.items():
         available = by_category.get(cat, [])
         available_sorted = sorted(
@@ -150,10 +189,15 @@ def generate_hidden_pack(
                 0 if fill_map[fid].metric and fill_map[fid].metric not in seen_metrics else 1
             ),
         )
-        picked = available_sorted[:quota]
-        chosen_ids.extend(picked)
-        chosen_set.update(picked)
-        seen_metrics.update(fill_map[fid].metric for fid in picked if fill_map[fid].metric)
+        for fid in available_sorted:
+            cat_count = sum(1 for x in chosen_ids if fill_map[x].category == cat)
+            if cat_count >= quota:
+                break
+            if fid not in chosen_set:
+                chosen_ids.append(fid)
+                chosen_set.add(fid)
+                if fill_map[fid].metric:
+                    seen_metrics.add(fill_map[fid].metric)
 
     remaining = [
         fid
