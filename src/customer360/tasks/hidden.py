@@ -203,6 +203,7 @@ def generate_hidden_pack(
                 limit=draft.limit,
                 order_by=draft.order_by,
                 order_direction=draft.order_direction,
+                having=draft.having,
             )
         )
     pack = HiddenTaskPack(
@@ -260,6 +261,7 @@ def write_hidden_pack(
             limit=item.limit,
             order_by=item.order_by,
             order_direction=item.order_direction,
+            having=item.having,
         )
         for item in pack.cases
     )

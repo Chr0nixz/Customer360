@@ -331,3 +331,59 @@ def test_check_having_rewrites():
     bad_dir = "按地区统计客户数为10人的各地区及客户数量。"
     issues = check_generated_rewrite(mock_case, bad_dir, repo)
     assert any("having rewrite drops greater-than comparison direction" in i.detail for i in issues)
+
+
+def test_sql_guard_rejects_grouping_column_in_having():
+    repo = MetadataRepository()
+    policy = AccessPolicy(
+        role="analyst",
+        customer_ids=(),
+        grants=(TableGrant(table="dim_customer", columns=("region", "customer_id")),),
+    )
+    limits = SqlLimits()
+
+    # Reject grouping column in HAVING (region is not the aggregated metric alias)
+    bad_group_having = (
+        'SELECT "region" AS "region", COUNT(DISTINCT "customer_id") AS "cnt" '
+        'FROM "dim_customer" '
+        'GROUP BY "region" '
+        'HAVING "region" > 1'
+    )
+    match_msg = "HAVING column 'region' must reference the aggregated metric alias"
+    with pytest.raises(QueryRejected, match=match_msg):
+        validate_sql(bad_group_having, repo.catalog, policy, limits)
+
+
+def test_generate_task_pack_with_having(tmp_path):
+    import yaml
+
+    from customer360.tasks.generator import generate_task_pack, write_generated_pack
+
+    repo = MetadataRepository()
+    pack = generate_task_pack(seed=42, count=120, repository=repo, include_v1_4=True)
+
+    # Verify that having drafts exist in the pack
+    having_cases = [c for c in pack.cases if getattr(c, "having", ())]
+    assert len(having_cases) >= 1
+    for c in having_cases:
+        assert c.category == "grouping"
+        assert c.group_by
+        assert c.having[0].operator in {"gte", "gt"}
+
+    # Write pack and verify public cases do NOT leak having
+    out_dir = tmp_path / "task_pack_having"
+    write_generated_pack(out_dir, pack)
+
+    public_yaml = yaml.safe_load((out_dir / "public_cases.yaml").read_text(encoding="utf-8"))
+    for case in public_yaml["cases"]:
+        assert "having" not in case
+        assert "expected_action" not in case
+
+    # Verify trusted oracles contain having
+    trusted_yaml = yaml.safe_load((out_dir / "generated_oracles.yaml").read_text(encoding="utf-8"))
+    trusted_having = [c for c in trusted_yaml["cases"] if c.get("having")]
+    assert len(trusted_having) >= 1
+    for c in trusted_having:
+        assert len(c["having"]) >= 1
+        assert "operator" in c["having"][0]
+        assert "value" in c["having"][0]

@@ -27,6 +27,7 @@ from customer360.contracts.pack import (
 )
 from customer360.contracts.semantic import (
     Filter,
+    HavingCondition,
     JoinSpec,
     LatestSnapshot,
     PointInTime,
@@ -82,6 +83,7 @@ class Draft:
     limit: int | None = None
     order_by: tuple[str, ...] = ()
     order_direction: Literal["asc", "desc"] = "desc"
+    having: tuple[HavingCondition, ...] = ()
 
 
 def _window_for(
@@ -183,6 +185,7 @@ def fingerprint_draft(draft: Draft):
         limit=draft.limit,
         order_by=draft.order_by,
         order_direction=draft.order_direction,
+        having=draft.having,
     )
 
 
@@ -798,6 +801,32 @@ def _pool_drafts(repository: MetadataRepository, include_v1_4: bool = False) -> 
                                 order_direction="desc" if direction == "DESC" else "asc",
                             )
                         )
+        # 8. HAVING drafts across key grouping metrics
+        having_metrics = (
+            ("distinct_customer_count", 5),
+            ("active_customer_count", 5),
+            ("total_transaction_amount", 100000),
+        )
+        for m_name, thresh in having_metrics:
+            try:
+                m_def = repository.get_metric_definition(m_name)
+            except KeyError:
+                continue
+            m_win = _window_for(m_def)
+            for dim in m_def.allowed_group_dimensions:
+                for op in ("gte", "gt"):
+                    drafts.append(
+                        Draft(
+                            expected_action="answer",
+                            category="grouping",
+                            material_status="compilable_answer",
+                            intended_failure_class="AGGREGATION_ERROR",
+                            metric=m_name,
+                            time_window=m_win,
+                            group_by=(dim,),
+                            having=(HavingCondition(operator=op, value=thresh),),  # type: ignore[arg-type]
+                        )
+                    )
     return drafts
 
 
@@ -1054,6 +1083,52 @@ def _render(draft: Draft, repository: MetadataRepository) -> tuple[str, tuple[st
             f"给出各{dim_label}{prefix}{biz}{order_str}排名前{k}位。",
             f"请按{dim_label}汇总{prefix}{biz}，按{order_str}给出前{k}名。",
             f"统计各{dim_label}{prefix}{biz}并按{order_str}筛选前{k}名。",
+        )
+        return question, rewrites
+    if draft.having:
+        dim = draft.group_by[0] if draft.group_by else "地区"
+        dim_map = {
+            "region": "地区",
+            "customer_level": "客户等级",
+            "risk_level": "风险等级",
+            "gender": "性别",
+            "channel": "渠道",
+            "transaction_type": "交易类型",
+            "flow_type": "流向",
+        }
+        dim_label = dim_map.get(dim, dim)
+        prefix = f"{label}的" if label else ""
+        h = draft.having[0]
+        val = str(h.value)
+        op_map = {
+            "gt": ("大于", "超过"),
+            "gte": ("不少于", "至少"),
+            "lt": ("小于", "低于"),
+            "lte": ("不超过", "至多"),
+            "eq": ("等于", "刚好为"),
+            "ne": ("不等于", "非"),
+        }
+        op_str1, op_str2 = op_map.get(h.operator, ("大于", "超过"))
+        if isinstance(draft.time_window, RollingWindow):
+            days = draft.time_window.days
+            anchor = draft.time_window.anchor_date
+            cn = f"{anchor.year}年{anchor.month}月{anchor.day}日"
+            iso = anchor.isoformat()
+            question = (
+                f"按{dim_label}统计截至{cn}近{days}天{prefix}{biz}{op_str1}{val}"
+                f"的各{dim_label}及{biz}。"
+            )
+            rewrites = (
+                f"截至{cn}近{days}天各{dim_label}{prefix}{biz}{op_str2}{val}的数据是多少？",
+                f"请按{dim_label}查询截至{iso}近{days}天{prefix}{biz}，筛选出{biz}{op_str1}{val}的{dim_label}。",
+                f"分{dim_label}统计截至{cn}近{days}天{prefix}{biz}，且仅保留{biz}{op_str2}{val}的各组情况。",
+            )
+            return question, rewrites
+        question = f"按{dim_label}统计{prefix}{biz}{op_str1}{val}的各{dim_label}及{biz}。"
+        rewrites = (
+            f"各{dim_label}{prefix}{biz}{op_str2}{val}的数据是多少？",
+            f"请按{dim_label}查询{prefix}{biz}，筛选出{biz}{op_str1}{val}的{dim_label}。",
+            f"分{dim_label}统计{prefix}{biz}，且仅保留{biz}{op_str2}{val}的各组情况。",
         )
         return question, rewrites
     if draft.group_by:
@@ -1357,6 +1432,12 @@ def generate_task_pack(
                         dev_drafts.append(candidates[fid])
                         used_fids.add(fid)
                         break
+            while sum(1 for d in dev_drafts if d.having) < 2:
+                for fid in cand_answers:
+                    if fid not in used_fids and candidates[fid].having:
+                        dev_drafts.append(candidates[fid])
+                        used_fids.add(fid)
+                        break
 
         # 3e. Fill remaining Dev answers to exactly 90
         for fid in cand_answers:
@@ -1468,6 +1549,12 @@ def generate_task_pack(
                     chosen_set.add(fid)
                     if sum(1 for x in chosen_ids if candidates[x].limit is not None) >= 2:
                         break
+            for fid in candidates:
+                if candidates[fid].having and fid not in chosen_set:
+                    chosen_ids.append(fid)
+                    chosen_set.add(fid)
+                    if sum(1 for x in chosen_ids if candidates[x].having) >= 2:
+                        break
 
         remaining = [
             fid
@@ -1519,6 +1606,7 @@ def generate_task_pack(
                 limit=draft.limit,
                 order_by=draft.order_by,
                 order_direction=draft.order_direction,
+                having=draft.having,
             )
         )
     pack = GeneratedTaskPack(
@@ -1586,6 +1674,7 @@ def write_generated_pack(
                 limit=item.limit,
                 order_by=item.order_by,
                 order_direction=item.order_direction,
+                having=item.having,
             )
             for item in pack.cases
         )

@@ -396,9 +396,9 @@ def _validate_having_clause(
         return set()
     elif isinstance(left, (exp.Count, exp.Sum)):
         matched = False
-        left_sql = left.sql().lower().replace('"', "")
+        left_sql = left.sql().lower().replace('"', "").replace(" ", "")
         for valid_agg in valid_aggregates:
-            if left_sql == valid_agg.sql().lower().replace('"', ""):
+            if left_sql == valid_agg.sql().lower().replace('"', "").replace(" ", ""):
                 matched = True
                 break
         if not matched:
@@ -520,9 +520,7 @@ def _validate_grouped_query(
     if having:
         privacy_agg = exp.Count(this=exp.Distinct(expressions=[exp.column("customer_id")]))
         valid_aggs = [aggregate, privacy_agg]
-        having_cols = _validate_having_clause(
-            having, valid_aggs, {alias.lower(), key_alias.lower()}
-        )
+        having_cols = _validate_having_clause(having, valid_aggs, {alias.lower()})
         referenced |= having_cols
 
     order = tree.args.get("order")
