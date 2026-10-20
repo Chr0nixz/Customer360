@@ -14,6 +14,8 @@ DATE_CN = re.compile(r"(\d{4})年(\d{1,2})月(\d{1,2})日")
 DAY_SPAN = re.compile(r"(\d{1,4})\s*天")
 NEGATED_VIP = re.compile(r"非\s*VIP|不是\s*VIP")
 NEGATED_SUCCESS = re.compile(r"不成功|非成功|未成功")
+NEGATED_DESC = re.compile(r"升序|从低到高|最低|倒数")
+NEGATED_ASC = re.compile(r"降序|从高到低|最高")
 REGIONS = ("华东", "华北", "华南", "西南")
 NULL_OCCUPATION = ("空", "缺失", "没有填写", "未填写")
 LATEST = ("最新快照", "最新资产快照", "最近一次快照", "最新总资产")
@@ -230,6 +232,18 @@ def check_generated_rewrite(
                             "composite join rewrite must keep 持仓/持有",
                         )
                     )
+                for f in case.join.filters:
+                    if f.field == "product_id" and f.values:
+                        prod_str = str(f.values[0])
+                        if prod_str not in text:
+                            issues.append(
+                                _issue(
+                                    case_id,
+                                    text,
+                                    "JOIN_ERROR",
+                                    f"composite join rewrite drops product_id {prod_str}",
+                                )
+                            )
             if case.join.path in {
                 "customer_transactions",
                 "customer_cash_flows",
@@ -260,6 +274,45 @@ def check_generated_rewrite(
                         f"top-k rewrite must keep limit {limit_val}",
                     )
                 )
+            direction = getattr(case, "order_direction", "desc")
+            if direction == "desc":
+                if not any(token in text for token in ("降序", "从高到低", "最高", "前")):
+                    issues.append(
+                        _issue(
+                            case_id,
+                            text,
+                            "AGGREGATION_ERROR",
+                            "top-k rewrite drops descending sort intent",
+                        )
+                    )
+                if NEGATED_DESC.search(text):
+                    issues.append(
+                        _issue(
+                            case_id,
+                            text,
+                            "AGGREGATION_ERROR",
+                            "top-k rewrite inverts desc order to asc",
+                        )
+                    )
+            elif direction == "asc":
+                if not any(token in text for token in ("升序", "从低到高", "最低", "前")):
+                    issues.append(
+                        _issue(
+                            case_id,
+                            text,
+                            "AGGREGATION_ERROR",
+                            "top-k rewrite drops ascending sort intent",
+                        )
+                    )
+                if NEGATED_ASC.search(text):
+                    issues.append(
+                        _issue(
+                            case_id,
+                            text,
+                            "AGGREGATION_ERROR",
+                            "top-k rewrite inverts asc order to desc",
+                        )
+                    )
     return tuple(issues)
 
 

@@ -76,6 +76,44 @@ point_in_time 示例：
 }
 ~~~
 
+Top-K 排序限量示例：
+
+~~~json
+{
+  "semantic_version": "0.1",
+  "metric": "distinct_customer_count",
+  "filters": [],
+  "group_by": ["region"],
+  "limit": 3,
+  "order_by": ["customer_count"],
+  "order_direction": "desc"
+}
+~~~
+
+三表复合关联示例：
+
+~~~json
+{
+  "semantic_version": "0.1",
+  "metric": "distinct_customer_count",
+  "filters": [
+    {"field": "customer_level", "operator": "eq", "values": ["VIP"]}
+  ],
+  "join": {
+    "path": "customer_transactions_and_holdings",
+    "time_window": {
+      "type": "rolling",
+      "days": 90,
+      "anchor_date": "2025-06-30"
+    },
+    "filters": [
+      {"field": "status", "operator": "eq", "values": ["success"]},
+      {"field": "holding_status", "operator": "eq", "values": ["active"]}
+    ]
+  }
+}
+~~~
+
 编译器从指标定义确定 source、measure、固定过滤和输出列，结构化参数仅生成正确转义的字面量，不能插入自由 SQL。Metric 定义不知道 Agent 内部实现。
 
 ## Agent 接入

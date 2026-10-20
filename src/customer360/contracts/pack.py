@@ -114,6 +114,8 @@ class TrustedGeneratedOracle(Contract):
             slot_replies=self.slot_replies,
             accepted_reason_codes=self.accepted_reason_codes,
             group_by=self.group_by,
+            limit=self.limit,
+            order_by=self.order_by,
         )
         if self.family.expected_action != self.expected_action:
             raise ValueError("family action must match oracle action")
@@ -194,6 +196,8 @@ class GeneratedCaseBlueprint(Contract):
             slot_replies=self.slot_replies,
             accepted_reason_codes=self.accepted_reason_codes,
             group_by=self.group_by,
+            limit=self.limit,
+            order_by=self.order_by,
         )
         if self.family.expected_action != self.expected_action:
             raise ValueError("family action must match generated case action")

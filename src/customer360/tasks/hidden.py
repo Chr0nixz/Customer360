@@ -64,6 +64,7 @@ def generate_hidden_pack(
     count: int = HIDDEN_DEFAULT_COUNT,
     repository: MetadataRepository | None = None,
     oracles: Path | None = None,
+    include_v1_4: bool = False,
 ) -> HiddenTaskPack:
     if count < REQUIRED_COUNT:
         raise ValueError(f"hidden pack needs at least {REQUIRED_COUNT} cases")
@@ -76,7 +77,7 @@ def generate_hidden_pack(
     human = load_human_cases(oracles=oracles, check_rewrites=False)
     blocked = {fingerprint_human_case(case).family_id for case in human.cases}
     blocked.update(item.family.family_id for item in public.cases)
-    unique = unique_pool_drafts(repository, blocked)
+    unique = unique_pool_drafts(repository, blocked, include_v1_4=include_v1_4)
     ordered = sorted(unique.items())
     required = _hidden_required(ordered)
     required_ids = {_fingerprint(draft).family_id for draft in required}
@@ -199,6 +200,9 @@ def generate_hidden_pack(
                 missing_slots=draft.missing_slots,
                 slot_replies=draft.slot_replies,
                 accepted_reason_codes=draft.accepted_reason_codes,
+                limit=draft.limit,
+                order_by=draft.order_by,
+                order_direction=draft.order_direction,
             )
         )
     pack = HiddenTaskPack(
@@ -253,6 +257,9 @@ def write_hidden_pack(
             missing_slots=item.missing_slots,
             slot_replies=item.slot_replies,
             accepted_reason_codes=item.accepted_reason_codes,
+            limit=item.limit,
+            order_by=item.order_by,
+            order_direction=item.order_direction,
         )
         for item in pack.cases
     )

@@ -122,9 +122,16 @@ def validate_case_material(
     slot_replies,
     accepted_reason_codes,
     group_by=(),
+    limit=None,
+    order_by=(),
 ) -> None:
     """Shared action/material constraints for public overlay and trusted blueprint."""
 
+    if limit is not None:
+        if not group_by:
+            raise ValueError("limit requires a non-empty group_by")
+        if not order_by:
+            raise ValueError("limit requires an explicit order_by")
     if join is not None and category != "join":
         raise ValueError("join semantic specs must use the join category")
     if category == "join" and join is None and material_status == "compilable_answer":

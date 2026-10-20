@@ -77,6 +77,44 @@ Point-in-time snapshot example:
 }
 ~~~
 
+Top-K aggregation with explicit ordering example:
+
+~~~json
+{
+  "semantic_version": "0.1",
+  "metric": "distinct_customer_count",
+  "filters": [],
+  "group_by": ["region"],
+  "limit": 3,
+  "order_by": ["customer_count"],
+  "order_direction": "desc"
+}
+~~~
+
+Three-table composite join example:
+
+~~~json
+{
+  "semantic_version": "0.1",
+  "metric": "distinct_customer_count",
+  "filters": [
+    {"field": "customer_level", "operator": "eq", "values": ["VIP"]}
+  ],
+  "join": {
+    "path": "customer_transactions_and_holdings",
+    "time_window": {
+      "type": "rolling",
+      "days": 90,
+      "anchor_date": "2025-06-30"
+    },
+    "filters": [
+      {"field": "status", "operator": "eq", "values": ["success"]},
+      {"field": "holding_status", "operator": "eq", "values": ["active"]}
+    ]
+  }
+}
+~~~
+
 Filters specify `field`, `operator`, and `values`. Supported operators: `eq`, `ne`, `gte`, `lte`, `in`, `is_null`, and `is_not_null`. Null checks use dedicated operators, `in` requires non-empty value lists, and literal types must strictly match column schemas.
 
 ## Agent Protocol Integration
