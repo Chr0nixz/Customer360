@@ -402,7 +402,7 @@ def _validate_having_clause(
                 f"HAVING column '{col_name}' must reference the aggregated metric alias",
             )
         return set()
-    elif isinstance(left, (exp.Count, exp.Sum)):
+    elif isinstance(left, (exp.Count, exp.Sum, exp.Round)):
         matched = False
         left_sql = left.sql().lower().replace('"', "").replace(" ", "")
         for valid_agg in valid_aggregates:
@@ -447,6 +447,14 @@ def _validate_ratio_aggregate(
 ) -> tuple[set[str], str]:
     if not isinstance(node, exp.Round):
         _fail("UNSUPPORTED_QUERY", "ratio expression must be wrapped in ROUND")
+    decimals = node.expression or node.args.get("decimals")
+    if decimals is not None:
+        if not (isinstance(decimals, exp.Literal) and decimals.is_int):
+            _fail("UNSAFE_SQL", "ROUND precision must be an integer literal")
+        prec_val = int(decimals.this)
+        if prec_val < 0 or prec_val > 8:
+            _fail("UNSAFE_SQL", f"ROUND precision {prec_val} is outside allowed range (0-8)")
+
     div = node.this
     if not isinstance(div, exp.Div):
         _fail("UNSUPPORTED_QUERY", "ROUND must enclose a division operator")
@@ -455,6 +463,15 @@ def _validate_ratio_aggregate(
 
     if isinstance(num_node, exp.Cast):
         num_agg = num_node.this
+        cast_to = num_node.to
+        if not isinstance(cast_to, exp.DataType):
+            _fail("UNSAFE_SQL", "CAST target must be a valid data type")
+        if cast_to.this not in (
+            exp.DataType.Type.DECIMAL,
+            exp.DataType.Type.DOUBLE,
+            exp.DataType.Type.FLOAT,
+        ):
+            _fail("UNSAFE_SQL", "CAST target must be a numeric type")
     else:
         num_agg = num_node
 

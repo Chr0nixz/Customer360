@@ -311,3 +311,54 @@ def test_generate_task_pack_with_ratio(tmp_path):
     trusted_yaml = yaml.safe_load((out_dir / "generated_oracles.yaml").read_text(encoding="utf-8"))
     trusted_ratios = [c for c in trusted_yaml["cases"] if c.get("ratio") is not None]
     assert len(trusted_ratios) >= 1
+
+
+def test_sql_guard_admits_ratio_in_having():
+    repo = MetadataRepository()
+    policy = AccessPolicy(
+        role="analyst",
+        customer_ids=(),
+        grants=(TableGrant(table="dim_customer", columns=("region", "customer_id")),),
+    )
+    limits = SqlLimits()
+
+    sql = (
+        'SELECT "region" AS "region", '
+        'ROUND(CAST(COUNT(DISTINCT "customer_id") AS DECIMAL(18, 4)) / '
+        'NULLIF(COUNT(DISTINCT "customer_id"), 0), 4) AS "active_rate" '
+        'FROM "dim_customer" '
+        'GROUP BY "region" '
+        'HAVING ROUND(CAST(COUNT(DISTINCT "customer_id") AS DECIMAL(18, 4)) / '
+        'NULLIF(COUNT(DISTINCT "customer_id"), 0), 4) >= 0.85'
+    )
+    guarded = validate_sql(sql, repo.catalog, policy, limits)
+    assert guarded.table == "dim_customer"
+    assert guarded.output_names == ("region", "active_rate")
+
+
+def test_sql_guard_rejects_unsafe_precision_and_cast():
+    repo = MetadataRepository()
+    policy = AccessPolicy(
+        role="analyst",
+        customer_ids=(),
+        grants=(TableGrant(table="fact_transaction", columns=("amount", "customer_id")),),
+    )
+    limits = SqlLimits()
+
+    # 1. Reject excessive precision (e.g. 99)
+    bad_prec = (
+        'SELECT ROUND(CAST(SUM("amount") AS DECIMAL(18, 2)) / '
+        'NULLIF(COUNT("customer_id"), 0), 99) AS "avg_ticket" '
+        'FROM "fact_transaction"'
+    )
+    with pytest.raises(QueryRejected, match="ROUND precision 99 is outside allowed range"):
+        validate_sql(bad_prec, repo.catalog, policy, limits)
+
+    # 2. Reject non-numeric CAST (e.g. CAST to VARCHAR)
+    bad_cast = (
+        'SELECT ROUND(CAST(SUM("amount") AS VARCHAR) / '
+        'NULLIF(COUNT("customer_id"), 0), 2) AS "avg_ticket" '
+        'FROM "fact_transaction"'
+    )
+    with pytest.raises(QueryRejected, match="CAST target must be a numeric type"):
+        validate_sql(bad_cast, repo.catalog, policy, limits)
