@@ -195,6 +195,39 @@ def compute_independent(
             cell, output_kind = _aggregate(rows)
             result_rows.append((*key, cell))
 
+        if spec.having:
+            filtered_rows = []
+            measure_index = len(spec.group_by)
+            for row in result_rows:
+                cell_val = row[measure_index]
+                if cell_val is None:
+                    continue
+                num_val = Decimal(str(cell_val))
+                keep = True
+                for h in spec.having:
+                    target_val = Decimal(str(h.value))
+                    if h.operator == "gt" and not (num_val > target_val):
+                        keep = False
+                        break
+                    elif h.operator == "gte" and not (num_val >= target_val):
+                        keep = False
+                        break
+                    elif h.operator == "lt" and not (num_val < target_val):
+                        keep = False
+                        break
+                    elif h.operator == "lte" and not (num_val <= target_val):
+                        keep = False
+                        break
+                    elif h.operator == "eq" and not (num_val == target_val):
+                        keep = False
+                        break
+                    elif h.operator == "ne" and not (num_val != target_val):
+                        keep = False
+                        break
+                if keep:
+                    filtered_rows.append(row)
+            result_rows = filtered_rows
+
         if spec.order_by or spec.limit is not None:
             valid_order_cols = set(spec.group_by) | {metric.output_column}
             for col in spec.order_by:

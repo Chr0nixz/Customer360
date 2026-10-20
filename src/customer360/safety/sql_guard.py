@@ -43,9 +43,15 @@ _ALLOWED_NODES = {
     exp.Not,
     exp.Join,
     exp.Group,
+    exp.Having,
+    exp.Order,
+    exp.Ordered,
+    exp.Limit,
     exp.Subquery,
 }
-_ALLOWED_SELECT_KEYS = frozenset({"expressions", "from_", "where", "joins", "group"})
+_ALLOWED_SELECT_KEYS = frozenset(
+    {"expressions", "from_", "where", "joins", "group", "having", "order", "limit"}
+)
 
 
 @dataclass(frozen=True)
@@ -265,6 +271,8 @@ def _validate_join_filters(
 def _validate_join_query(
     tree: exp.Select, catalog: Catalog, policy: AccessPolicy, limits: SqlLimits
 ) -> GuardedQuery:
+    if tree.args.get("having"):
+        _fail("UNSUPPORTED_QUERY", "HAVING clause is only supported on grouped queries")
     from_clause = tree.args.get("from_")
     joins = tree.args.get("joins") or []
     if not from_clause or len(joins) not in {1, 2} or not isinstance(from_clause.this, exp.Table):
@@ -337,6 +345,10 @@ def _validate_join_query(
 
 
 def _aliased_column(node: exp.Expression) -> tuple[str, str]:
+    if isinstance(node, exp.Column) and not node.table:
+        if not re.fullmatch(r"[a-z][a-z0-9_]*", node.name):
+            _fail("UNSAFE_SQL", "unsafe output alias")
+        return node.name, node.name
     if not isinstance(node, exp.Alias) or not re.fullmatch(r"[a-z][a-z0-9_]*", node.alias):
         _fail("UNSAFE_SQL", "unsafe output alias")
     column = node.this
@@ -347,8 +359,83 @@ def _aliased_column(node: exp.Expression) -> tuple[str, str]:
     return column.name, node.alias
 
 
+def _validate_having_clause(
+    node: exp.Expression,
+    valid_aggregates: list[exp.Expression],
+    valid_aliases: set[str],
+) -> set[str]:
+    if isinstance(node, exp.Having):
+        return _validate_having_clause(node.this, valid_aggregates, valid_aliases)
+    if isinstance(node, exp.Paren):
+        return _validate_having_clause(node.this, valid_aggregates, valid_aliases)
+    if isinstance(node, exp.And):
+        return _validate_having_clause(
+            node.left, valid_aggregates, valid_aliases
+        ) | _validate_having_clause(node.right, valid_aggregates, valid_aliases)
+    if not isinstance(node, _ALLOWED_PREDICATES):
+        _fail("UNSUPPORTED_QUERY", "HAVING condition must use comparison predicates")
+
+    left = node.left
+    right = node.right
+
+    if isinstance(right, (exp.Column, exp.Count, exp.Sum)) and isinstance(left, exp.Literal):
+        left, right = right, left
+
+    if not isinstance(right, exp.Literal):
+        _fail("UNSAFE_SQL", "HAVING condition comparison must be against a literal")
+    if not right.is_number:
+        _fail("UNSUPPORTED_QUERY", "HAVING condition value must be numeric")
+
+    if isinstance(left, exp.Column):
+        col_name = left.name.lower()
+        if col_name not in valid_aliases:
+            _fail(
+                "UNSAFE_SQL",
+                f"HAVING column '{col_name}' must reference the aggregated metric alias",
+            )
+        return set()
+    elif isinstance(left, (exp.Count, exp.Sum)):
+        matched = False
+        left_sql = left.sql().lower().replace('"', "")
+        for valid_agg in valid_aggregates:
+            if left_sql == valid_agg.sql().lower().replace('"', ""):
+                matched = True
+                break
+        if not matched:
+            _fail(
+                "UNSAFE_SQL",
+                "HAVING aggregate does not match selected aggregate or privacy threshold",
+            )
+        cols = {c.name for c in left.find_all(exp.Column)}
+        return cols
+    else:
+        _fail("UNSAFE_SQL", "HAVING condition must compare an aggregate expression or metric alias")
+
+
+def _validate_order_clause(order: exp.Order, allowed_columns: set[str]) -> None:
+    for expr in order.expressions:
+        if not isinstance(expr, exp.Ordered):
+            _fail("UNSUPPORTED_QUERY", "invalid ORDER BY expression")
+        target = expr.this
+        if isinstance(target, exp.Column):
+            name = target.name.lower()
+            if name not in allowed_columns:
+                _fail("UNSAFE_SQL", f"ORDER BY column '{name}' is not an authorized output column")
+        else:
+            _fail("UNSAFE_SQL", "ORDER BY must reference output columns")
+
+
+def _validate_limit_clause(limit: exp.Limit, max_rows: int) -> None:
+    val = limit.expression if limit.expression is not None else limit.this
+    if not isinstance(val, exp.Literal) or not val.is_int:
+        _fail("UNSAFE_SQL", "LIMIT must be an integer literal")
+    limit_int = int(val.this)
+    if limit_int < 1 or limit_int > max_rows:
+        _fail("UNSAFE_SQL", f"LIMIT {limit_int} exceeds max allowed rows ({max_rows})")
+
+
 def _validate_grouped_query(
-    tree: exp.Select, catalog: Catalog, policy: AccessPolicy, sql: str
+    tree: exp.Select, catalog: Catalog, policy: AccessPolicy, sql: str, limits: SqlLimits
 ) -> GuardedQuery:
     from_clause = tree.args.get("from_")
     table = from_clause.this if from_clause else None
@@ -428,6 +515,24 @@ def _validate_grouped_query(
     where = tree.args.get("where")
     if where:
         referenced |= _validate_condition(where.this, catalog, table.name)
+
+    having = tree.args.get("having")
+    if having:
+        privacy_agg = exp.Count(this=exp.Distinct(expressions=[exp.column("customer_id")]))
+        valid_aggs = [aggregate, privacy_agg]
+        having_cols = _validate_having_clause(
+            having, valid_aggs, {alias.lower(), key_alias.lower()}
+        )
+        referenced |= having_cols
+
+    order = tree.args.get("order")
+    if order:
+        _validate_order_clause(order, {alias.lower(), key_alias.lower()})
+
+    limit = tree.args.get("limit")
+    if limit:
+        _validate_limit_clause(limit, limits.max_rows)
+
     known = {column.column_name for column in table_def.columns}
     if not referenced <= known:
         _fail("UNKNOWN_FIELD", "query references an unknown column")
@@ -587,6 +692,12 @@ def _validate_latest_snapshot(
 def _validate_single_table(
     tree: exp.Select, catalog: Catalog, policy: AccessPolicy, sql: str
 ) -> GuardedQuery:
+    if tree.args.get("having"):
+        _fail("UNSUPPORTED_QUERY", "HAVING clause is only supported on grouped queries")
+    if tree.args.get("order"):
+        _fail("UNSUPPORTED_QUERY", "ORDER BY is not supported on scalar aggregate queries")
+    if tree.args.get("limit"):
+        _fail("UNSUPPORTED_QUERY", "LIMIT is not supported on scalar aggregate queries")
     from_clause = tree.args.get("from_")
     table = from_clause.this if from_clause else None
     if (
@@ -701,5 +812,5 @@ def validate_sql(
             return _validate_latest_snapshot(tree, catalog, policy, sql)
         return _validate_join_query(tree, catalog, policy, limits)
     if tree.args.get("group"):
-        return _validate_grouped_query(tree, catalog, policy, sql)
+        return _validate_grouped_query(tree, catalog, policy, sql, limits)
     return _validate_single_table(tree, catalog, policy, sql)

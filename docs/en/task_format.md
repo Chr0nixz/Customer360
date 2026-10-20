@@ -91,6 +91,20 @@ Top-K aggregation with explicit ordering example:
 }
 ~~~
 
+HAVING post-aggregation filtering example:
+
+~~~json
+{
+  "semantic_version": "0.1",
+  "metric": "distinct_customer_count",
+  "filters": [],
+  "group_by": ["region"],
+  "having": [
+    {"operator": "gte", "value": 10}
+  ]
+}
+~~~
+
 Three-table composite join example:
 
 ~~~json

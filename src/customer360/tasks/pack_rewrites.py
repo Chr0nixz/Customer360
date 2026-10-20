@@ -313,6 +313,38 @@ def check_generated_rewrite(
                             "top-k rewrite inverts asc order to desc",
                         )
                     )
+        if getattr(case, "having", ()):
+            for h in case.having:
+                val_str = str(h.value)
+                if val_str not in text:
+                    issues.append(
+                        _issue(
+                            case_id,
+                            text,
+                            "AGGREGATION_ERROR",
+                            f"having rewrite drops threshold {val_str}",
+                        )
+                    )
+                if h.operator in {"gt", "gte"}:
+                    if not any(t in text for t in ("大于", "超过", "高于", "至少", "不少于", "起")):
+                        issues.append(
+                            _issue(
+                                case_id,
+                                text,
+                                "AGGREGATION_ERROR",
+                                "having rewrite drops greater-than comparison direction",
+                            )
+                        )
+                elif h.operator in {"lt", "lte"}:
+                    if not any(t in text for t in ("小于", "低于", "不超过", "至多", "以下")):
+                        issues.append(
+                            _issue(
+                                case_id,
+                                text,
+                                "AGGREGATION_ERROR",
+                                "having rewrite drops less-than comparison direction",
+                            )
+                        )
     return tuple(issues)
 
 

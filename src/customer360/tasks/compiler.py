@@ -21,6 +21,16 @@ class CompiledQuery:
     columns: tuple[Column, ...]
 
 
+_HAVING_OP_MAP = {
+    "eq": "=",
+    "ne": "<>",
+    "gt": ">",
+    "gte": ">=",
+    "lt": "<",
+    "lte": "<=",
+}
+
+
 def _quote(value: object) -> str:
     if isinstance(value, bool):
         return "TRUE" if value else "FALSE"
@@ -401,6 +411,13 @@ def compile_semantic(spec: SemanticSpec, repository: MetadataRepository) -> Comp
     if spec.group_by:
         key_select = ", ".join(f'"{name}" AS "{name}"' for name in spec.group_by)
         group_clause = " GROUP BY " + ", ".join(f'"{name}"' for name in spec.group_by)
+        having_clause = ""
+        if spec.having:
+            having_parts = []
+            for h in spec.having:
+                op_sql = _HAVING_OP_MAP[h.operator]
+                having_parts.append(f"{expression} {op_sql} {h.value}")
+            having_clause = " HAVING " + " AND ".join(having_parts)
         order_clause = ""
         if spec.order_by or spec.limit is not None:
             valid_order_cols = set(spec.group_by) | {alias, metric.output_column}
@@ -413,10 +430,8 @@ def compile_semantic(spec: SemanticSpec, repository: MetadataRepository) -> Comp
             order_items = [f'"{primary}" {direction}'] + tie_breakers
             order_clause = " ORDER BY " + ", ".join(order_items)
         limit_clause = f" LIMIT {spec.limit}" if spec.limit is not None else ""
-        sql = (
-            f'SELECT {key_select}, {expression} AS "{alias}" '
-            f'FROM "{metric.source_table}"{where}{group_clause}{order_clause}{limit_clause}'
-        )
+        tail = f"{where}{group_clause}{having_clause}{order_clause}{limit_clause}"
+        sql = f'SELECT {key_select}, {expression} AS "{alias}" FROM "{metric.source_table}"{tail}'
         key_columns = tuple(
             Column(name=name, kind=table.column(name).kind) for name in spec.group_by
         )

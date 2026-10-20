@@ -16,6 +16,7 @@ from customer360.contracts.oracle import SlotReply
 from customer360.contracts.public import RefusalCode
 from customer360.contracts.semantic import (
     Filter,
+    HavingCondition,
     JoinSpec,
     LatestSnapshot,
     PointInTime,
@@ -96,6 +97,7 @@ class TrustedGeneratedOracle(Contract):
     limit: int | None = Field(default=None, ge=1, le=1000)
     order_by: tuple[Identifier, ...] = ()
     order_direction: Literal["asc", "desc"] = "desc"
+    having: tuple[HavingCondition, ...] = ()
 
     @model_validator(mode="after")
     def consistent(self) -> "TrustedGeneratedOracle":
@@ -116,6 +118,7 @@ class TrustedGeneratedOracle(Contract):
             group_by=self.group_by,
             limit=self.limit,
             order_by=self.order_by,
+            having=self.having,
         )
         if self.family.expected_action != self.expected_action:
             raise ValueError("family action must match oracle action")
@@ -135,6 +138,7 @@ class TrustedGeneratedOracle(Contract):
             limit=self.limit,
             order_by=self.order_by,
             order_direction=self.order_direction,
+            having=self.having,
         )
 
 
@@ -178,6 +182,7 @@ class GeneratedCaseBlueprint(Contract):
     limit: int | None = Field(default=None, ge=1, le=1000)
     order_by: tuple[Identifier, ...] = ()
     order_direction: Literal["asc", "desc"] = "desc"
+    having: tuple[HavingCondition, ...] = ()
 
     @model_validator(mode="after")
     def consistent(self) -> "GeneratedCaseBlueprint":
@@ -198,6 +203,7 @@ class GeneratedCaseBlueprint(Contract):
             group_by=self.group_by,
             limit=self.limit,
             order_by=self.order_by,
+            having=self.having,
         )
         if self.family.expected_action != self.expected_action:
             raise ValueError("family action must match generated case action")
@@ -217,6 +223,7 @@ class GeneratedCaseBlueprint(Contract):
             limit=self.limit,
             order_by=self.order_by,
             order_direction=self.order_direction,
+            having=self.having,
         )
 
 

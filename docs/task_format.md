@@ -47,7 +47,9 @@ M3 生成包与 20 题包分离：`c360 generate-tasks --count 120 --seed 42` �
 
 默认是单指标、单表。另支持 5 条单跳可执行 Join 路径（`customer_transactions`、`customer_holdings`、`customer_asset_snapshots`、`customer_cash_flows`、`customer_service_relations`）以及受控三表复合关联路径（`customer_transactions_and_holdings`，客户同时关联交易事实表与持仓事实表）：均以 `dim_customer.customer_id` 为连接键，结果只能按客户去重计数或聚合已授权数值度量；客户条件和关联表条件分别在对应表侧执行，交易 Join 必须显式提供 rolling 时间窗口。`group_by` 支持安全白名单维度（`region`、`customer_level`、`risk_level`、`channel`、`transaction_type` 等，严格禁止 `customer_id` 等单客高基数标识列）；输出为组键加指标列，网关强制执行组粒度聚合防御（`COALESCE(MIN(cnt), 0) >= 3`）。
 
-支持 Top-K 与有序排序语法（`limit`、`order_by`、`order_direction`）：声明 `limit` 时必须具有排序依据；为彻底消除底层数据库引擎在遇到度量并列（Ties）时的随机性，编译器与独立 Oracle 共同遵循确定性全序消歧规则（主排序列 + 分组维度 ASC 全序 Tie-breaker），比对器采用 `ComparisonPolicy(ordered=True)` 进行严格顺序与数值容差校验。`time_window` 可以是 rolling、point_in_time 或 latest_snapshot（仅 `latest_total_asset`：逐客户 `MAX(snapshot_date) <= anchor` 再 SUM）。窗口函数、HAVING 和未声明 Join 仍拒绝。Filter 指定 field、operator、values；支持 eq/ne/gte/lte/in/is_null/is_not_null。NULL 使用专用操作，IN 非空，类型必须与字段匹配。三种时间语义不能互换。
+支持 Top-K 与有序排序语法（`limit`、`order_by`、`order_direction`）：声明 `limit` 时必须具有排序依据；为彻底消除底层数据库引擎在遇到度量并列（Ties）时的随机性，编译器与独立 Oracle 共同遵循确定性全序消歧规则（主排序列 + 分组维度 ASC 全序 Tie-breaker），比对器采用 `ComparisonPolicy(ordered=True)` 进行严格顺序与数值容差校验。
+
+支持 HAVING 聚合后过滤语法（`having`）：仅允许在声明了分组维度（`group_by`）的多行聚合查询中使用；支持对已聚合的目标度量按比较操作符（`eq`、`ne`、`gt`、`gte`、`lt`、`lte`）与数值阈值进行筛选；SQL Guard 网关对 HAVING 条件实施严格静态 AST 审计（一侧必须为目标聚合度量或其别名，另一侧必须为数字字面量，且仅限 AND 组合，严禁裸列与未授权列）；单表标量查询与 Join 查询中的 HAVING 保持 Fail-Closed 拦截。`time_window` 可以是 rolling、point_in_time 或 latest_snapshot（仅 `latest_total_asset`：逐客户 `MAX(snapshot_date) <= anchor` 再 SUM）。窗口函数与未声明 Join 仍拒绝。Filter 指定 field、operator、values；支持 eq/ne/gte/lte/in/is_null/is_not_null。NULL 使用专用操作，IN 非空，类型必须与字段匹配。三种时间语义不能互换。
 
 latest_snapshot 示例：
 
@@ -87,6 +89,20 @@ Top-K 排序限量示例：
   "limit": 3,
   "order_by": ["customer_count"],
   "order_direction": "desc"
+}
+~~~
+
+HAVING 聚合后过滤示例：
+
+~~~json
+{
+  "semantic_version": "0.1",
+  "metric": "distinct_customer_count",
+  "filters": [],
+  "group_by": ["region"],
+  "having": [
+    {"operator": "gte", "value": 10}
+  ]
 }
 ~~~
 

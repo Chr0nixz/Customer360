@@ -6,6 +6,7 @@ from customer360.contracts.coverage import HumanCaseBlueprint
 from customer360.contracts.family import FamilyFingerprint
 from customer360.contracts.semantic import (
     Filter,
+    HavingCondition,
     JoinSpec,
     LatestSnapshot,
     PointInTime,
@@ -22,6 +23,7 @@ def infer_template_id(
     filters: tuple[Filter, ...],
     missing_slots: tuple[str, ...],
     limit: int | None = None,
+    having: tuple[HavingCondition, ...] = (),
 ) -> str:
     if expected_action == "refuse":
         return "t_refuse"
@@ -31,6 +33,8 @@ def infer_template_id(
         return "t_clarify_time"
     if limit is not None:
         return "t_topk"
+    if having:
+        return "t_having"
     if join is not None:
         return "t_join"
     if group_by:
@@ -100,6 +104,7 @@ def fingerprint_for(
     limit: int | None = None,
     order_by: tuple[str, ...] | str | None = None,
     order_direction: str | None = None,
+    having: tuple[HavingCondition, ...] = (),
 ) -> FamilyFingerprint:
     template_id = infer_template_id(
         expected_action=expected_action,
@@ -109,6 +114,7 @@ def fingerprint_for(
         filters=filters,
         missing_slots=missing_slots,
         limit=limit,
+        having=having,
     )
     time_kind, rolling_days, time_point = _time_fields(time_window, join)
     signature = filter_signature(filters, join=join, accepted_reason_codes=accepted_reason_codes)
@@ -126,6 +132,12 @@ def fingerprint_for(
     if limit is not None:
         order_str = ",".join(order_by) if isinstance(order_by, tuple) else (order_by or "-")
         parts.append(f"{order_str}:{order_direction or 'desc'}:{limit}")
+    if having:
+        having_strs = [
+            f"{h.metric or metric or '-'}:{h.operator}:{h.value}"
+            for h in sorted(having, key=lambda x: (x.metric or "", x.operator, str(x.value)))
+        ]
+        parts.append(",".join(having_strs))
     canonical = "|".join(parts)
     family_id = "fam_" + sha256(canonical.encode("utf-8")).hexdigest()[:16]
     return FamilyFingerprint(
@@ -156,4 +168,5 @@ def fingerprint_human_case(case: HumanCaseBlueprint) -> FamilyFingerprint:
         limit=getattr(case, "limit", None),
         order_by=getattr(case, "order_by", None),
         order_direction=getattr(case, "order_direction", None),
+        having=getattr(case, "having", ()),
     )

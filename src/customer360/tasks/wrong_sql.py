@@ -306,6 +306,23 @@ def distinguish_wrong_sql(
                 return hit
         return WrongSqlContrast(False, None)
     if intended == "AGGREGATION_ERROR":
+        if spec.having:
+            hit = try_spec(spec.model_copy(update={"having": ()}))
+            if hit is not None:
+                return hit
+            first = spec.having[0]
+            inverted_op = {
+                "gt": "lte",
+                "gte": "lt",
+                "lt": "gte",
+                "lte": "gt",
+                "eq": "ne",
+                "ne": "eq",
+            }.get(first.operator, "lt")
+            inv_having = (first.model_copy(update={"operator": inverted_op}),) + spec.having[1:]
+            hit = try_spec(spec.model_copy(update={"having": inv_having}))
+            if hit is not None:
+                return hit
         if spec.limit is not None:
             alt_dir = "ASC" if spec.order_direction == "DESC" else "DESC"
             hit = try_spec(spec.model_copy(update={"order_direction": alt_dir}))
