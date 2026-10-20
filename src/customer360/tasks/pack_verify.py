@@ -252,7 +252,7 @@ def verify_task_pack(
             # Trusted Gold correctness and Agent applicability are separate axes.
             # A gateway rejection must never hide a broken compiler/oracle result.
             variant_match = compare_results(variant_independent, variant_result, policy=cmp_policy)
-            changed = not compare_results(compiled_result, variant_result)
+            changed = not compare_results(compiled_result, variant_result, policy=cmp_policy)
             differed += int(changed)
             variant_rows.append(
                 PackVariantResult(

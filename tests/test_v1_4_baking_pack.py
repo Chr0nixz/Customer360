@@ -192,3 +192,17 @@ def test_cli_generate_and_check_isolation(tmp_path):
     )
     assert res_iso.exit_code == 0
     assert '"passed": true' in res_iso.stdout.lower() or '"passed":true' in res_iso.stdout.lower()
+
+
+def test_verify_task_pack_semantic_acceptance_v1_4(baseline):
+    from customer360.tasks.pack_verify import verify_task_pack
+
+    repo = MetadataRepository()
+    pack = generate_task_pack(seed=42, count=120, repository=repo, include_v1_4=True)
+
+    report = verify_task_pack(baseline, pack)
+    assert report.semantic_passed is True
+    assert all(
+        c.independent_match for c in report.cases if c.material_status == "compilable_answer"
+    )
+    assert all(c.failure is None for c in report.cases)

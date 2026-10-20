@@ -147,7 +147,7 @@ class _InputLimit(Exception):
 
 
 def _cell(value):
-    if isinstance(value, Decimal):
+    if isinstance(value, (Decimal, float)):
         return str(value)
     if isinstance(value, date):
         return value.isoformat()

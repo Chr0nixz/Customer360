@@ -125,6 +125,8 @@ Hidden tasks are **entirely new cases** (`C360_4001+`, `split=private`), not rel
 
 ```bash
 uv run c360 generate-hidden --public-pack outputs/tasks-300 --count 100 --output outputs/hidden-pack
+# If including v1.4 advanced analytic features (Top-K, 3-table join, HAVING, ratios):
+uv run c360 generate-hidden --public-pack outputs/tasks-300-v14 --count 100 --output outputs/hidden-pack-v14 --v1-4
 uv run c360 generate-hidden-data --seed 1042 --output outputs/hidden-tiny
 uv run c360 check-isolation --pack outputs/tasks-300 --hidden outputs/hidden-pack
 uv run c360 verify-hidden --dataset outputs/hidden-tiny --pack outputs/hidden-pack --output outputs/verify-hidden-local
