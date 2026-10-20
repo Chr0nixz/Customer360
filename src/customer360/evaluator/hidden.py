@@ -248,8 +248,9 @@ def evaluate_hidden_pack(
         and all(item.split == "private" for item in pack.cases)
         and all(int(item.case_id[5:]) >= 4001 for item in pack.cases)
     )
+    norm_agent_id = agent_id.replace("-", "_")
     report = HiddenEvalReport(
-        agent_id=agent_id,
+        agent_id=norm_agent_id,
         case_count=len(records),
         compilable_answers=compilable,
         integrity_passed=integrity,

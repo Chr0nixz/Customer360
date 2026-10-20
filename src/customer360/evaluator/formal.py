@@ -217,9 +217,10 @@ def evaluate_formal(dataset_dir, pack_dir, variant_dirs, agent, *, agent_id, hid
             )
         )
     provenance["task_pack"] = digest(pack.model_dump(mode="json"))
+    norm_agent_id = agent_id.replace("-", "_")
     return FormalEvaluationReport(
         split=split,
-        agent_id=agent_id,
+        agent_id=norm_agent_id,
         agent_version=__version__,
         case_count=len(records),
         case_ids=tuple(item.case_id for item in records),

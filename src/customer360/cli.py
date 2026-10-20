@@ -347,7 +347,9 @@ def evaluate(
     duplicate_variant: Annotated[Path, typer.Option(help="tiny_duplicate_fanout directory")],
     null_variant: Annotated[Path, typer.Option(help="tiny_null_empty_groups directory")],
     date_variant: Annotated[Path, typer.Option(help="tiny_date_boundary directory")],
-    agent: Annotated[str, typer.Option(help="Local driver: template or baseline")] = "template",
+    agent: Annotated[
+        str, typer.Option(help="Local driver: baseline, local-model, or template")
+    ] = "template",
     mode: Annotated[str, typer.Option(help="same_sql, agent_rerun, or scoring")] = "same_sql",
     split: Annotated[str, typer.Option(help="Must remain dev for the human pack")] = "dev",
     oracles: Annotated[
@@ -1156,6 +1158,44 @@ def test_agent_cmd(
     typer.echo(json_text(report))
     if not report.get("conformance_passed"):
         raise typer.Exit(1)
+
+
+@app.command("serve-local-mock")
+def serve_local_mock_cmd(
+    host: Annotated[
+        str, typer.Option(help="Local loopback host (127.0.0.1 or localhost)")
+    ] = "127.0.0.1",
+    port: Annotated[
+        int, typer.Option(help="Port to bind (11434 by default, or 0 for ephemeral)")
+    ] = 11434,
+    model: Annotated[str, typer.Option(help="Simulated model name")] = "local-model",
+    quiet: Annotated[bool, typer.Option(help="Suppress HTTP request access logs")] = False,
+) -> None:
+    """Run an offline OpenAI-compatible mock inference server on local loopback."""
+    from customer360.agent.local_server import LocalInferenceServer
+
+    server = LocalInferenceServer(host=host, port=port, model=model, quiet=quiet)
+    server.start()
+    typer.echo(
+        json_text(
+            {
+                "status": "listening",
+                "endpoint_url": server.endpoint_url,
+                "model": model,
+                "host": host,
+                "port": server.bound_port,
+            }
+        )
+    )
+    try:
+        import time
+
+        while True:
+            time.sleep(0.5)
+    except KeyboardInterrupt:
+        typer.echo("\nShutting down local mock inference server...")
+    finally:
+        server.stop()
 
 
 if __name__ == "__main__":

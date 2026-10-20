@@ -92,7 +92,10 @@ def _build_user_prompt(packet: AdapterPacket) -> str:
                 "metric_name": m.get("metric_name"),
                 "business_name": m.get("business_name"),
                 "time_semantics": m.get("time_semantics"),
+                "source_table": m.get("source_table"),
                 "allowed_group_dimensions": m.get("allowed_group_dimensions"),
+                "allowed_filter_columns": m.get("allowed_filter_columns"),
+                "fixed_filters": m.get("fixed_filters"),
                 "definition": m.get("definition"),
             }
             for m in packet.metrics[:15]
@@ -213,7 +216,11 @@ class LocalModelAdapter(ModelAdapter):
         req = urllib_request.Request(
             url,
             data=data,
-            headers={"Content-Type": "application/json", "User-Agent": "Customer360-LocalModel"},
+            headers={
+                "Content-Type": "application/json",
+                "Connection": "close",
+                "User-Agent": "Customer360-LocalModel",
+            },
         )
         with opener.open(req, timeout=timeout) as resp:
             return resp.read().decode("utf-8")
@@ -272,13 +279,29 @@ class LocalModelAdapter(ModelAdapter):
         group_by = tuple(
             str(g) for g in data.get("group_by") or () if str(g).lower() not in forbidden_groups
         )
+
+        # Parse time_date into datetime.date object if it's a string,
+        # or fallback to packet anchor_date
+        time_date_val = data.get("time_date")
+        from datetime import date
+
+        if isinstance(time_date_val, str) and time_date_val:
+            try:
+                time_date_obj = date.fromisoformat(time_date_val)
+            except ValueError:
+                time_date_obj = packet.anchor_date
+        elif isinstance(time_date_val, date):
+            time_date_obj = time_date_val
+        else:
+            time_date_obj = packet.anchor_date
+
         return Intent(
             action="answer",
             metric_name=metric_name,
             filters=tuple(filters_list),
             time_kind=data.get("time_kind", "none"),
             days=data.get("days"),
-            time_date=data.get("time_date"),
+            time_date=time_date_obj,
             join_path=data.get("join_path"),
             group_by=group_by,
             evidence=("local_model", self.model),

@@ -56,7 +56,9 @@ def resolve_eval_agent(agent_id: str) -> Agent:
 
         from customer360.agent.local_model import create_local_model_agent
 
-        endpoint = os.getenv("C360_LOCAL_MODEL_URL", "http://127.0.0.1:11434/v1")
+        endpoint = os.getenv("C360_LOCAL_MODEL_URL") or os.getenv(
+            "C360_LOCAL_MODEL_ENDPOINT", "http://127.0.0.1:11434/v1"
+        )
         model = os.getenv("C360_LOCAL_MODEL_NAME", "local-model")
         return create_local_model_agent(endpoint=endpoint, model=model)
     if agent_id in NETWORK_AGENT_IDS:
@@ -360,9 +362,10 @@ def evaluate_matrix(
             )
         )
     integrity = date_unchanged and all(item.split == "dev" for item in records)
+    norm_agent_id = agent_id.replace("-", "_")
     return MatrixRunReport(
         replay_mode=replay_mode,
-        agent_id=agent_id,
+        agent_id=norm_agent_id,
         integrity_passed=integrity,
         agent_invoked=agent_invoked,
         date_dimension_unchanged=date_unchanged,

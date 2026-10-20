@@ -287,6 +287,7 @@ For exhaustive parameter lists, run `uv run c360 <command> --help`.
 | `audit-metadata` | Statically audit catalog, metrics, and foreign key closures |
 | `audit-splits` | Audit template novelty, orthogonality, and variant drift |
 | `transpile-sql` | SQLGlot cross-dialect transpilation (DuckDB <-> PostgreSQL) |
+| `serve-local-mock` | Run offline OpenAI-compatible mock inference server on loopback |
 
 Unimplemented commands will fail cleanly with an error message rather than silently reporting success.
 

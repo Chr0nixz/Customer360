@@ -287,6 +287,7 @@ outputs/score-local/
 | `audit-metadata` | 静态审计 catalog / metrics / 外键拓扑闭包 |
 | `audit-splits` | 审计训练集与验证集的模板/正交/变体泛化度 |
 | `transpile-sql` | SQLGlot 跨方言转译（DuckDB <-> PostgreSQL） |
+| `serve-local-mock` | 本地回环离线 OpenAI 兼容 Mock 推理服务 |
 
 尚未实现的命令（例如 `build-metadata-index`）会报错，不会假装成功。
 

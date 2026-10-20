@@ -281,10 +281,13 @@ Customer360 原生支持通过标准 OpenAI 兼容接口连接**本地离线大�
 - **物理沙箱受控不变**：大模型生成的所有 SQL 仍须严格通过单条只读、高基数 ID 拦截、授权行列前置物化以及组粒度防御（`min_group_size`）。
 
 #### 2. 启动本地推理引擎
-以 Ollama 为例启动本地兼容服务：
+你可以启动真实的本地 Ollama / vLLM 推理服务，或者直接使用内置的零依赖离线 Mock 服务器：
 ```bash
+# 方式 A：启动真实 Ollama 实例（默认监听 http://127.0.0.1:11434/v1）
 ollama run qwen2.5-coder:7b
-# Ollama 默认监听 http://127.0.0.1:11434/v1
+
+# 方式 B：无 GPU / 无 Ollama 环境时，一键启动内置离线 Mock 推理服务
+uv run c360 serve-local-mock --port 11434 --model local-model
 ```
 
 #### 3. CLI 指定本地模型评测
