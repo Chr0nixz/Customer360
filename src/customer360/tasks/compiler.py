@@ -228,7 +228,9 @@ def _validate_join_filters(
                 predicates.append(_predicate(item, prefix=h_def["alias"]))
             elif item.field == "product_id":
                 _check_filter_value(tx_table, item)
+                _check_filter_value(h_table, item)
                 predicates.append(_predicate(item, prefix=tx_def["alias"]))
+                predicates.append(_predicate(item, prefix=h_def["alias"]))
             else:
                 raise C360Error("JOIN_ERROR", f"join filter is not allowed: {item.field}")
 

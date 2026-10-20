@@ -177,3 +177,84 @@ def test_composite_join_gateway_execution(baseline: Path):
     # Distinct customer count should be >= 0
     cnt = int(receipt.result.rows[0][0])
     assert cnt >= 0
+
+
+def test_composite_join_product_id_dual_filter_and_oracle_parity(baseline: Path):
+    repo = MetadataRepository()
+    spec = SemanticSpec(
+        metric="distinct_customer_count",
+        join=JoinSpec(
+            path="customer_transactions_and_holdings",
+            time_window=RollingWindow(days=90, anchor_date=date(2025, 6, 30)),
+            filters=(
+                Filter(field="product_id", operator="eq", values=("P001",)),
+                Filter(field="status", operator="eq", values=("success",)),
+                Filter(field="holding_status", operator="eq", values=("active",)),
+            ),
+        ),
+    )
+    compiled = compile_semantic(spec, repo)
+    assert '"t"."product_id" = \'P001\'' in compiled.sql
+    assert '"h"."product_id" = \'P001\'' in compiled.sql
+
+    conn = duckdb.connect(str(baseline / "dataset.duckdb"), read_only=True)
+    cur = conn.execute(compiled.sql)
+    sql_rows = tuple(cur.fetchall())
+    conn.close()
+    sql_result = QueryResult(columns=compiled.columns, rows=sql_rows)
+
+    slices = load_table_slices(baseline / "dataset.duckdb", repo.catalog)
+    oracle_result = compute_independent(spec, repo, slices)
+    assert sql_result == oracle_result
+    assert compare_results(sql_result, oracle_result) is True
+
+
+def test_sql_guard_rejects_left_join_and_wrong_direction(repository: MetadataRepository):
+    policy = tiny_eval_policy()
+    # 1. Left join is rejected
+    left_sql = (
+        'SELECT COUNT(DISTINCT "c"."customer_id") AS "customer_count" '
+        'FROM "dim_customer" AS "c" '
+        'LEFT JOIN "fact_transaction" AS "t" ON "c"."customer_id" = "t"."customer_id"'
+    )
+    with pytest.raises(QueryRejected):
+        validate_sql(left_sql, repository.catalog, policy, SqlLimits())
+
+    # 2. Wrong direction (starting from fact table) is rejected
+    wrong_dir_sql = (
+        'SELECT COUNT(DISTINCT "c"."customer_id") AS "customer_count" '
+        'FROM "fact_transaction" AS "t" '
+        'JOIN "dim_customer" AS "c" ON "t"."customer_id" = "c"."customer_id"'
+    )
+    with pytest.raises(QueryRejected):
+        validate_sql(wrong_dir_sql, repository.catalog, policy, SqlLimits())
+
+
+def test_sql_guard_rejects_three_joins(repository: MetadataRepository):
+    policy = tiny_eval_policy()
+    three_joins_sql = (
+        'SELECT COUNT(DISTINCT "c"."customer_id") AS "customer_count" '
+        'FROM "dim_customer" AS "c" '
+        'JOIN "fact_transaction" AS "t" ON "c"."customer_id" = "t"."customer_id" '
+        'JOIN "fact_holding" AS "h" ON "c"."customer_id" = "h"."customer_id" '
+        'JOIN "fact_cash_flow" AS "cf" ON "c"."customer_id" = "cf"."customer_id"'
+    )
+    with pytest.raises(QueryRejected):
+        validate_sql(three_joins_sql, repository.catalog, policy, SqlLimits())
+
+
+def test_composite_join_transpiles_to_postgres():
+    from customer360.runtime.dialects import transpile_sql
+
+    sql = (
+        'SELECT COUNT(DISTINCT "c"."customer_id") AS "customer_count" '
+        'FROM "dim_customer" AS "c" '
+        'JOIN "fact_transaction" AS "t" ON "c"."customer_id" = "t"."customer_id" '
+        'JOIN "fact_holding" AS "h" ON "c"."customer_id" = "h"."customer_id" '
+        'WHERE "t"."status" = \'success\' '
+        'AND "h"."holding_status" = \'active\''
+    )
+    result = transpile_sql(sql, source_dialect="duckdb", target_dialect="postgres")
+    assert result.ast_valid is True
+    assert "fact_transaction" in result.transpiled_sql
+    assert "fact_holding" in result.transpiled_sql
