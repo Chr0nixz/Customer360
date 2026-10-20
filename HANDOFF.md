@@ -140,6 +140,12 @@
 - **评测引擎 Agent 标识归一化**：在 `evaluate_matrix`、`evaluate_formal`、`evaluate_hidden_pack` 中自动将 `local-model` 归一化为 `local_model` 满足 Pydantic `Identifier` 命名契约；
 - **全链路端到端评测闭环**：新增 `tests/test_local_model_benchmark.py`（8 项专项测试全部通过），打通 CLI 单题运行、20 题四变体矩阵评测（`same_sql`）、Markdown/HTML 出分报告、CORS 与异常熔断回退。
 
+**2026-10-20 受控三表复合关联白名单与多表集合交集计算 (Composite Join, D068)**：
+- **受控三表复合关联**：支持 `customer_transactions_and_holdings`，实现跨 `dim_customer`、`fact_transaction` 与 `fact_holding` 的业务条件筛选与客户去重计数；
+- **SQL Guard 严密防御**：升级 `_validate_join_query` 支持 1~2 个受控 INNER JOIN，强制校验表权限、标准别名（`t`、`h`）与笛卡尔积拦截；
+- **独立 Oracle 集合交集计算**：内存切片纯逻辑运算（`set_cust & set_tx & set_h`），与 DuckDB 执行 SQL 结果达成 100% 绝对一致；
+- **专属测试套件**：新增 `tests/test_v1_4_composite_join.py`（8 项测试全绿通过）。
+
 阅读顺序：要跑命令先读 [使用说明](docs/user-guide.md)；改代码读 AGENTS.md → 本文件 → docs/architecture.md → docs/data_dictionary.md → ROADMAP.md；公开到 GitHub 读 [docs/github-publish.md](docs/github-publish.md) 与 [CONTRIBUTING.md](CONTRIBUTING.md)。原方案继续保留，矛盾处理见 ROADMAP。
 
 ## 2. 已完成与尚未完成

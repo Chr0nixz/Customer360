@@ -300,6 +300,35 @@ INDEPENDENT_JOIN_SPECS = {
         "time_column": None,
         "window_kind": None,
     },
+    "customer_transactions_and_holdings": {
+        "is_composite": True,
+        "tables": [
+            {
+                "right_table": "fact_transaction",
+                "allowed_columns": {
+                    "customer_id",
+                    "product_id",
+                    "transaction_type",
+                    "channel",
+                    "transaction_date",
+                    "status",
+                },
+                "time_column": "transaction_date",
+                "window_kind": "rolling",
+            },
+            {
+                "right_table": "fact_holding",
+                "allowed_columns": {
+                    "customer_id",
+                    "product_id",
+                    "holding_status",
+                    "snapshot_date",
+                },
+                "time_column": "snapshot_date",
+                "window_kind": "pit",
+            },
+        ],
+    },
 }
 
 
@@ -315,6 +344,90 @@ def _compute_customer_join(
     if not supported:
         raise C360Error("JOIN_ERROR", "only distinct customer count join is supported")
     path_def = INDEPENDENT_JOIN_SPECS[spec.join.path]
+
+    if path_def.get("is_composite"):
+        tx_def = path_def["tables"][0]
+        h_def = path_def["tables"][1]
+        tx_table = repository.catalog.table(tx_def["right_table"])
+        h_table = repository.catalog.table(h_def["right_table"])
+        customer_table = repository.catalog.table("dim_customer")
+
+        for item in spec.filters:
+            if item.field not in metric.allowed_filter_columns:
+                raise C360Error("JOIN_ERROR", f"customer filter is not allowed: {item.field}")
+            kind = customer_table.column(item.field).kind
+            for value in item.values:
+                _coerce(kind, value)
+
+        for item in spec.join.filters:
+            if (
+                item.field not in tx_def["allowed_columns"]
+                and item.field not in h_def["allowed_columns"]
+            ):
+                raise C360Error("JOIN_ERROR", f"join filter is not allowed: {item.field}")
+            target_table = tx_table if item.field in tx_def["allowed_columns"] else h_table
+            kind = target_table.column(item.field).kind
+            for value in item.values:
+                _coerce(kind, value)
+
+        if spec.join.time_window is None or not isinstance(spec.join.time_window, RollingWindow):
+            msg = f"joined {spec.join.path} query requires a rolling window"
+            raise C360Error("TIME_RANGE_ERROR", msg)
+
+        # 1. Matching customer IDs in dim_customer
+        customer = slices["dim_customer"]
+        cust_id_idx = customer.index("customer_id")
+        cand_cust_ids = set()
+        for customer_row in customer.rows:
+            if all(
+                _matches_filter(
+                    customer_row[customer.index(item.field)], item, customer.kind(item.field)
+                )
+                for item in spec.filters
+            ):
+                cand_cust_ids.add(customer_row[cust_id_idx])
+
+        # 2. Matching customer IDs in fact_transaction
+        tx_slice = slices[tx_def["right_table"]]
+        tx_cust_id_idx = tx_slice.index("customer_id")
+        tx_time_idx = tx_slice.index(tx_def["time_column"])
+        start_date = spec.join.time_window.start_date
+        anchor_date = spec.join.time_window.anchor_date
+        tx_filters = [f for f in spec.join.filters if f.field in tx_def["allowed_columns"]]
+
+        tx_cust_ids = set()
+        for row in tx_slice.rows:
+            row_date = row[tx_time_idx]
+            if row_date is None:
+                continue
+            d = date.fromisoformat(str(row_date)) if isinstance(row_date, str) else row_date
+            if not (start_date <= d <= anchor_date):
+                continue
+            if all(
+                _matches_filter(row[tx_slice.index(f.field)], f, tx_slice.kind(f.field))
+                for f in tx_filters
+            ):
+                tx_cust_ids.add(row[tx_cust_id_idx])
+
+        # 3. Matching customer IDs in fact_holding
+        h_slice = slices[h_def["right_table"]]
+        h_cust_id_idx = h_slice.index("customer_id")
+        h_filters = [f for f in spec.join.filters if f.field in h_def["allowed_columns"]]
+
+        h_cust_ids = set()
+        for row in h_slice.rows:
+            if all(
+                _matches_filter(row[h_slice.index(f.field)], f, h_slice.kind(f.field))
+                for f in h_filters
+            ):
+                h_cust_ids.add(row[h_cust_id_idx])
+
+        # 4. Intersection of all three conditions
+        matched_ids = cand_cust_ids & tx_cust_ids & h_cust_ids
+        return QueryResult(
+            columns=(Column(name=metric.output_column, kind="integer"),),
+            rows=((len(matched_ids),),),
+        )
     right_table_name = path_def["right_table"]
     customer = slices["dim_customer"]
     right_slice = slices[right_table_name]

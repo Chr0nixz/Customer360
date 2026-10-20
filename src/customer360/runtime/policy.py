@@ -73,6 +73,19 @@ ANALYST_GRANTS = (
             "net_asset",
         ),
     ),
+    TableGrant(
+        table="fact_holding",
+        columns=(
+            "snapshot_date",
+            "customer_id",
+            "product_id",
+            "quantity",
+            "market_value",
+            "cost_value",
+            "unrealized_profit",
+            "holding_status",
+        ),
+    ),
 )
 
 TINY_CUSTOMER_IDS = tuple(f"C{index:03d}" for index in range(1, 101))

@@ -137,15 +137,104 @@ JOIN_PATH_SPECS = {
         "time_column": None,
         "window_kind": None,
     },
+    "customer_transactions_and_holdings": {
+        "is_composite": True,
+        "tables": [
+            {
+                "right_table": "fact_transaction",
+                "alias": "t",
+                "allowed_columns": {
+                    "customer_id",
+                    "product_id",
+                    "transaction_type",
+                    "channel",
+                    "transaction_date",
+                    "status",
+                },
+                "time_column": "transaction_date",
+                "window_kind": "rolling",
+            },
+            {
+                "right_table": "fact_holding",
+                "alias": "h",
+                "allowed_columns": {
+                    "customer_id",
+                    "product_id",
+                    "holding_status",
+                    "snapshot_date",
+                },
+                "time_column": "snapshot_date",
+                "window_kind": "pit",
+            },
+        ],
+    },
 }
+
+
+def _check_filter_value(table, item: Filter) -> None:
+    kind = table.column(item.field).kind
+    for value in item.values:
+        if kind == "string" and type(value) is not str:
+            raise C360Error("JOIN_ERROR", "join filter value does not match column type")
+        if kind == "boolean" and type(value) is not bool:
+            raise C360Error("JOIN_ERROR", "join filter value does not match column type")
+        if kind == "date":
+            try:
+                if type(value) is not str or date.fromisoformat(value).isoformat() != value:
+                    raise ValueError
+            except ValueError as exc:
+                raise C360Error("JOIN_ERROR", "join date is not canonical") from exc
 
 
 def _validate_join_filters(
     join: JoinSpec, repository: MetadataRepository
-) -> tuple[list[str], str, str]:
+) -> tuple[list[str], list[tuple[str, str]]]:
     if join.path not in JOIN_PATH_SPECS:
         raise C360Error("JOIN_ERROR", "join path is not supported")
     path_def = JOIN_PATH_SPECS[join.path]
+
+    if path_def.get("is_composite"):
+        tx_def = path_def["tables"][0]
+        h_def = path_def["tables"][1]
+        tx_table = repository.catalog.table(tx_def["right_table"])
+        h_table = repository.catalog.table(h_def["right_table"])
+
+        if join.time_window is None or not isinstance(join.time_window, RollingWindow):
+            msg = f"joined {join.path} query requires a rolling window"
+            raise C360Error("TIME_RANGE_ERROR", msg)
+
+        start_str = _quote(join.time_window.start_date.isoformat())
+        anchor_str = _quote(join.time_window.anchor_date.isoformat())
+        tx_col = tx_def["time_column"]
+        tx_alias = tx_def["alias"]
+        predicates = [
+            f'"{tx_alias}"."{tx_col}" >= {start_str}',
+            f'"{tx_alias}"."{tx_col}" <= {anchor_str}',
+        ]
+        for item in join.filters:
+            if item.field == "customer_id":
+                raise C360Error("JOIN_ERROR", "join filter is not allowed: customer_id")
+            if (
+                item.field in tx_def["allowed_columns"]
+                and item.field not in h_def["allowed_columns"]
+            ):
+                _check_filter_value(tx_table, item)
+                predicates.append(_predicate(item, prefix=tx_def["alias"]))
+            elif (
+                item.field in h_def["allowed_columns"]
+                and item.field not in tx_def["allowed_columns"]
+            ):
+                _check_filter_value(h_table, item)
+                predicates.append(_predicate(item, prefix=h_def["alias"]))
+            elif item.field == "product_id":
+                _check_filter_value(tx_table, item)
+                predicates.append(_predicate(item, prefix=tx_def["alias"]))
+            else:
+                raise C360Error("JOIN_ERROR", f"join filter is not allowed: {item.field}")
+
+        joined_tables = [(d["right_table"], d["alias"]) for d in path_def["tables"]]
+        return predicates, joined_tables
+
     table = repository.catalog.table(path_def["right_table"])
     allowed = path_def["allowed_columns"]
     alias = path_def["alias"]
@@ -194,20 +283,9 @@ def _validate_join_filters(
     for item in filters:
         if item.field not in allowed or item.field == "customer_id":
             raise C360Error("JOIN_ERROR", f"join filter is not allowed: {item.field}")
-        kind = table.column(item.field).kind
-        for value in item.values:
-            if kind == "string" and type(value) is not str:
-                raise C360Error("JOIN_ERROR", "join filter value does not match column type")
-            if kind == "boolean" and type(value) is not bool:
-                raise C360Error("JOIN_ERROR", "join filter value does not match column type")
-            if kind == "date":
-                try:
-                    if type(value) is not str or date.fromisoformat(value).isoformat() != value:
-                        raise ValueError
-                except ValueError as exc:
-                    raise C360Error("JOIN_ERROR", "join date is not canonical") from exc
+        _check_filter_value(table, item)
         predicates.append(_predicate(item, prefix=alias))
-    return predicates, path_def["right_table"], alias
+    return predicates, [(path_def["right_table"], alias)]
 
 
 def _predicate(item: Filter, prefix: str | None = None) -> str:
@@ -286,17 +364,17 @@ def compile_semantic(spec: SemanticSpec, repository: MetadataRepository) -> Comp
     else:
         expression, alias, kind = f'SUM("{metric.measure_column}")', metric.output_column, "decimal"
     if spec.join is not None:
-        join_predicates, right_table, right_alias = _validate_join_filters(spec.join, repository)
+        join_predicates, joined_tables = _validate_join_filters(spec.join, repository)
         customer_predicates = [_predicate(item, prefix="c") for item in filters]
         joined_where = customer_predicates + join_predicates
         where = " WHERE " + " AND ".join(joined_where) if joined_where else ""
-        join_clause = (
-            f'JOIN "{right_table}" AS "{right_alias}" '
-            f'ON "c"."customer_id" = "{right_alias}"."customer_id"'
-        )
+        join_clauses = [
+            f'JOIN "{tbl}" AS "{als}" ON "c"."customer_id" = "{als}"."customer_id"'
+            for tbl, als in joined_tables
+        ]
         sql = (
             f'SELECT COUNT(DISTINCT "c"."customer_id") AS "{alias}" '
-            f'FROM "dim_customer" AS "c" {join_clause}{where}'
+            f'FROM "dim_customer" AS "c" {" ".join(join_clauses)}{where}'
         )
         return CompiledQuery(sql, (Column(name=alias, kind=kind),))
     if metric.time_semantics == "latest_snapshot_required":

@@ -267,35 +267,50 @@ def _validate_join_query(
 ) -> GuardedQuery:
     from_clause = tree.args.get("from_")
     joins = tree.args.get("joins") or []
-    if not from_clause or len(joins) != 1 or not isinstance(from_clause.this, exp.Table):
-        _fail("JOIN_ERROR", "exactly one supported join is required")
-    right = joins[0].this
-    if not isinstance(right, exp.Table):
-        _fail("JOIN_ERROR", "joined source must be a table")
-    join = joins[0]
-    if (
-        join.args.get("side")
-        or join.args.get("method")
-        or join.args.get("kind") not in (None, "", "INNER")
-    ):
-        _fail("UNSUPPORTED_QUERY", "only an inner join is supported")
-    if from_clause.this.name != "dim_customer" or right.name not in VALID_RIGHT_TABLES:
+    if not from_clause or len(joins) not in {1, 2} or not isinstance(from_clause.this, exp.Table):
+        _fail("JOIN_ERROR", "one or two supported joins are required")
+    if from_clause.this.name != "dim_customer":
         _fail("JOIN_ERROR", "join direction is not supported")
-    tables = (from_clause.this.name, right.name)
-    expected_right_alias = VALID_RIGHT_TABLES[right.name]
-    aliases = {}
-    for item, expected in ((from_clause.this, "c"), (right, expected_right_alias)):
-        alias = item.args.get("alias")
-        if not alias or alias.name != expected:
-            _fail("UNSUPPORTED_QUERY", f"join aliases must be c and {expected_right_alias}")
-        aliases[expected] = item.name
+
+    alias_from = from_clause.this.args.get("alias")
+    if not alias_from or alias_from.name != "c":
+        _fail("UNSUPPORTED_QUERY", "join aliases must start with c for dim_customer")
+
+    aliases = {"c": "dim_customer"}
+    right_tables: list[str] = []
+    for join in joins:
+        right = join.this
+        if not isinstance(right, exp.Table):
+            _fail("JOIN_ERROR", "joined source must be a table")
+        if (
+            join.args.get("side")
+            or join.args.get("method")
+            or join.args.get("kind") not in (None, "", "INNER")
+        ):
+            _fail("UNSUPPORTED_QUERY", "only an inner join is supported")
+        if right.name not in VALID_RIGHT_TABLES:
+            _fail("JOIN_ERROR", "join table is not supported")
+        expected_right_alias = VALID_RIGHT_TABLES[right.name]
+        alias = right.args.get("alias")
+        if not alias or alias.name != expected_right_alias:
+            msg = f"join alias for {right.name} must be {expected_right_alias}"
+            _fail("UNSUPPORTED_QUERY", msg)
+        if right.name in right_tables:
+            _fail("JOIN_ERROR", "duplicate joined table is not permitted")
+        right_tables.append(right.name)
+        aliases[expected_right_alias] = right.name
+
+    tables = ("dim_customer", *right_tables)
     grants = {grant.table: set(grant.columns) for grant in policy.grants}
     for table in tables:
         if table not in grants:
             _fail("PERMISSION_DENIED", "joined table is not granted")
     if tree.args.get("group"):
         _fail("UNSUPPORTED_QUERY", "joined queries cannot group")
-    referenced = _join_condition(joins[0].args.get("on"), aliases, catalog, grants)
+
+    referenced = set()
+    for join in joins:
+        referenced |= _join_condition(join.args.get("on"), aliases, catalog, grants)
     projections = tree.expressions
     if len(projections) != 1 or not isinstance(projections[0], exp.Alias):
         _fail("UNSUPPORTED_QUERY", "one aliased aggregate is required")

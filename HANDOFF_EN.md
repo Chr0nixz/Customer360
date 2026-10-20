@@ -63,6 +63,11 @@ The current implementation encompasses:
   2. Model prompt & parser hardening: enriched `LocalModelAdapter` prompt with filter columns, fixed filters, and source table metadata; added non-dict validation, safe string-digit coercion for `days`, and date deserialization with anchor fallback;
   3. Agent ID normalization: evaluator normalizes `local-model` to `local_model` conforming to Pydantic `Identifier` contract;
   4. End-to-end benchmark suite: added `tests/test_local_model_benchmark.py` (8/8 tests passed) validating CLI run-case, 20-case 4-variant matrix evaluation, HTML/Markdown report generation, CORS, and error fallback.
+- **2026-10-20 Controlled Three-Table Composite Join & Set Intersection Oracle (Composite Join, D068)**:
+  1. Controlled three-table join: implemented `customer_transactions_and_holdings` spanning `dim_customer`, `fact_transaction`, and `fact_holding` for distinct customer aggregations;
+  2. SQL Guard defense: upgraded `_validate_join_query` to admit 1 or 2 INNER JOINs, strictly checking table permissions, alias conventions (`t`, `h`), and blocking Cartesian products;
+  3. Independent Oracle set intersection: pure in-memory set intersection (`set_cust & set_tx & set_h`) matching DuckDB executed results 100%;
+  4. Dedicated test suite: added `tests/test_v1_4_composite_join.py` (8/8 passed).
 
 ## 2. Completed vs. Uncompleted Status
 
