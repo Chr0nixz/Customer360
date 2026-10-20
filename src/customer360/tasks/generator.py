@@ -6,6 +6,7 @@ from dataclasses import dataclass
 from datetime import date
 from pathlib import Path
 from random import Random
+from typing import Literal
 
 import yaml
 
@@ -78,6 +79,9 @@ class Draft:
     missing_slots: tuple[str, ...] = ()
     slot_replies: tuple[SlotReply, ...] = ()
     accepted_reason_codes: tuple[str, ...] = ()
+    limit: int | None = None
+    order_by: tuple[str, ...] = ()
+    order_direction: Literal["asc", "desc"] = "desc"
 
 
 def _window_for(
@@ -152,6 +156,17 @@ def _join_spec_path(
             path=path,  # type: ignore[arg-type]
             filters=extra or (Filter(field="is_primary", operator="eq", values=(True,)),),
         )
+    if path == "customer_transactions_and_holdings":
+        tw = window or RollingWindow(days=days, anchor_date=ANCHOR)
+        return JoinSpec(
+            path=path,  # type: ignore[arg-type]
+            filters=(
+                Filter(field="status", operator="eq", values=("success",)),
+                Filter(field="holding_status", operator="eq", values=("active",)),
+                *extra,
+            ),
+            time_window=tw,
+        )
     raise ValueError(f"unsupported join path: {path}")
 
 
@@ -165,6 +180,9 @@ def fingerprint_draft(draft: Draft):
         group_by=draft.group_by,
         missing_slots=draft.missing_slots,
         accepted_reason_codes=draft.accepted_reason_codes,
+        limit=draft.limit,
+        order_by=draft.order_by,
+        order_direction=draft.order_direction,
     )
 
 
@@ -324,7 +342,7 @@ def _failure_class_for(
     return "METRIC_ERROR"
 
 
-def _pool_drafts(repository: MetadataRepository) -> list[Draft]:
+def _pool_drafts(repository: MetadataRepository, include_v1_4: bool = False) -> list[Draft]:
     drafts: list[Draft] = []
     for metric in repository.metrics.metrics:
         if metric.metric_name == "latest_total_asset":
@@ -724,6 +742,62 @@ def _pool_drafts(repository: MetadataRepository) -> list[Draft]:
                     accepted_reason_codes=codes,
                 )
             )
+    if include_v1_4:
+        # 6. customer_transactions_and_holdings (Composite Joins)
+        for region in ("华东", "华北", "华南", "西南"):
+            drafts.append(
+                Draft(
+                    expected_action="answer",
+                    category="join",
+                    material_status="compilable_answer",
+                    intended_failure_class="JOIN_ERROR",
+                    metric="distinct_customer_count",
+                    filters=(Filter(field="region", operator="eq", values=(region,)),),
+                    join=_join_spec_path("customer_transactions_and_holdings"),
+                )
+            )
+        for level in ("VIP", "standard"):
+            drafts.append(
+                Draft(
+                    expected_action="answer",
+                    category="join",
+                    material_status="compilable_answer",
+                    intended_failure_class="JOIN_ERROR",
+                    metric="distinct_customer_count",
+                    filters=(Filter(field="customer_level", operator="eq", values=(level,)),),
+                    join=_join_spec_path("customer_transactions_and_holdings"),
+                )
+            )
+        # 7. Top-K drafts across key grouping metrics
+        topk_metrics = (
+            "distinct_customer_count",
+            "active_customer_count",
+            "total_transaction_amount",
+            "total_cash_inflow",
+        )
+        for m_name in topk_metrics:
+            try:
+                m_def = repository.get_metric_definition(m_name)
+            except KeyError:
+                continue
+            m_win = _window_for(m_def)
+            for dim in m_def.allowed_group_dimensions:
+                for k in (3, 5):
+                    for direction in ("DESC", "ASC"):
+                        drafts.append(
+                            Draft(
+                                expected_action="answer",
+                                category="grouping",
+                                material_status="compilable_answer",
+                                intended_failure_class="AGGREGATION_ERROR",
+                                metric=m_name,
+                                time_window=m_win,
+                                group_by=(dim,),
+                                limit=k,
+                                order_by=(m_def.output_column,),
+                                order_direction="desc" if direction == "DESC" else "asc",
+                            )
+                        )
     return drafts
 
 
@@ -901,6 +975,29 @@ def _render(draft: Draft, repository: MetadataRepository) -> tuple[str, tuple[st
                 f"请给出{who}中有{trade}的去重人数。",
                 f"{who}存在{trade}的客户数量是多少？",
             )
+        elif path == "customer_transactions_and_holdings":
+            days = draft.join.time_window.days if draft.join.time_window is not None else 90
+            prod_filters = [f for f in draft.join.filters if f.field == "product_id"]
+            if prod_filters:
+                prod = str(prod_filters[0].values[0])
+                question = (
+                    f"统计{who}中截至2025年6月30日近{days}天有产品{prod}"
+                    "成功交易且持有该产品的去重客户数。"
+                )
+                rewrites = (
+                    f"{who}里截至2025年6月30日近{days}天发生过产品{prod}成功交易且持有该产品的客户有多少人？",
+                    f"请给出{who}在截至2025-06-30近{days}天有产品{prod}成功交易并保有持仓的去重人数。",
+                    f"{who}截至2025年6月30日近{days}天有产品{prod}成功交易同时当前存在持仓的客户数量是多少？",
+                )
+            else:
+                question = (
+                    f"统计{who}中截至2025年6月30日近{days}天有成功交易且当前持有产品的去重客户数。"
+                )
+                rewrites = (
+                    f"{who}里截至2025年6月30日近{days}天发生过成功交易且当前持有产品的客户有多少人？",
+                    f"请给出{who}在截至2025-06-30近{days}天有成功交易并保有持仓的去重人数。",
+                    f"{who}截至2025年6月30日近{days}天有成功交易同时当前存在持仓的客户数量是多少？",
+                )
         else:
             question = f"统计{who}中分配有{trade}的去重客户数。"
             rewrites = (
@@ -908,6 +1005,56 @@ def _render(draft: Draft, repository: MetadataRepository) -> tuple[str, tuple[st
                 f"请给出{who}中分配有{trade}的去重人数。",
                 f"{who}分配有{trade}的客户数量是多少？",
             )
+        return question, rewrites
+    if draft.limit is not None:
+        dim = draft.group_by[0] if draft.group_by else "地区"
+        dim_map = {
+            "region": "地区",
+            "customer_level": "客户等级",
+            "risk_level": "风险等级",
+            "gender": "性别",
+            "channel": "渠道",
+            "transaction_type": "交易类型",
+            "flow_type": "流向",
+        }
+        dim_label = dim_map.get(dim, dim)
+        prefix = f"{label}的" if label else ""
+        order_str = "降序" if draft.order_direction == "desc" else "升序"
+        k = draft.limit
+        if isinstance(draft.time_window, RollingWindow):
+            days = draft.time_window.days
+            anchor = draft.time_window.anchor_date
+            cn = f"{anchor.year}年{anchor.month}月{anchor.day}日"
+            iso = anchor.isoformat()
+            question = (
+                f"按{dim_label}统计截至{cn}近{days}天{prefix}{biz}，"
+                f"按{biz}{order_str}排列取前{k}名。"
+            )
+            rewrites = (
+                f"给出截至{cn}近{days}天各{dim_label}{prefix}{biz}{order_str}排名前{k}位。",
+                f"请按{dim_label}汇总截至{iso}近{days}天{prefix}{biz}，按{order_str}给出前{k}名。",
+                f"统计截至{cn}近{days}天各{dim_label}{prefix}{biz}并按{order_str}筛选前{k}名。",
+            )
+            return question, rewrites
+        if isinstance(draft.time_window, PointInTime):
+            snap = draft.time_window.snapshot_date
+            cn = f"{snap.year}年{snap.month}月{snap.day}日"
+            iso = snap.isoformat()
+            question = (
+                f"按{dim_label}统计{cn}估值日{prefix}{biz}，按{biz}{order_str}排列取前{k}名。"
+            )
+            rewrites = (
+                f"给出{cn}估值日各{dim_label}{prefix}{biz}{order_str}排名的前{k}位。",
+                f"请按{dim_label}汇总{iso}估值日{prefix}{biz}，按{order_str}给出前{k}名。",
+                f"统计估值日{cn}各{dim_label}{prefix}{biz}并按{order_str}筛选前{k}名。",
+            )
+            return question, rewrites
+        question = f"按{dim_label}统计{prefix}{biz}，按{biz}{order_str}排列取前{k}名。"
+        rewrites = (
+            f"给出各{dim_label}{prefix}{biz}{order_str}排名前{k}位。",
+            f"请按{dim_label}汇总{prefix}{biz}，按{order_str}给出前{k}名。",
+            f"统计各{dim_label}{prefix}{biz}并按{order_str}筛选前{k}名。",
+        )
         return question, rewrites
     if draft.group_by:
         dim = draft.group_by[0]
@@ -996,9 +1143,11 @@ def _render(draft: Draft, repository: MetadataRepository) -> tuple[str, tuple[st
     return question, rewrites
 
 
-def unique_pool_drafts(repository: MetadataRepository, blocked: set[str]) -> dict[str, Draft]:
+def unique_pool_drafts(
+    repository: MetadataRepository, blocked: set[str], include_v1_4: bool = False
+) -> dict[str, Draft]:
     unique: dict[str, Draft] = {}
-    for draft in _pool_drafts(repository):
+    for draft in _pool_drafts(repository, include_v1_4=include_v1_4):
         family_id = _fingerprint(draft).family_id
         if family_id in blocked or family_id in unique:
             continue
@@ -1028,6 +1177,7 @@ def generate_task_pack(
     count: int = DEFAULT_COUNT,
     repository: MetadataRepository | None = None,
     oracles: Path | None = None,
+    include_v1_4: bool = False,
 ) -> GeneratedTaskPack:
     if count < REQUIRED_COUNT:
         raise ValueError(f"generated pack needs at least {REQUIRED_COUNT} cases")
@@ -1040,7 +1190,7 @@ def generate_task_pack(
     required_ids = {_fingerprint(draft).family_id for draft in required}
     if required_ids & blocked:
         raise ValueError("required generated families collide with the human pack")
-    unique = unique_pool_drafts(repository, blocked | required_ids)
+    unique = unique_pool_drafts(repository, blocked | required_ids, include_v1_4=include_v1_4)
     reserved = reserve_hidden_error_drafts(unique)
     fill_needed = count - REQUIRED_COUNT
     candidates = {fid: unique[fid] for fid in sorted(unique) if fid not in reserved}
@@ -1183,6 +1333,31 @@ def generate_task_pack(
                     used_fids.add(fid)
                     break
 
+        if include_v1_4:
+            while (
+                sum(
+                    1
+                    for d in dev_drafts
+                    if d.join and d.join.path == "customer_transactions_and_holdings"
+                )
+                < 2
+            ):
+                for fid in cand_answers:
+                    if (
+                        fid not in used_fids
+                        and candidates[fid].join
+                        and candidates[fid].join.path == "customer_transactions_and_holdings"
+                    ):
+                        dev_drafts.append(candidates[fid])
+                        used_fids.add(fid)
+                        break
+            while sum(1 for d in dev_drafts if d.limit is not None) < 2:
+                for fid in cand_answers:
+                    if fid not in used_fids and candidates[fid].limit is not None:
+                        dev_drafts.append(candidates[fid])
+                        used_fids.add(fid)
+                        break
+
         # 3e. Fill remaining Dev answers to exactly 90
         for fid in cand_answers:
             if sum(1 for d in dev_drafts if d.expected_action == "answer") >= 90:
@@ -1268,6 +1443,32 @@ def generate_task_pack(
                     chosen_ids.append(fid)
                     chosen_set.add(fid)
 
+        if include_v1_4:
+            for fid in candidates:
+                if (
+                    candidates[fid].join
+                    and candidates[fid].join.path == "customer_transactions_and_holdings"
+                    and fid not in chosen_set
+                ):
+                    chosen_ids.append(fid)
+                    chosen_set.add(fid)
+                    if (
+                        sum(
+                            1
+                            for x in chosen_ids
+                            if candidates[x].join
+                            and candidates[x].join.path == "customer_transactions_and_holdings"
+                        )
+                        >= 2
+                    ):
+                        break
+            for fid in candidates:
+                if candidates[fid].limit is not None and fid not in chosen_set:
+                    chosen_ids.append(fid)
+                    chosen_set.add(fid)
+                    if sum(1 for x in chosen_ids if candidates[x].limit is not None) >= 2:
+                        break
+
         remaining = [
             fid
             for fid in candidates
@@ -1315,6 +1516,9 @@ def generate_task_pack(
                 missing_slots=draft.missing_slots,
                 slot_replies=draft.slot_replies,
                 accepted_reason_codes=draft.accepted_reason_codes,
+                limit=draft.limit,
+                order_by=draft.order_by,
+                order_direction=draft.order_direction,
             )
         )
     pack = GeneratedTaskPack(
@@ -1379,6 +1583,9 @@ def write_generated_pack(
                 missing_slots=item.missing_slots,
                 slot_replies=item.slot_replies,
                 accepted_reason_codes=item.accepted_reason_codes,
+                limit=item.limit,
+                order_by=item.order_by,
+                order_direction=item.order_direction,
             )
             for item in pack.cases
         )

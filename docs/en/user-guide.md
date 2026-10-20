@@ -95,6 +95,8 @@ uv run c360 report --input outputs/matrix-local --format json
 ```bash
 uv run c360 generate-tasks --count 120 --seed 42 --output outputs/tasks-120
 uv run c360 generate-tasks --count 300 --seed 42 --output outputs/tasks-300
+# Synthesize tasks with v1.4 Top-K limits and three-table composite joins:
+uv run c360 generate-tasks --count 120 --seed 42 --output outputs/tasks-120-v14 --v1-4
 uv run c360 check-isolation --pack outputs/tasks-300
 ```
 
@@ -103,7 +105,7 @@ uv run c360 check-isolation --pack outputs/tasks-300
 | 120 | Development pack | `m3_complete=true`, `m6_structure=false` |
 | 300 | 180 train / 120 generated-dev | `m6_structure=true` |
 
-Task IDs begin at `C360_1001`. Public YAML files contain only question prompts and paraphrases. `pack.json` and `generated_oracles.yaml` belong strictly to the trusted side. The `m6_structure` marker only verifies task count structure, not oracle verification.
+Optionally use `--v1-4` to include Top-K aggregations and three-table composite joins (`customer_transactions_and_holdings`). Task IDs begin at `C360_1001`. Public YAML files contain only question prompts and paraphrases. `pack.json` and `generated_oracles.yaml` belong strictly to the trusted side. The `m6_structure` marker only verifies task count structure, not oracle verification.
 
 ### 4.3 Semantic Verification (Verifying Gold Oracles, Not Agent Score)
 

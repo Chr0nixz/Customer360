@@ -20,7 +20,7 @@ from customer360.contracts.pack_verify import (
 )
 from customer360.contracts.variant import SEMANTIC_VERIFY_VARIANT_IDS
 from customer360.errors import ExecutionFailure, QueryRejected
-from customer360.evaluator.compare import compare_results
+from customer360.evaluator.compare import ComparisonPolicy, compare_results
 from customer360.metadata.metrics import MetadataRepository
 from customer360.runtime.gateway import ExecutionGateway
 from customer360.tasks.compiler import compile_semantic
@@ -228,7 +228,8 @@ def verify_task_pack(
         compiled = compile_semantic(spec, repository)
         independent = compute_independent(spec, repository, slices)
         compiled_result = normalize_sql_result(database, compiled)
-        baseline_match = compare_results(independent, compiled_result)
+        cmp_policy = ComparisonPolicy(ordered=spec.order_by is not None)
+        baseline_match = compare_results(independent, compiled_result, policy=cmp_policy)
         policy_block = _policy_block_code(gateway, compiled.sql)
         policy_incompatible = policy_block == "AGGREGATION_TOO_SMALL"
         policy_count += int(policy_incompatible)
@@ -250,7 +251,7 @@ def verify_task_pack(
             variant_policy_block = _policy_block_code(variant_gateways[variant_id], compiled.sql)
             # Trusted Gold correctness and Agent applicability are separate axes.
             # A gateway rejection must never hide a broken compiler/oracle result.
-            variant_match = compare_results(variant_independent, variant_result)
+            variant_match = compare_results(variant_independent, variant_result, policy=cmp_policy)
             changed = not compare_results(compiled_result, variant_result)
             differed += int(changed)
             variant_rows.append(

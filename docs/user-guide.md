@@ -95,6 +95,8 @@ uv run c360 report --input outputs/matrix-local --format json
 ```bash
 uv run c360 generate-tasks --count 120 --seed 42 --output outputs/tasks-120
 uv run c360 generate-tasks --count 300 --seed 42 --output outputs/tasks-300
+# 启用 v1.4 Top-K 排序限量与三表复合关联题目合成：
+uv run c360 generate-tasks --count 120 --seed 42 --output outputs/tasks-120-v14 --v1-4
 uv run c360 check-isolation --pack outputs/tasks-300
 ```
 
@@ -103,7 +105,7 @@ uv run c360 check-isolation --pack outputs/tasks-300
 | 120 | 开发包 | `m3_complete=true`，`m6_structure=false` |
 | 300 | 180 train / 120 generated-dev | `m6_structure=true` |
 
-题号从 `C360_1001` 起。公开 YAML 只有问题与改写。`pack.json` 和 `generated_oracles.yaml` 是可信侧。`m6_structure` 只表示题量结构，不表示答案已核验。
+可选用 `--v1-4` 选项包含 Top-K 聚合与三表复合关联（`customer_transactions_and_holdings`）高阶用例。题号从 `C360_1001` 起。公开 YAML 只有问题与改写。`pack.json` 和 `generated_oracles.yaml` 是可信侧。`m6_structure` 只表示题量结构，不表示答案已核验。
 
 ### 4.3 语义验收（Gold 对不对，不是 Agent 分数）
 

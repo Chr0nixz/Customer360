@@ -305,12 +305,21 @@ def distinguish_wrong_sql(
             if hit is not None:
                 return hit
         return WrongSqlContrast(False, None)
-    if intended == "AGGREGATION_ERROR" and spec.group_by:
-        mutated = CompiledQuery(
-            sql=gold.sql.replace("COUNT(DISTINCT ", "COUNT(", 1),
-            columns=gold.columns,
-        )
-        if _mismatch(database, gold, mutated, independent):
-            return WrongSqlContrast(True, "mismatch", mutated.sql)
-        return WrongSqlContrast(False, None)
+    if intended == "AGGREGATION_ERROR":
+        if spec.limit is not None:
+            alt_dir = "ASC" if spec.order_direction == "DESC" else "DESC"
+            hit = try_spec(spec.model_copy(update={"order_direction": alt_dir}))
+            if hit is not None:
+                return hit
+            hit = try_spec(spec.model_copy(update={"limit": spec.limit + 1}))
+            if hit is not None:
+                return hit
+        if spec.group_by:
+            mutated = CompiledQuery(
+                sql=gold.sql.replace("COUNT(DISTINCT ", "COUNT(", 1),
+                columns=gold.columns,
+            )
+            if _mismatch(database, gold, mutated, independent):
+                return WrongSqlContrast(True, "mismatch", mutated.sql)
+            return WrongSqlContrast(False, None)
     return WrongSqlContrast(False, None)

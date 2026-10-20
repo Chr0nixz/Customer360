@@ -21,6 +21,7 @@ def infer_template_id(
     time_window: RollingWindow | PointInTime | LatestSnapshot | None,
     filters: tuple[Filter, ...],
     missing_slots: tuple[str, ...],
+    limit: int | None = None,
 ) -> str:
     if expected_action == "refuse":
         return "t_refuse"
@@ -28,6 +29,8 @@ def infer_template_id(
         if "metric" in missing_slots:
             return "t_clarify_metric"
         return "t_clarify_time"
+    if limit is not None:
+        return "t_topk"
     if join is not None:
         return "t_join"
     if group_by:
@@ -94,6 +97,9 @@ def fingerprint_for(
     group_by: tuple[str, ...] = (),
     missing_slots: tuple[str, ...] = (),
     accepted_reason_codes: tuple[str, ...] = (),
+    limit: int | None = None,
+    order_by: tuple[str, ...] | str | None = None,
+    order_direction: str | None = None,
 ) -> FamilyFingerprint:
     template_id = infer_template_id(
         expected_action=expected_action,
@@ -102,22 +108,25 @@ def fingerprint_for(
         time_window=time_window,
         filters=filters,
         missing_slots=missing_slots,
+        limit=limit,
     )
     time_kind, rolling_days, time_point = _time_fields(time_window, join)
     signature = filter_signature(filters, join=join, accepted_reason_codes=accepted_reason_codes)
-    canonical = "|".join(
-        (
-            template_id,
-            expected_action,
-            metric or "-",
-            join.path if join is not None else "-",
-            time_kind,
-            str(rolling_days) if rolling_days is not None else "-",
-            time_point,
-            signature,
-            ",".join(group_by) or "-",
-        )
-    )
+    parts = [
+        template_id,
+        expected_action,
+        metric or "-",
+        join.path if join is not None else "-",
+        time_kind,
+        str(rolling_days) if rolling_days is not None else "-",
+        time_point,
+        signature,
+        ",".join(group_by) or "-",
+    ]
+    if limit is not None:
+        order_str = ",".join(order_by) if isinstance(order_by, tuple) else (order_by or "-")
+        parts.append(f"{order_str}:{order_direction or 'desc'}:{limit}")
+    canonical = "|".join(parts)
     family_id = "fam_" + sha256(canonical.encode("utf-8")).hexdigest()[:16]
     return FamilyFingerprint(
         template_id=template_id,
@@ -144,4 +153,7 @@ def fingerprint_human_case(case: HumanCaseBlueprint) -> FamilyFingerprint:
         group_by=case.group_by,
         missing_slots=case.missing_slots,
         accepted_reason_codes=tuple(case.accepted_reason_codes),
+        limit=getattr(case, "limit", None),
+        order_by=getattr(case, "order_by", None),
+        order_direction=getattr(case, "order_direction", None),
     )

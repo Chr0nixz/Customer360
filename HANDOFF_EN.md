@@ -67,7 +67,12 @@ The current implementation encompasses:
   1. Controlled three-table join: implemented `customer_transactions_and_holdings` spanning `dim_customer`, `fact_transaction`, and `fact_holding` for distinct customer aggregations;
   2. SQL Guard defense: upgraded `_validate_join_query` to admit 1 or 2 INNER JOINs, strictly checking table permissions, alias conventions (`t`, `h`), and blocking Cartesian products;
   3. Independent Oracle set intersection: pure in-memory set intersection (`set_cust & set_tx & set_h`) matching DuckDB executed results 100%;
-  4. Dedicated test suite: added `tests/test_v1_4_composite_join.py` (8/8 passed).
+  4. Dedicated test suite: added `tests/test_v1_4_composite_join.py` (12/12 passed).
+- **2026-10-20 Task Generator Synthesis Expansion for Top-K & Composite Joins (Generator Synthesis, D069)**:
+  1. Task generator feature flag: `generate_task_pack` supports `include_v1_4: bool = False` (backward compatible by default), CLI command `c360 generate-tasks --v1-4`;
+  2. Pool & contract enhancement: `_pool_drafts` incorporates composite joins and Top-K grouping drafts; `GeneratedCaseBlueprint` and `TrustedGeneratedOracle` extended with `limit`, `order_by`, and `order_direction` protected under `PRIVATE_ORACLE_FIELDS`;
+  3. Paraphrase synthesis & audit: `_render` automatically synthesizes natural language and paraphrased rewrites, audited via `check_generated_rewrite`; `pack_verify` automatically injects `ComparisonPolicy(ordered=...)` strict row parity checking;
+  4. Dedicated test suite: added `tests/test_v1_4_generator_expansion.py` (6/6 passed).
 
 ## 2. Completed vs. Uncompleted Status
 

@@ -144,7 +144,13 @@
 - **受控三表复合关联**：支持 `customer_transactions_and_holdings`，实现跨 `dim_customer`、`fact_transaction` 与 `fact_holding` 的业务条件筛选与客户去重计数；
 - **SQL Guard 严密防御**：升级 `_validate_join_query` 支持 1~2 个受控 INNER JOIN，强制校验表权限、标准别名（`t`、`h`）与笛卡尔积拦截；
 - **独立 Oracle 集合交集计算**：内存切片纯逻辑运算（`set_cust & set_tx & set_h`），与 DuckDB 执行 SQL 结果达成 100% 绝对一致；
-- **专属测试套件**：新增 `tests/test_v1_4_composite_join.py`（8 项测试全绿通过）。
+- **专属测试套件**：新增 `tests/test_v1_4_composite_join.py`（12 项测试全绿通过）。
+
+**2026-10-20 任务生成引擎扩展 Top-K 与复合关联自动合成 (Generator Synthesis, D069)**：
+- **任务生成器特性开关**：`generate_task_pack` 支持 `include_v1_4: bool = False`（默认保持向后兼容），CLI 新增 `c360 generate-tasks --v1-4`；
+- **候选池与契约增强**：`_pool_drafts` 纳入复合关联与 Top-K 多维分组排序草案，`GeneratedCaseBlueprint` 与 `TrustedGeneratedOracle` 扩展 `limit`、`order_by`、`order_direction` 强契约并加入 `PRIVATE_ORACLE_FIELDS` 物理防泄露；
+- **问句改写与检验闭环**：`_render` 自动合成复合关联与 Top-K 自然语言问句与改写，`check_generated_rewrite` 建立一致性审查，`pack_verify` 自动注入 `ComparisonPolicy(ordered=...)` 有序全等裁决；
+- **专属测试套件**：新增 `tests/test_v1_4_generator_expansion.py`（6 项测试全绿通过）。
 
 阅读顺序：要跑命令先读 [使用说明](docs/user-guide.md)；改代码读 AGENTS.md → 本文件 → docs/architecture.md → docs/data_dictionary.md → ROADMAP.md；公开到 GitHub 读 [docs/github-publish.md](docs/github-publish.md) 与 [CONTRIBUTING.md](CONTRIBUTING.md)。原方案继续保留，矛盾处理见 ROADMAP。
 

@@ -429,10 +429,13 @@ def generate_tasks(
     oracles: Annotated[
         Path, typer.Option(help="Trusted human oracles; not shipped in the wheel")
     ] = DEFAULT_TRUSTED_ORACLES,
+    v1_4: Annotated[
+        bool, typer.Option("--v1-4", help="Include v1.4 Top-K and Composite Join tasks")
+    ] = False,
 ) -> None:
     """Generate an independent public task pack. Does not relabel C360_0001-0020."""
     try:
-        pack = generate_task_pack(seed=seed, count=count, oracles=oracles)
+        pack = generate_task_pack(seed=seed, count=count, oracles=oracles, include_v1_4=v1_4)
         summary = write_generated_pack(output, pack, oracles=oracles)
     except (OSError, ValueError) as exc:
         typer.echo(f"Task generation failed: {exc}", err=True)

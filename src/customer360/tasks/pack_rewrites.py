@@ -216,7 +216,25 @@ def check_generated_rewrite(
                         "service relation join rewrite must keep 服务",
                     )
                 )
-            if case.join.path in {"customer_transactions", "customer_cash_flows"}:
+            elif case.join.path == "customer_transactions_and_holdings":
+                if "交易" not in text:
+                    issues.append(
+                        _issue(case_id, text, "JOIN_ERROR", "composite join rewrite must keep 交易")
+                    )
+                if "持仓" not in text and "持有" not in text:
+                    issues.append(
+                        _issue(
+                            case_id,
+                            text,
+                            "JOIN_ERROR",
+                            "composite join rewrite must keep 持仓/持有",
+                        )
+                    )
+            if case.join.path in {
+                "customer_transactions",
+                "customer_cash_flows",
+                "customer_transactions_and_holdings",
+            }:
                 if "成功" not in text:
                     issues.append(
                         _issue(case_id, text, "JOIN_ERROR", "join rewrite drops status=success")
@@ -231,6 +249,17 @@ def check_generated_rewrite(
             if not any(token in text for token in dim_tokens):
                 msg = f"grouping rewrite drops the {dim} split"
                 issues.append(_issue(case_id, text, "AGGREGATION_ERROR", msg))
+        if getattr(case, "limit", None) is not None:
+            limit_val = str(case.limit)
+            if limit_val not in text:
+                issues.append(
+                    _issue(
+                        case_id,
+                        text,
+                        "AGGREGATION_ERROR",
+                        f"top-k rewrite must keep limit {limit_val}",
+                    )
+                )
     return tuple(issues)
 
 

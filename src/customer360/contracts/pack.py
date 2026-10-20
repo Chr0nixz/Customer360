@@ -93,6 +93,9 @@ class TrustedGeneratedOracle(Contract):
     missing_slots: tuple[Identifier, ...] = ()
     slot_replies: tuple[SlotReply, ...] = ()
     accepted_reason_codes: tuple[RefusalCode, ...] = ()
+    limit: int | None = Field(default=None, ge=1, le=1000)
+    order_by: tuple[Identifier, ...] = ()
+    order_direction: Literal["asc", "desc"] = "desc"
 
     @model_validator(mode="after")
     def consistent(self) -> "TrustedGeneratedOracle":
@@ -127,6 +130,9 @@ class TrustedGeneratedOracle(Contract):
             time_window=self.time_window,
             join=self.join,
             group_by=self.group_by,
+            limit=self.limit,
+            order_by=self.order_by,
+            order_direction=self.order_direction,
         )
 
 
@@ -167,6 +173,9 @@ class GeneratedCaseBlueprint(Contract):
     missing_slots: tuple[Identifier, ...] = ()
     slot_replies: tuple[SlotReply, ...] = ()
     accepted_reason_codes: tuple[RefusalCode, ...] = ()
+    limit: int | None = Field(default=None, ge=1, le=1000)
+    order_by: tuple[Identifier, ...] = ()
+    order_direction: Literal["asc", "desc"] = "desc"
 
     @model_validator(mode="after")
     def consistent(self) -> "GeneratedCaseBlueprint":
@@ -201,6 +210,9 @@ class GeneratedCaseBlueprint(Contract):
             time_window=self.time_window,
             join=self.join,
             group_by=self.group_by,
+            limit=self.limit,
+            order_by=self.order_by,
+            order_direction=self.order_direction,
         )
 
 
