@@ -444,7 +444,10 @@ class LocalDeterministicAdapter:
             span = topk_match.span()
             prefix_sub = question[max(0, span[0] - 2) : span[0]]
             suffix_sub = question[span[1] : min(len(question), span[1] + 2)]
-            if "天" not in prefix_sub and "日" not in prefix_sub and "天" not in suffix_sub:
+            time_tokens = ("天", "日", "月", "季", "年", "周")
+            if not any(c in prefix_sub for c in time_tokens) and not any(
+                c in suffix_sub for c in time_tokens
+            ):
                 k = int(topk_match.group(1))
                 if 1 <= k <= 1000:
                     limit_val = k

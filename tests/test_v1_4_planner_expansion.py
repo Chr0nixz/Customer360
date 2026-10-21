@@ -140,3 +140,45 @@ def test_composite_join_planning_and_rendering():
     assert '"c"."region" = \'华东\'' in sql
     assert '"t"."status" = \'success\'' in sql
     assert '"h"."holding_status" = \'active\'' in sql
+
+
+def test_active_rate_planning_no_status_where():
+    from customer360.agent.baseline import BaselineAgent
+
+    repo = MetadataRepository()
+    agent = BaselineAgent()
+    packet = AdapterPacket(
+        question="按地区统计客户活跃率。",
+        conversation=(),
+        anchor_date=date(2025, 6, 30),
+        metrics=tuple(m.model_dump(mode="json") for m in repo.metrics.metrics),
+        columns=(),
+        joins=(),
+        glossary=(),
+    )
+    intent, _ = agent.adapter.complete(packet)
+    assert intent.ratio_alias == "active_rate"
+    metric_def = repo.get_metric_definition("active_customer_count").model_dump(mode="json")
+    plan = agent._plan(intent, metric_def, date(2025, 6, 30))
+    sql = render_sql(plan)
+    assert "WHERE \"status\" = 'active'" not in sql
+    assert 'AS "active_rate"' in sql
+    assert 'COUNT(DISTINCT CASE WHEN "status" = \'active\' THEN "customer_id" END)' in sql
+    assert 'NULLIF(COUNT(DISTINCT "customer_id"), 0)' in sql
+
+
+def test_topk_time_window_negative_check():
+    planner = LocalDeterministicAdapter()
+    repo = MetadataRepository()
+    # Question mentions "前3天", which is a time window, NOT a top-k limit!
+    packet = AdapterPacket(
+        question="统计前3天交易金额。",
+        conversation=(),
+        anchor_date=date(2025, 6, 30),
+        metrics=tuple(m.model_dump(mode="json") for m in repo.metrics.metrics),
+        columns=(),
+        joins=(),
+        glossary=(),
+    )
+    intent, _ = planner.complete(packet)
+    assert intent.limit is None

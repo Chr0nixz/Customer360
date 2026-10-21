@@ -234,7 +234,10 @@ class BaselineAgent:
             )
 
         predicates: list[PlanFilter] = []
-        for key, value in (metric.get("fixed_filters") or {}).items():
+        fixed_filters = dict(metric.get("fixed_filters") or {})
+        if intent.ratio_alias == "active_rate":
+            fixed_filters.pop("status", None)
+        for key, value in fixed_filters.items():
             predicates.append(PlanFilter(field=key, operator="eq", values=(value,)))
         for column in metric.get("fixed_null_columns") or ():
             predicates.append(PlanFilter(field=column, operator="is_null"))

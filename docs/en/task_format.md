@@ -159,16 +159,9 @@ Agents implement `Agent.respond(request, tools)` in `agent/protocol.py`. Availab
 - `get_metric_definition`
 - `get_business_glossary`
 - `get_join_paths`
+- `validate_query_plan`
 
-`execute_sql` returns a `QueryReceipt` containing a unique `query_id`, structured results, and execution latency (`elapsed_ms`). Successful responses must supply the matching `query_id`, the exact SQL submitted, the final answer text, and a confidence score.
-
-Four valid Agent response statuses:
-- `success`
-- `clarification_needed`: Non-empty list of questions and deduplicated `requested_slots`.
-- `refused`: Machine-readable `reason_code`, human explanation `reason`, and optional `alternative`.
-- `error`: Operational runtime failure (never counted as a correct refusal).
-
-The official baseline is `BaselineAgent`: it queries authorized metadata, generates plans via an offline `LocalDeterministicAdapter`, compiles candidate SQL, and executes via the gateway.
+The official baseline is `BaselineAgent`: it queries authorized metadata, generates plans via an offline `LocalDeterministicAdapter` or `LocalModelAdapter`, compiles candidate SQL, and executes via the gateway. The planning layer (`Intent` and `QueryPlan`) natively supports Top-K limits and tie-broken orderings (`limit`, `order_by`, `order_direction`), HAVING post-aggregation comparisons (`having_operator`, `having_threshold`), controlled 3-table composite join routing (`customer_transactions_and_holdings`), and derived compound ratios (`ratio_alias`: `avg_ticket` and `active_rate`).
 
 ## Structured Result Contract
 

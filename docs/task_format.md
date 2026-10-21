@@ -153,7 +153,7 @@ HAVING 聚合后过滤示例：
 
 ## Agent 接入
 
-实现 agent/protocol.py 的 Agent.respond(request, tools)。当前工具端口包括 execute_sql、search_tables、search_columns、search_metrics、get_table_schema、get_metric_definition、get_business_glossary、get_join_paths。Join 检索返回当前授权表均已授予的路径；可编译的仍只有 `customer_transactions`。协议适配器为可信本地代码；不支持上传任意 Python 插件。检索结果已按授权表/列过滤，不能用来发现 restricted 字段或未授权表。
+实现 agent/protocol.py 的 Agent.respond(request, tools)。当前工具端口包括 execute_sql、search_tables、search_columns、search_metrics、get_table_schema、get_metric_definition、get_business_glossary、get_join_paths、validate_query_plan。可执行 Join 路径包括单跳路径与受控三表复合关联路径 `customer_transactions_and_holdings`。Agent 规划层（`Intent` 与 `QueryPlan`）原生支持 Top-K 排序限量（`limit`, `order_by`, `order_direction`）、HAVING 后聚合过滤（`having_operator`, `having_threshold`）、受控三表复合关联路由，以及派生复合比率（`ratio_alias`：客单价与客户活跃率）。协议适配器为受控本地代码；不支持上传任意 Python 插件。检索结果已按授权表/列过滤，不能用来发现 restricted 字段或未授权表。
 
 execute_sql 返回 QueryReceipt，包含随机 query_id、结构化结果和 elapsed_ms。Success 必須返回该 query_id、实际提交 SQL、answer、confidence；假设和证据可选。evaluator 只认可当前会话登记的回执。
 
