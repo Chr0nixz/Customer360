@@ -16,7 +16,7 @@ from customer360.contracts.oracle import (
 from customer360.contracts.public import AgentRequest, Refusal, Success
 from customer360.contracts.variant import SEMANTIC_VERIFY_VARIANT_IDS
 from customer360.errors import ExecutionFailure, QueryRejected
-from customer360.evaluator.compare import compare_results
+from customer360.evaluator.compare import ComparisonPolicy, compare_results
 from customer360.evaluator.perf import collect_environment
 from customer360.evaluator.runner import evaluate_case
 from customer360.metadata.metrics import MetadataRepository
@@ -53,10 +53,13 @@ def final_receipt(evaluation):
 
 
 def _reference(snapshot_id, item, database, gateway, repository, slices, *, execute_gateway=True):
+    cmp_policy = ComparisonPolicy(ordered=bool(item.order_by) or item.limit is not None)
     compiled = compile_semantic(item.semantic_spec(), repository)
     independent = compute_independent(item.semantic_spec(), repository, slices)
     # Oracle correctness is checked even for a policy-incompatible snapshot.
-    if not compare_results(normalize_sql_result(database, compiled), independent):
+    if not compare_results(
+        normalize_sql_result(database, compiled), independent, policy=cmp_policy
+    ):
         raise ValueError("formal Gold disagrees with independent oracle")
     try:
         receipt = gateway.execute(compiled.sql) if execute_gateway else None
@@ -69,13 +72,14 @@ def _reference(snapshot_id, item, database, gateway, repository, slices, *, exec
     except ExecutionFailure as exc:
         raise ValueError(f"formal Gold execution failed: {exc.code}") from exc
     if receipt is not None and (
-        receipt.result.truncated or not compare_results(receipt.result, independent)
+        receipt.result.truncated
+        or not compare_results(receipt.result, independent, policy=cmp_policy)
     ):
         raise ValueError("formal Gold gateway result is truncated or inconsistent")
     return independent, None
 
 
-def _replay(snapshot_id, gateway, sql, independent, baseline_result):
+def _replay(snapshot_id, gateway, sql, independent, baseline_result, *, policy=None):
     if sql is None:
         return FormalSnapshot(
             snapshot_id=snapshot_id, applicable=True, execution_code="MISSING_RESULT"
@@ -89,11 +93,11 @@ def _replay(snapshot_id, gateway, sql, independent, baseline_result):
         snapshot_id=snapshot_id,
         applicable=True,
         independent_match=not receipt.result.truncated
-        and compare_results(receipt.result, independent),
+        and compare_results(receipt.result, independent, policy=policy),
         truncated=receipt.result.truncated,
         execution_code="UNVERIFIED_RESULT" if receipt.result.truncated else None,
         differs=(
-            not compare_results(receipt.result, baseline_result)
+            not compare_results(receipt.result, baseline_result, policy=policy)
             if baseline_result is not None
             else None
         ),
@@ -170,6 +174,7 @@ def evaluate_formal(dataset_dir, pack_dir, variant_dirs, agent, *, agent_id, hid
         sql = receipt.sql if receipt and not receipt.truncated else None
         baseline_result = receipt.result if receipt else None
         rows = []
+        cmp_policy = ComparisonPolicy(ordered=bool(item.order_by) or item.limit is not None)
         for name, (independent, blocked) in references.items():
             if blocked is not None:
                 rows.append(blocked)
@@ -182,14 +187,23 @@ def evaluate_formal(dataset_dir, pack_dir, variant_dirs, agent, *, agent_id, hid
                             receipt
                             and not receipt.truncated
                             and receipt.result
-                            and compare_results(receipt.result, independent)
+                            and compare_results(receipt.result, independent, policy=cmp_policy)
                         ),
                         truncated=bool(receipt and receipt.truncated),
                         execution_code=None if sql else "MISSING_RESULT",
                     )
                 )
             else:
-                rows.append(_replay(name, gateways[name], sql, independent, baseline_result))
+                rows.append(
+                    _replay(
+                        name,
+                        gateways[name],
+                        sql,
+                        independent,
+                        baseline_result,
+                        policy=cmp_policy,
+                    )
+                )
         interaction = evaluation.outcome == "pass"
         if item.expected_action == "answer":
             interaction = isinstance(final, Success)

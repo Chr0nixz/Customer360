@@ -28,7 +28,7 @@ from customer360.contracts.public import (
 )
 from customer360.contracts.semantic import RollingWindow
 from customer360.errors import C360Error, ExecutionFailure, QueryRejected
-from customer360.evaluator.compare import compare_results
+from customer360.evaluator.compare import ComparisonPolicy, compare_results
 from customer360.metadata.metrics import MetadataRepository
 from customer360.runtime.gateway import ExecutionGateway
 from customer360.runtime.tools import ToolSession
@@ -214,7 +214,11 @@ def evaluate_case(
             return finish("error", "ORACLE_EXECUTION_ERROR", final.status)
         if execution.sql != final.sql:
             return finish("fail", "SQL_RECEIPT_MISMATCH", final.status)
-        if not compare_results(execution.result, reference.result):
+        cmp_policy = ComparisonPolicy(
+            ordered=bool(case.oracle.completed_spec.order_by)
+            or case.oracle.completed_spec.limit is not None
+        )
+        if not compare_results(execution.result, reference.result, policy=cmp_policy):
             return finish("fail", "RESULT_MISMATCH", final.status)
         return finish("pass", "CLARIFICATION_OK", final.status)
     if isinstance(case.oracle, RefusalOracle):
@@ -252,6 +256,10 @@ def evaluate_case(
         return finish("fail", "UNVERIFIED_RESULT", response.status)
     if execution.sql != response.sql:
         return finish("fail", "SQL_RECEIPT_MISMATCH", response.status)
-    if not compare_results(execution.result, reference.result):
+    cmp_policy = ComparisonPolicy(
+        ordered=bool(case.oracle.semantic_spec.order_by)
+        or case.oracle.semantic_spec.limit is not None
+    )
+    if not compare_results(execution.result, reference.result, policy=cmp_policy):
         return finish("fail", "RESULT_MISMATCH", response.status)
     return finish("pass", "OK", response.status)

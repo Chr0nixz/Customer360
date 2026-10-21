@@ -22,7 +22,7 @@ from customer360.contracts.oracle import (
 )
 from customer360.contracts.public import AgentRequest
 from customer360.errors import ExecutionFailure, QueryRejected
-from customer360.evaluator.compare import compare_results
+from customer360.evaluator.compare import ComparisonPolicy, compare_results
 from customer360.evaluator.runner import evaluate_case
 from customer360.metadata.metrics import MetadataRepository
 from customer360.runtime.gateway import ExecutionGateway
@@ -97,6 +97,8 @@ def _replay_variant(
     sql: str | None,
     independent,
     baseline_result,
+    *,
+    policy: ComparisonPolicy | None = None,
 ) -> HiddenVariantReplay:
     if not sql:
         return HiddenVariantReplay(
@@ -147,8 +149,12 @@ def _replay_variant(
             truncated=True,
             independent_match=False,
         )
-    matched = independent is not None and compare_results(receipt.result, independent)
-    differs = baseline_result is not None and not compare_results(receipt.result, baseline_result)
+    matched = independent is not None and compare_results(
+        receipt.result, independent, policy=policy
+    )
+    differs = baseline_result is not None and not compare_results(
+        receipt.result, baseline_result, policy=policy
+    )
     return HiddenVariantReplay(
         variant_id=variant_id,
         applicable="applicable",
@@ -213,6 +219,7 @@ def evaluate_hidden_pack(
         candidate_sql, truncated, baseline_result = _candidate_sql(evaluation)
         replays: tuple[HiddenVariantReplay, ...] = ()
         if variants:
+            cmp_policy = ComparisonPolicy(ordered=bool(item.order_by) or item.limit is not None)
             replays = tuple(
                 _replay_variant(
                     variant_id,
@@ -222,6 +229,7 @@ def evaluate_hidden_pack(
                     if item.material_status == "compilable_answer"
                     else None,
                     baseline_result,
+                    policy=cmp_policy,
                 )
                 for variant_id, _database, _manifest in variants
             )

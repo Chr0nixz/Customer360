@@ -27,6 +27,8 @@ def extract_quadruple_from_spec(spec: SemanticSpec | None) -> DiagnosticQuadrupl
         return DiagnosticQuadruple()
 
     metric_name = getattr(spec, "metric", None) or getattr(spec, "metric_name", None)
+    if not metric_name and getattr(spec, "ratio", None):
+        metric_name = spec.ratio.output_alias
     filters = getattr(spec, "filters", ())
     filter_dims = tuple(str(f.field) for f in filters if hasattr(f, "field"))
 
@@ -482,6 +484,11 @@ def diagnose_matrix_run(
     for item in report.cases:
         blueprint = case_map.get(item.case_id)
         spec = getattr(blueprint, "semantic_spec", None)
+        if callable(spec):
+            try:
+                spec = spec()
+            except (ValueError, TypeError):
+                spec = None
         if spec is None and hasattr(blueprint, "oracle"):
             oracle_fn = blueprint.oracle
             oracle_obj = oracle_fn() if callable(oracle_fn) else oracle_fn
@@ -491,35 +498,92 @@ def diagnose_matrix_run(
         all_quads.append(quad)
 
         # Check outcomes across all applicable snapshots
-        snapshots = item.snapshots
-        failed_snap = None
-        for snap in snapshots:
-            if snap.applicable == "applicable" and snap.outcome != "pass":
-                failed_snap = snap
-                break
+        snapshots = getattr(item, "snapshots", ())
+        failed = False
+        fail_code = None
+        fail_stage = "execution"
+        fail_diff = None
+        split_val = getattr(item, "split", getattr(report, "split", "dev"))
 
-        if failed_snap is None:
+        if (
+            hasattr(item, "outcome")
+            and not hasattr(item, "evaluation")
+            and not hasattr(item, "snapshots")
+        ):
+            # HiddenEvalRecord
+            if item.outcome != "pass":
+                failed = True
+                fail_code = item.reason_code or "FAILURE"
+                fail_stage = "execution"
+                fail_diff = f"reason: {fail_code}"
+            else:
+                for rep in getattr(item, "variant_replays", ()):
+                    if rep.applicable == "applicable" and rep.outcome != "pass":
+                        failed = True
+                        fail_code = rep.reason_code or "VARIANT_REPLAY_FAILURE"
+                        fail_stage = "comparison"
+                        fail_diff = f"variant {rep.variant_id} mismatch"
+                        break
+        elif hasattr(item, "evaluation"):
+            eval_rec = item.evaluation
+            if eval_rec is not None and eval_rec.outcome != "pass":
+                failed = True
+                fail_code = eval_rec.reason_code or "FAILURE"
+                fail_stage = (
+                    "interaction"
+                    if getattr(item, "expected_action", "") == "clarification_needed"
+                    else "plan"
+                )
+                fail_diff = f"reason: {fail_code}"
+            else:
+                for snap in snapshots:
+                    is_app = (
+                        getattr(snap, "applicable", False) is True
+                        or getattr(snap, "applicable", "") == "applicable"
+                    )
+                    if is_app and not getattr(snap, "independent_match", False):
+                        failed = True
+                        fail_code = getattr(snap, "execution_code", None) or "RESULT_MISMATCH"
+                        fail_stage = "comparison"
+                        fail_diff = f"snapshot {snap.snapshot_id} mismatch"
+                        break
+        else:
+            for snap in snapshots:
+                is_app = (
+                    getattr(snap, "applicable", "") == "applicable"
+                    or getattr(snap, "applicable", False) is True
+                )
+                is_pass = getattr(snap, "outcome", None) == "pass" or getattr(
+                    snap, "independent_match", False
+                )
+                if is_app and not is_pass:
+                    failed = True
+                    fail_code = (
+                        getattr(snap, "reason_code", None)
+                        or getattr(snap, "failure_class", None)
+                        or "FAILURE"
+                    )
+                    fail_stage = (
+                        snap.stage
+                        if getattr(snap, "stage", None)
+                        in {"plan", "sql_guard", "execution", "comparison", "interaction"}
+                        else "execution"
+                    )
+                    if getattr(snap, "reason_code", None):
+                        fail_diff = f"reason: {snap.reason_code}"
+                    break
+
+        if not failed:
             passed_cases += 1
         else:
-            diff_summary = None
-            if failed_snap.reason_code:
-                diff_summary = f"reason: {failed_snap.reason_code}"
-            stage_val = (
-                failed_snap.stage
-                if failed_snap.stage
-                in {"plan", "sql_guard", "execution", "comparison", "interaction"}
-                else "execution"
-            )
             attributions.append(
                 CaseFailureAttribution(
                     case_id=item.case_id,
-                    split=item.split,
-                    stage=stage_val,  # type: ignore[arg-type]
-                    primary_failure_code=failed_snap.reason_code
-                    or failed_snap.failure_class
-                    or "FAILURE",
+                    split=split_val,
+                    stage=fail_stage,  # type: ignore[arg-type]
+                    primary_failure_code=fail_code or "FAILURE",
                     quadruple=quad,
-                    diff_summary=diff_summary,
+                    diff_summary=fail_diff,
                 )
             )
 

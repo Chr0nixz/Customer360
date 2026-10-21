@@ -90,7 +90,6 @@ class DuckDBExecutionGateway(BaseExecutionGateway):
         try:
             exec_start = perf_counter()
             process.start()
-            send.close()
             # Dual-level timeout check
             if not receive.poll(self.limits.timeout_seconds):
                 raise ExecutionFailure("TIMEOUT", "query exceeded its wall-clock budget")

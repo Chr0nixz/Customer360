@@ -55,6 +55,7 @@ _ALLOWED_NODES = {
     exp.DataTypeParam,
     exp.Case,
     exp.When,
+    exp.If,
     exp.Subquery,
 }
 _ALLOWED_SELECT_KEYS = frozenset(

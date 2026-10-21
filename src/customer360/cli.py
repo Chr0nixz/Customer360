@@ -1049,7 +1049,11 @@ def audit_splits_cmd(
 @app.command("diagnose")
 def diagnose_cmd(
     source: Annotated[
-        Path, typer.Option("--input", help="Matrix run directory (containing private/matrix.json)")
+        Path,
+        typer.Option(
+            "--input",
+            help="Evaluation run directory (with private/matrix.json or formal_input.json)",
+        ),
     ],
     output: Annotated[
         Path,
@@ -1057,15 +1061,62 @@ def diagnose_cmd(
             help="New output directory for diagnostics JSON, Markdown, and HTML dashboard"
         ),
     ],
+    pack: Annotated[
+        Path | None,
+        typer.Option(
+            help="Optional task pack directory (for 120/300 generated or 100 hidden cases)"
+        ),
+    ] = None,
     oracles: Annotated[
         Path, typer.Option(help="Trusted human oracle YAML; not shipped in wheel")
     ] = DEFAULT_TRUSTED_ORACLES,
 ) -> None:
-    """Generate failure attribution and HTML diagnostics dashboard from a matrix run."""
+    """Generate failure attribution and HTML diagnostics dashboard from an evaluation run."""
     try:
-        report = load_private_matrix(source)
-        catalog = load_human_cases(oracles=oracles)
-        diag_summary = diagnose_matrix_run(report, catalog.cases)
+        matrix_path = source / "private" / "matrix.json"
+        if not matrix_path.is_file():
+            matrix_path = source / "matrix.json"
+        formal_path = source / "private" / "formal_input.json"
+        if not formal_path.is_file():
+            formal_path = source / "formal_input.json"
+
+        hidden_path = source / "private" / "hidden.json"
+        if not hidden_path.is_file():
+            hidden_path = source / "hidden.json"
+
+        if matrix_path.is_file():
+            report = load_private_matrix(source)
+        elif formal_path.is_file():
+            from customer360.contracts.formal import FormalEvaluationReport
+
+            report = FormalEvaluationReport.model_validate_json(
+                formal_path.read_text(encoding="utf-8")
+            )
+        elif hidden_path.is_file():
+            from customer360.contracts.hidden import HiddenEvalReport
+
+            report = HiddenEvalReport.model_validate_json(hidden_path.read_text(encoding="utf-8"))
+        else:
+            raise ValueError(f"No matrix.json, formal_input.json, or hidden.json found in {source}")
+
+        if pack is not None:
+            if (pack / "pack.json").is_file():
+                import json
+
+                from customer360.tasks.generator import load_generated_pack
+                from customer360.tasks.hidden import load_hidden_pack
+
+                raw_pack = json.loads((pack / "pack.json").read_text(encoding="utf-8"))
+                if raw_pack.get("hidden"):
+                    catalog_cases = load_hidden_pack(pack).cases
+                else:
+                    catalog_cases = load_generated_pack(pack).cases
+            else:
+                catalog_cases = load_human_cases(oracles=oracles).cases
+        else:
+            catalog_cases = load_human_cases(oracles=oracles).cases
+
+        diag_summary = diagnose_matrix_run(report, catalog_cases)
         result = write_diagnostics_report(output, diag_summary)
     except (OSError, ValueError) as exc:
         typer.echo(f"Diagnostics failed: {exc}", err=True)
