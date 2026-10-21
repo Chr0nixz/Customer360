@@ -23,6 +23,12 @@ class QueryPlan:
     latest_anchor: date | None = None
     join_path: str | None = None
     group_by: tuple[str, ...] = ()
+    limit: int | None = None
+    order_by: tuple[str, ...] = ()
+    order_direction: str = "desc"
+    having_operator: str | None = None
+    having_threshold: float | int | None = None
+    ratio_alias: str | None = None
 
 
 _UNSAFE = (
@@ -84,6 +90,14 @@ def _predicate(item: PlanFilter) -> str:
 
 
 def _aggregate(plan: QueryPlan) -> str:
+    if plan.ratio_alias == "avg_ticket":
+        return (
+            'ROUND(CAST(SUM("amount") AS DECIMAL(18, 2)) / NULLIF(COUNT("transaction_id"), 0), 2)'
+        )
+    if plan.ratio_alias == "active_rate":
+        case_expr = 'COUNT(DISTINCT CASE WHEN "status" = \'active\' THEN "customer_id" END)'
+        den = 'NULLIF(COUNT(DISTINCT "customer_id"), 0)'
+        return f"ROUND(CAST({case_expr} AS DECIMAL(18, 4)) / {den}, 4)"
     if plan.operation == "count_distinct":
         return f'COUNT(DISTINCT "{plan.measure_column}")'
     if plan.operation == "count":
@@ -103,7 +117,10 @@ JOIN_TABLE_SPECS: dict[str, tuple[str, str]] = {
 
 
 def render_sql(plan: QueryPlan) -> str:
-    if plan.join_path and plan.join_path not in JOIN_TABLE_SPECS:
+    if plan.join_path and (
+        plan.join_path not in JOIN_TABLE_SPECS
+        and plan.join_path != "customer_transactions_and_holdings"
+    ):
         raise ValueError("join path is not executable")
     if plan.latest_anchor is not None:
         if plan.predicates or plan.group_by or plan.join_path or not plan.time_column:
@@ -124,6 +141,14 @@ def render_sql(plan: QueryPlan) -> str:
     where = ""
     if plan.predicates:
         where = " WHERE " + " AND ".join(_predicate(item) for item in plan.predicates)
+    if plan.join_path == "customer_transactions_and_holdings":
+        expression = f'COUNT(DISTINCT "c"."{plan.measure_column}")'
+        return (
+            f'SELECT {expression} AS "{plan.output_column}" '
+            f'FROM "dim_customer" AS "c" '
+            f'JOIN "fact_transaction" AS "t" ON "c"."customer_id" = "t"."customer_id" '
+            f'JOIN "fact_holding" AS "h" ON "c"."customer_id" = "h"."customer_id"' + where
+        )
     if plan.join_path:
         right_table, alias = JOIN_TABLE_SPECS[plan.join_path]
         expression = f'COUNT(DISTINCT "c"."{plan.measure_column}")'
@@ -146,8 +171,33 @@ def render_sql(plan: QueryPlan) -> str:
     if plan.group_by:
         keys = ", ".join(f'"{name}" AS "{name}"' for name in plan.group_by)
         grouped = " GROUP BY " + ", ".join(f'"{name}"' for name in plan.group_by)
-        return (
-            f'SELECT {keys}, {expression} AS "{plan.output_column}" '
-            f'FROM "{plan.source_table}"{where}{grouped}'
-        )
+        having_clause = ""
+        if plan.having_operator and plan.having_threshold is not None:
+            op_map = {
+                "gt": ">",
+                "gte": ">=",
+                "lt": "<",
+                "lte": "<=",
+                "eq": "=",
+                "ne": "<>",
+                ">": ">",
+                ">=": ">=",
+                "<": "<",
+                "<=": "<=",
+                "=": "=",
+                "<>": "<>",
+            }
+            op_str = op_map.get(plan.having_operator, ">")
+            having_clause = f" HAVING {expression} {op_str} {plan.having_threshold}"
+        order_clause = ""
+        if plan.order_by or plan.limit is not None:
+            direction = plan.order_direction.upper()
+            primary = plan.order_by[0] if plan.order_by else plan.output_column
+            tie_breakers = [f'"{dim}" ASC' for dim in plan.group_by if dim != primary]
+            order_items = [f'"{primary}" {direction}'] + tie_breakers
+            order_clause = " ORDER BY " + ", ".join(order_items)
+        limit_clause = f" LIMIT {plan.limit}" if plan.limit is not None else ""
+        tail = f"{where}{grouped}{having_clause}{order_clause}{limit_clause}"
+        select_clause = f'SELECT {keys}, {expression} AS "{plan.output_column}"'
+        return f'{select_clause} FROM "{plan.source_table}"{tail}'
     return f'SELECT {expression} AS "{plan.output_column}" FROM "{plan.source_table}"{where}'

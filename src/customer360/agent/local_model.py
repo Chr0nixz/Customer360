@@ -61,8 +61,14 @@ SYSTEM_PROMPT = """你是一个专业的金融客户360度数据分析助手。
   "time_kind": "none" | "rolling" | "point_in_time" | "latest_snapshot",
   "days": 窗口自然天数(整数，若time_kind为rolling),
   "time_date": "时点日期(YYYY-MM-DD，若time_kind为point_in_time)",
-  "join_path": "可执行关联路径名(若需要跨表统计，如 customer_transactions 等)",
+  "join_path": "可执行关联路径名(如 customer_transactions 等)",
   "group_by": ["分组维度列名，如 region, customer_level 等(必须为指标允许的分组维度)"],
+  "limit": 整数(若指定前N名/Top-K，如 3, 5),
+  "order_by": ["排序列名，如指标输出列或维度"],
+  "order_direction": "desc" | "asc",
+  "having_operator": "gt" | "gte" | "lt" | "lte" | "eq" | "ne",
+  "having_threshold": 数值(若指定分组后聚合过滤阈值),
+  "ratio_alias": "avg_ticket" | "active_rate"(若查询客单价或活跃率),
   "filters": [
     {
       "field": "字段名",
@@ -332,6 +338,37 @@ class LocalModelAdapter(ModelAdapter):
         else:
             time_date_obj = packet.anchor_date
 
+        limit_val = None
+        raw_limit = data.get("limit")
+        if isinstance(raw_limit, int) and 1 <= raw_limit <= 1000:
+            limit_val = raw_limit
+        elif isinstance(raw_limit, str) and raw_limit.strip().isdigit():
+            k = int(raw_limit.strip())
+            if 1 <= k <= 1000:
+                limit_val = k
+
+        raw_order_by = data.get("order_by")
+        order_by: tuple[str, ...] = ()
+        if isinstance(raw_order_by, (list, tuple)):
+            order_by = tuple(str(x) for x in raw_order_by if x)
+        elif isinstance(raw_order_by, str) and raw_order_by:
+            order_by = (raw_order_by,)
+
+        order_dir = str(data.get("order_direction", "desc")).lower()
+        if order_dir not in {"asc", "desc"}:
+            order_dir = "desc"
+
+        having_op = data.get("having_operator")
+        if having_op not in {"gt", "gte", "lt", "lte", "eq", "ne"}:
+            having_op = None
+        having_thresh = data.get("having_threshold")
+        if not isinstance(having_thresh, (int, float)):
+            having_thresh = None
+
+        ratio_alias = data.get("ratio_alias")
+        if ratio_alias not in {"avg_ticket", "active_rate"}:
+            ratio_alias = None
+
         return Intent(
             action="answer",
             metric_name=metric_name,
@@ -341,6 +378,12 @@ class LocalModelAdapter(ModelAdapter):
             time_date=time_date_obj,
             join_path=data.get("join_path"),
             group_by=group_by,
+            limit=limit_val,
+            order_by=order_by,
+            order_direction=order_dir,  # type: ignore[arg-type]
+            having_operator=having_op,
+            having_threshold=having_thresh,
+            ratio_alias=ratio_alias,
             evidence=("local_model", self.model),
         )
 

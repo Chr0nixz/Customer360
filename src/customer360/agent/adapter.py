@@ -149,6 +149,12 @@ class Intent:
     reason: str | None = None
     alternative: str | None = None
     evidence: tuple[str, ...] = ()
+    limit: int | None = None
+    order_by: tuple[str, ...] = ()
+    order_direction: Literal["asc", "desc"] = "desc"
+    having_operator: str | None = None
+    having_threshold: float | int | None = None
+    ratio_alias: str | None = None
 
 
 class ModelAdapter(Protocol):
@@ -263,6 +269,15 @@ def _executable_join(packet: AdapterPacket, question: str = "") -> str | None:
     }
     if not executable_paths:
         return None
+    has_tx = any(k in question for k in ("交易", "买入", "卖出", "申购", "赎回", "发生过"))
+    has_hold = any(k in question for k in ("持仓", "资产持有", "投资持仓", "持有", "产品持仓"))
+    if (
+        has_tx
+        and has_hold
+        and "customer_transactions" in executable_paths
+        and "customer_holdings" in executable_paths
+    ):
+        return "customer_transactions_and_holdings"
     if (
         any(k in question for k in ("资金流", "现金流", "流向", "流入", "流出"))
         and "customer_cash_flows" in executable_paths
@@ -412,6 +427,55 @@ class LocalDeterministicAdapter:
             if dim in allowed_groups and any(token in question for token in tokens):
                 group_by = (dim,)
                 break
+
+        ratio_alias = None
+        ticket_tokens = ("客单价", "笔均交易金额", "笔均金额", "笔均", "平均每笔交易金额")
+        active_tokens = ("客户活跃率", "活跃率", "活跃客户比例", "活跃客户占比")
+        if any(token in question for token in ticket_tokens):
+            ratio_alias = "avg_ticket"
+        elif any(token in question for token in active_tokens):
+            ratio_alias = "active_rate"
+
+        limit_val = None
+        order_direction: Literal["asc", "desc"] = "desc"
+        order_by: tuple[str, ...] = ()
+        topk_match = re.search(r"(?:排名前|取前|筛选前|前)\s*(\d+)\s*(?:名|位|个)?", question)
+        if topk_match:
+            span = topk_match.span()
+            prefix_sub = question[max(0, span[0] - 2) : span[0]]
+            suffix_sub = question[span[1] : min(len(question), span[1] + 2)]
+            if "天" not in prefix_sub and "日" not in prefix_sub and "天" not in suffix_sub:
+                k = int(topk_match.group(1))
+                if 1 <= k <= 1000:
+                    limit_val = k
+                    if any(w in question for w in ("升序", "最少", "最低", "升序排列", "按升序")):
+                        order_direction = "asc"
+                    else:
+                        order_direction = "desc"
+                    if ratio_alias:
+                        order_by = (ratio_alias,)
+                    else:
+                        order_by = (str(metric.get("output_column") or ""),)
+
+        having_op = None
+        having_val = None
+        if group_by:
+            having_patterns = [
+                (r"(?:不少于|至少)\s*(\d+(?:\.\d+)?)", "gte"),
+                (r"(?:不超过|至多)\s*(\d+(?:\.\d+)?)", "lte"),
+                (r"(?:大于|超过)\s*(\d+(?:\.\d+)?)", "gt"),
+                (r"(?:小于|低于)\s*(\d+(?:\.\d+)?)", "lt"),
+                (r"(?:等于|刚好为)\s*(\d+(?:\.\d+)?)", "eq"),
+                (r"(?:不等于|非)\s*(\d+(?:\.\d+)?)", "ne"),
+            ]
+            for pat, op_name in having_patterns:
+                h_m = re.search(pat, question)
+                if h_m:
+                    having_op = op_name
+                    raw_v = h_m.group(1)
+                    having_val = float(raw_v) if "." in raw_v else int(raw_v)
+                    break
+
         return Intent(
             action="answer",
             metric_name=metric["metric_name"],
@@ -421,6 +485,12 @@ class LocalDeterministicAdapter:
             time_date=time_date,
             join_path=join_path,
             group_by=group_by,
+            limit=limit_val,
+            order_by=order_by,
+            order_direction=order_direction,
+            having_operator=having_op,
+            having_threshold=having_val,
+            ratio_alias=ratio_alias,
             evidence=("local_planner", metric["metric_name"]),
         )
 
@@ -452,6 +522,12 @@ class LocalDeterministicAdapter:
                 score += 80
         if name and name in q:
             score += 50
+        if any(token in q for token in ("客单价", "笔均", "笔均金额", "笔均交易金额")):
+            if metric_id == "successful_transaction_amount":
+                score += 150
+        if any(token in q for token in ("客户活跃率", "活跃率", "活跃客户比例")):
+            if metric_id == "active_customer_count":
+                score += 150
         tokens = (
             "净流入",
             "流入减流出",
@@ -606,6 +682,8 @@ class LocalDeterministicAdapter:
         parsed_date = _parse_date(text) or packet.anchor_date
         days = _parse_days(text)
         if join_path:
+            if join_path == "customer_transactions_and_holdings":
+                return "rolling", days or 90, parsed_date, ()
             if join_path in {"customer_transactions", "customer_cash_flows"}:
                 if days is None:
                     return None, None, None, ("time_window",)
@@ -937,5 +1015,32 @@ class LocalDeterministicAdapter:
                         side="join",
                     )
                 )
+            elif join_path == "customer_transactions_and_holdings":
+                found.append(
+                    IntentFilter(
+                        field="status",
+                        operator="eq",
+                        values=("success",),
+                        side="join",
+                    )
+                )
+                found.append(
+                    IntentFilter(
+                        field="holding_status",
+                        operator="eq",
+                        values=("active",),
+                        side="join",
+                    )
+                )
+                prod_match = re.search(r"产品(?:代码)?\s*([A-Za-z0-9_]+)", question)
+                if prod_match:
+                    found.append(
+                        IntentFilter(
+                            field="product_id",
+                            operator="eq",
+                            values=(prod_match.group(1),),
+                            side="join",
+                        )
+                    )
 
         return tuple(found)

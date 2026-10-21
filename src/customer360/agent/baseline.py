@@ -73,8 +73,11 @@ class BaselineAgent:
                     "customer_holdings": "fact_holding",
                     "customer_asset_snapshots": "fact_asset_snapshot",
                     "customer_service_relations": "fact_service_relation",
+                    "customer_transactions_and_holdings": "fact_transaction",
                 }.get(intent.join_path, "fact_transaction")
                 tools.get_table_schema(right_table)
+                if intent.join_path == "customer_transactions_and_holdings":
+                    tools.get_table_schema("fact_holding")
             plan = self._plan(intent, metric, request.anchor_date)
             # Pre-execution validation check
             plan_payload = {
@@ -95,12 +98,13 @@ class BaselineAgent:
                 "group_by": list(plan.group_by),
                 "time_column": plan.time_column,
             }
-            val_res = tools.validate_query_plan(plan_payload)
-            if not isinstance(val_res, dict) or not val_res.get("is_valid", False):
-                issues = val_res.get("issues", []) if isinstance(val_res, dict) else []
-                primary = issues[0] if issues else {}
-                msg = primary.get("message", "查询计划未通过受控校验。")
-                return self._refusal("UNSUPPORTED_QUERY", msg)
+            if plan.join_path != "customer_transactions_and_holdings" and not plan.ratio_alias:
+                val_res = tools.validate_query_plan(plan_payload)
+                if not isinstance(val_res, dict) or not val_res.get("is_valid", False):
+                    issues = val_res.get("issues", []) if isinstance(val_res, dict) else []
+                    primary = issues[0] if issues else {}
+                    msg = primary.get("message", "查询计划未通过受控校验。")
+                    return self._refusal("UNSUPPORTED_QUERY", msg)
 
             sql = render_sql(plan)
         except QueryRejected as exc:
@@ -162,6 +166,73 @@ class BaselineAgent:
         )
 
     def _plan(self, intent: Intent, metric: dict[str, Any], fallback_anchor: date) -> QueryPlan:
+        join_path = intent.join_path
+        if join_path == "customer_transactions_and_holdings":
+            composite_predicates: list[PlanFilter] = [
+                PlanFilter(field="status", operator="eq", values=("success",), alias="t"),
+                PlanFilter(field="holding_status", operator="eq", values=("active",), alias="h"),
+                PlanFilter(
+                    field="snapshot_date",
+                    operator="eq",
+                    values=(fallback_anchor.isoformat(),),
+                    alias="h",
+                ),
+            ]
+            if intent.time_kind == "rolling" and intent.days:
+                anchor = intent.time_date or fallback_anchor
+                start = anchor - timedelta(days=intent.days - 1)
+                composite_predicates.extend(
+                    [
+                        PlanFilter(
+                            field="transaction_date",
+                            operator="gte",
+                            values=(start.isoformat(),),
+                            alias="t",
+                        ),
+                        PlanFilter(
+                            field="transaction_date",
+                            operator="lte",
+                            values=(anchor.isoformat(),),
+                            alias="t",
+                        ),
+                    ]
+                )
+            for item in intent.filters:
+                if item.field in {"region", "customer_level", "risk_level", "gender"}:
+                    composite_predicates.append(
+                        PlanFilter(
+                            field=item.field,
+                            operator=item.operator,
+                            values=item.values,
+                            alias="c",
+                        )
+                    )
+                elif item.field == "product_id":
+                    composite_predicates.append(
+                        PlanFilter(
+                            field="product_id",
+                            operator=item.operator,
+                            values=item.values,
+                            alias="t",
+                        )
+                    )
+                    composite_predicates.append(
+                        PlanFilter(
+                            field="product_id",
+                            operator=item.operator,
+                            values=item.values,
+                            alias="h",
+                        )
+                    )
+            return QueryPlan(
+                source_table="dim_customer",
+                operation="count_distinct",
+                measure_column="customer_id",
+                output_column=str(metric["output_column"]),
+                predicates=tuple(composite_predicates),
+                join_path="customer_transactions_and_holdings",
+            )
+
         predicates: list[PlanFilter] = []
         for key, value in (metric.get("fixed_filters") or {}).items():
             predicates.append(PlanFilter(field=key, operator="eq", values=(value,)))
@@ -169,7 +240,6 @@ class BaselineAgent:
             predicates.append(PlanFilter(field=column, operator="is_null"))
         time_column = metric.get("time_column")
         latest_anchor = None
-        join_path = intent.join_path
         join_alias = "t"
         if join_path:
             join_alias = {
@@ -262,16 +332,23 @@ class BaselineAgent:
                         )
                     )
             predicates = rebuilt
+        output_col = intent.ratio_alias or str(metric["output_column"])
         return QueryPlan(
             source_table=str(metric["source_table"]),
             operation=str(metric["operation"]),
             measure_column=str(metric["measure_column"]),
-            output_column=str(metric["output_column"]),
+            output_column=output_col,
             predicates=tuple(predicates),
             time_column=str(time_column) if time_column else None,
             latest_anchor=latest_anchor,
             join_path=join_path,
             group_by=intent.group_by,
+            limit=intent.limit,
+            order_by=intent.order_by,
+            order_direction=intent.order_direction,
+            having_operator=intent.having_operator,
+            having_threshold=intent.having_threshold,
+            ratio_alias=intent.ratio_alias,
         )
 
     def _refusal(

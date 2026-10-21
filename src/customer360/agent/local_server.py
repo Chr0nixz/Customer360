@@ -194,6 +194,18 @@ class _MockOpenAIHandler(BaseHTTPRequestHandler):
                 out["join_path"] = intent.join_path
             if intent.group_by:
                 out["group_by"] = list(intent.group_by)
+            if intent.limit is not None:
+                out["limit"] = intent.limit
+            if intent.order_by:
+                out["order_by"] = list(intent.order_by)
+            if intent.order_direction:
+                out["order_direction"] = intent.order_direction
+            if intent.having_operator:
+                out["having_operator"] = intent.having_operator
+            if intent.having_threshold is not None:
+                out["having_threshold"] = intent.having_threshold
+            if intent.ratio_alias:
+                out["ratio_alias"] = intent.ratio_alias
             filters_list = []
             for f in intent.filters:
                 filters_list.append(
