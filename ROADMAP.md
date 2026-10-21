@@ -99,7 +99,13 @@
 - [x] v1.1 多轮反事实澄清与抗干扰协议：落地 `protocol_version: "1.1"`、`Message.turn` 轮次追踪、`SlotReply.distractor` 反事实噪声注入、过度追问拦截与 `MAX_CLARIFICATION_TURNS = 4` 轮次上限防护；
 - [x] v1.2 受控逻辑计划校验引擎与元数据生命周期演进：落地 `validate_query_plan`（9 类稳定拒绝码含 `INVALID_PLAN_SCHEMA` 与 `time_column` 校验）、指标生命周期（`deprecation_date >= effective_date`）、`DEPRECATED_METRIC_REJECTED` 替代指引与 `c360 audit-metadata` 全量外键拓扑闭包审计；
 - [x] v1.3 跨引擎方言转译、执行网关抽象与阶段性能采样加固：落地 `transpile_sql`（含 ALTER/TRUNCATE/MERGE 只读防御）、PostgreSQL 网关 Fail-Closed 准入隔离与前置 SQL Guard 防御、端到端阶段耗时采样模型（plan_ms / guard_ms / exec_ms / e2e_ms 及其 P50/P90/P95/P99 分位数）与 `tests/test_v1_3_engine_adaptation.py` 专属测试套件；
-- [x] v1.4 DSL Top-K 聚合查询、确定性全序并列裁决、三表复合关联与任务生成器扩充：落地 `limit`、`order_by`、`order_direction` 契约，实施排序列白名单校验与多行分组约束，构建确定性全序并列 Tie-breaker 消除数据库引擎底层随机差异；落地受控三表复合关联路径 `customer_transactions_and_holdings`，SQL Guard 升级支持 1~2 个 INNER JOIN 与笛卡尔积拦截，独立 Oracle 内存集合交集计算与 DuckDB 结果 100% 绝对一致；任务生成引擎全面扩展支持 Top-K 与复合关联自动合成，通过多维改写一致性审查与 `pack_verify` 有序比对验收（D066, D068, D069）。
+- [x] v1.4 高级分析语义、烘焙流水线与全链路端到端评测闭环 (D066–D073)：
+  - **Top-K 排序限量与并列裁决**：落地 `limit`、`order_by`、`order_direction` 契约，排序列白名单校验与多行分组约束，构建确定性全序并列 Tie-breaker，对齐 `ComparisonPolicy(ordered=...)` 有序全等裁决（D066）；
+  - **受控三表复合关联**：落地受控路径 `customer_transactions_and_holdings`，SQL Guard 升级支持 1~2 个 INNER JOIN 与笛卡尔积拦截，独立 Oracle 内存集合交集计算与 DuckDB 结果 100% 吻合（D068）；
+  - **HAVING 聚合后过滤**：落地 `HavingCondition` 与 `having` 字段，约束仅在多行分组聚合生效，私有白名单脱敏，SQL Guard 严格静态审计拦截裸列与分组维度泄露（D070）；
+  - **复合派生比率**：落地 `RatioSpec` 与 `ratio` 字段，编译器自动注入 `NULLIF(den, 0)`、固定精度 `ROUND` 与 `CASE WHEN` 条件聚合，SQL Guard 扩展 `exp.If` 与比率静态审计（D071, D073）；
+  - **新一代公开 300 题与隐藏 100 题烘焙**：多维草案池扩充，隐藏集生成引擎建立四大高级分析特性硬性保底（各 >= 2 题），实测验证 240+61 道 Answer 题经 DuckDB 与独立 Oracle 双向验证达成 100% 绝对一致（D072）；
+  - **端到端基准出分、失败归因与网关加固**：修复 Windows 多进程管道竞争 `[WinError 5]`，升级 `c360 diagnose` 统一归因分析，完整跑通 `evaluate-public`（82/120, 68.3%）、`evaluate-hidden`（66/100, 66.0%）与 `LocalModelAdapter` 回环评测（15/20, 75.0%），产出首期脱敏细粒度失败归因矩阵与交互式 HTML 诊断看板（D073）。
 
 ### 下一阶段执行顺序（2026-10-18 更新）
 

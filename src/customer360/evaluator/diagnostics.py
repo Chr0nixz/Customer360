@@ -30,7 +30,10 @@ def extract_quadruple_from_spec(spec: SemanticSpec | None) -> DiagnosticQuadrupl
     if not metric_name and getattr(spec, "ratio", None):
         metric_name = spec.ratio.output_alias
     filters = getattr(spec, "filters", ())
-    filter_dims = tuple(str(f.field) for f in filters if hasattr(f, "field"))
+    join_spec = getattr(spec, "join", None)
+    join_filters = getattr(join_spec, "filters", ()) if join_spec else ()
+    all_filters = (*filters, *join_filters)
+    filter_dims = tuple(dict.fromkeys(str(f.field) for f in all_filters if hasattr(f, "field")))
 
     time_kind = None
     time_window = getattr(spec, "time_window", None)

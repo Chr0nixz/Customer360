@@ -84,6 +84,8 @@ uv run c360 generate-variant --variant-id tiny_null_empty_groups --output output
 uv run c360 generate-variant --variant-id tiny_date_boundary --output outputs/var-date
 uv run c360 evaluate --dataset outputs/tiny-local --distribution-variant outputs/tiny-seed43 --duplicate-variant outputs/var-dup --null-variant outputs/var-null --date-variant outputs/var-date --agent baseline --mode same_sql --output outputs/matrix-local
 uv run c360 report --input outputs/matrix-local --format json
+# Generate fine-grained failure attribution matrix & interactive HTML dashboard:
+uv run c360 diagnose --input outputs/matrix-local --output outputs/diag-local
 ```
 
 `evaluate --mode same_sql`: Calls the Agent once on the baseline, and then replays **the submitted candidate SQL** across the baseline plus all four variants. Using `--mode scoring` here will fail; historical matrix reports must record `scoring_applied=false`. Passing `--split private` will fail; use `evaluate-hidden` for the hidden set.
@@ -139,6 +141,8 @@ Informal hidden evaluation:
 
 ```bash
 uv run c360 evaluate-hidden --dataset outputs/hidden-tiny --pack outputs/hidden-pack --agent baseline --output outputs/hidden-eval
+# Generate failure attribution matrix & interactive HTML dashboard for hidden evaluation:
+uv run c360 diagnose --input outputs/hidden-eval --pack outputs/hidden-pack --output outputs/diag-hidden
 ```
 
 Formal hidden evaluation (Agent called once on baseline; same-SQL replayed across 4 private variants):
@@ -158,6 +162,8 @@ Scoring subjects:
 
 ```bash
 uv run c360 evaluate-public --dataset outputs/tiny-local --pack outputs/tasks-300 --variant outputs/tiny-seed43 --variant outputs/var-dup --variant outputs/var-null --variant outputs/var-date --agent baseline --output outputs/eval-public
+# Generate failure attribution matrix & interactive HTML dashboard for formal public evaluation:
+uv run c360 diagnose --input outputs/eval-public --pack outputs/tasks-300 --output outputs/diag-public
 uv run c360 score --public-report outputs/eval-public --hidden-report outputs/hidden-eval-formal --agent baseline --output outputs/score-local
 ```
 
@@ -290,6 +296,9 @@ For exhaustive parameter lists, run `uv run c360 <command> --help`.
 | `prepare-formal-release` / `check-formal-release` | Manage and audit the eight v1.0 RC gates |
 | `audit-metadata` | Statically audit catalog, metrics, and foreign key closures |
 | `audit-splits` | Audit template novelty, orthogonality, and variant drift |
+| `setup-env` | One-click benchmark environment setup (Baseline + 4 variants) |
+| `debug-case` | Interactive single-case execution trace and diff diagnostics |
+| `diagnose` | Fine-grained failure attribution and interactive HTML diagnostic dashboard |
 | `transpile-sql` | SQLGlot cross-dialect transpilation (DuckDB <-> PostgreSQL) |
 | `serve-local-mock` | Run offline OpenAI-compatible mock inference server on loopback |
 

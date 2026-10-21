@@ -84,6 +84,8 @@ uv run c360 generate-variant --variant-id tiny_null_empty_groups --output output
 uv run c360 generate-variant --variant-id tiny_date_boundary --output outputs/var-date
 uv run c360 evaluate --dataset outputs/tiny-local --distribution-variant outputs/tiny-seed43 --duplicate-variant outputs/var-dup --null-variant outputs/var-null --date-variant outputs/var-date --agent baseline --mode same_sql --output outputs/matrix-local
 uv run c360 report --input outputs/matrix-local --format json
+# 生成脱敏细粒度失败归因矩阵与交互式 HTML 诊断看板：
+uv run c360 diagnose --input outputs/matrix-local --output outputs/diag-local
 ```
 
 `evaluate --mode same_sql`：只在 baseline 上调用一次 Agent，再把**这次提交的候选 SQL**重放到 baseline + 四个变体。`--mode scoring` 会失败；历史矩阵报告的 `scoring_applied` 必须是 false。`--split private` 会失败，隐藏集请用 `evaluate-hidden`。
@@ -139,6 +141,8 @@ uv run c360 generate-hidden-variants --dataset outputs/hidden-tiny --output outp
 
 ```bash
 uv run c360 evaluate-hidden --dataset outputs/hidden-tiny --pack outputs/hidden-pack --agent baseline --output outputs/hidden-eval
+# 生成隐藏评测失败归因矩阵与交互式 HTML 看板：
+uv run c360 diagnose --input outputs/hidden-eval --pack outputs/hidden-pack --output outputs/diag-hidden
 ```
 
 正式隐藏评测（baseline 调一次 Agent，四个私有变体 same-SQL replay）：
@@ -158,6 +162,8 @@ uv run c360 evaluate-hidden --dataset outputs/hidden-tiny --pack outputs/hidden-
 
 ```bash
 uv run c360 evaluate-public --dataset outputs/tiny-local --pack outputs/tasks-300 --variant outputs/tiny-seed43 --variant outputs/var-dup --variant outputs/var-null --variant outputs/var-date --agent baseline --output outputs/eval-public
+# 生成公开正式评测的失败归因矩阵与交互式 HTML 诊断报告：
+uv run c360 diagnose --input outputs/eval-public --pack outputs/tasks-300 --output outputs/diag-public
 uv run c360 score --public-report outputs/eval-public --hidden-report outputs/hidden-eval-formal --agent baseline --output outputs/score-local
 ```
 
@@ -290,6 +296,9 @@ outputs/score-local/
 | `prepare-formal-release` / `check-formal-release` | v1.0 正式门 |
 | `audit-metadata` | 静态审计 catalog / metrics / 外键拓扑闭包 |
 | `audit-splits` | 审计训练集与验证集的模板/正交/变体泛化度 |
+| `setup-env` | 一键构建本地基准环境（Baseline + 4 变体） |
+| `debug-case` | 单用例交互式执行轨迹与 Diff 诊断 |
+| `diagnose` | 细粒度失败归因与交互式 HTML 诊断看板 |
 | `transpile-sql` | SQLGlot 跨方言转译（DuckDB <-> PostgreSQL） |
 | `serve-local-mock` | 本地回环离线 OpenAI 兼容 Mock 推理服务 |
 
