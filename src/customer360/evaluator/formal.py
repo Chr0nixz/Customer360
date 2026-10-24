@@ -6,6 +6,7 @@ from pathlib import Path
 from customer360 import __version__
 from customer360.artifacts import digest, write_json_new
 from customer360.contracts.budget import limits_for_manifest
+from customer360.contracts.evaluation import FORMAL_EVALUATOR_VERSION
 from customer360.contracts.formal import FormalCase, FormalEvaluationReport, FormalSnapshot
 from customer360.contracts.oracle import (
     AnswerOracle,
@@ -52,7 +53,17 @@ def final_receipt(evaluation):
     return final, None
 
 
-def _reference(snapshot_id, item, database, gateway, repository, slices, *, execute_gateway=True):
+def _reference(snapshot_id, item, database, gateway, repository, slices):
+    """Compile Gold, cross-check the independent oracle, probe policy applicability.
+
+    The gateway probe runs wherever the outcome can still affect scoring (D076):
+    a Gold reference that the real policy rejects — e.g. zero contributing
+    customers — makes that snapshot inapplicable instead of masquerading as an
+    agent mismatch on replay. Cases already excluded by their baseline keep
+    plain replay rows on their variants, preserving the frozen
+    robustness-coverage gate semantics at zero information loss.
+    """
+
     cmp_policy = ComparisonPolicy(ordered=bool(item.order_by) or item.limit is not None)
     compiled = compile_semantic(item.semantic_spec(), repository)
     independent = compute_independent(item.semantic_spec(), repository, slices)
@@ -62,7 +73,7 @@ def _reference(snapshot_id, item, database, gateway, repository, slices, *, exec
     ):
         raise ValueError("formal Gold disagrees with independent oracle")
     try:
-        receipt = gateway.execute(compiled.sql) if execute_gateway else None
+        receipt = gateway.execute(compiled.sql)
     except QueryRejected as exc:
         if exc.code == "AGGREGATION_TOO_SMALL":
             return independent, FormalSnapshot(
@@ -71,9 +82,8 @@ def _reference(snapshot_id, item, database, gateway, repository, slices, *, exec
         raise ValueError(f"formal Gold rejected: {exc.code}") from exc
     except ExecutionFailure as exc:
         raise ValueError(f"formal Gold execution failed: {exc.code}") from exc
-    if receipt is not None and (
-        receipt.result.truncated
-        or not compare_results(receipt.result, independent, policy=cmp_policy)
+    if receipt.result.truncated or not compare_results(
+        receipt.result, independent, policy=cmp_policy
     ):
         raise ValueError("formal Gold gateway result is truncated or inconsistent")
     return independent, None
@@ -147,16 +157,22 @@ def evaluate_formal(dataset_dir, pack_dir, variant_dirs, agent, *, agent_id, hid
     for item in cases:
         references = {}
         if item.expected_action != "refuse":
-            for name, db, _ in snapshots:
-                references[name] = _reference(
-                    name,
-                    item,
-                    db,
-                    gateways[name],
-                    repository,
-                    slices[name],
-                    execute_gateway=name == "baseline",
-                )
+            for index, (name, db, _) in enumerate(snapshots):
+                if index > 0 and references["baseline"][1] is not None:
+                    # D076: the baseline already structurally excludes this case,
+                    # so variant Gold applicability cannot change any score or
+                    # diagnose outcome. Variant rows keep plain same-SQL replay
+                    # semantics (the agent submission is still executed and
+                    # policy-checked there), which preserves the frozen
+                    # robustness-coverage gate without spending further probes.
+                    references[name] = (
+                        compute_independent(item.semantic_spec(), repository, slices[name]),
+                        None,
+                    )
+                else:
+                    references[name] = _reference(
+                        name, item, db, gateways[name], repository, slices[name]
+                    )
         private = PrivateCase(
             request=AgentRequest(
                 case_id=item.case_id,
@@ -168,7 +184,7 @@ def evaluate_formal(dataset_dir, pack_dir, variant_dirs, agent, *, agent_id, hid
             task_version=item.task_version,
         )
         evaluation = evaluate_case(private, agent, gateways["baseline"], repository).model_copy(
-            update={"evaluator_version": "0.6"}
+            update={"evaluator_version": FORMAL_EVALUATOR_VERSION}
         )
         final, receipt = final_receipt(evaluation)
         sql = receipt.sql if receipt and not receipt.truncated else None

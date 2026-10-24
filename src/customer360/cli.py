@@ -93,12 +93,14 @@ def run() -> None:
 @app.command()
 def version_info() -> None:
     """Show package and protocol versions."""
+    from customer360.contracts.evaluation import FORMAL_EVALUATOR_VERSION
+
     typer.echo(
         json_text(
             {
                 "package": __version__,
                 "protocol": "0.1",
-                "evaluator": "0.6",
+                "evaluator": FORMAL_EVALUATOR_VERSION,
                 "score_protocol": "1.0",
                 "ranking_enabled": False,
             }

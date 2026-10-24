@@ -92,7 +92,7 @@ class ConformanceEvidence(RcEvidence):
     split: Literal["public_dev"] = "public_dev"
     case_count: Literal[120] = 120
     integrity_passed: bool
-    evaluator_version: Literal["0.6"] = "0.6"
+    evaluator_version: Literal["0.6", "0.7"] = "0.7"
 
     @model_validator(mode="after")
     def integrity_is_the_pass_bit(self) -> "ConformanceEvidence":

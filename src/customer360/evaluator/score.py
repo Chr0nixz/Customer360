@@ -153,7 +153,7 @@ def aggregate_score(report: FormalEvaluationReport) -> ScoreRunReport:
             "policy_incompatible_snapshots": policy_pairs,
             "eligible_cases": eligible,
         },
-        evaluator_version="0.6",
+        evaluator_version=report.evaluator_version,
         data_version=report.data_version,
         task_version=report.task_version,
         metadata_version=report.metadata_version,

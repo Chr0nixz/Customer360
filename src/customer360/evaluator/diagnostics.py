@@ -89,11 +89,17 @@ def build_diagnostic_summary(
     passed_count: int,
     attributions: Iterable[CaseFailureAttribution],
     all_quadruples: Iterable[DiagnosticQuadruple] | None = None,
+    excluded_count: int = 0,
+    excluded_ids: tuple[str, ...] = (),
 ) -> DiagnosticSummary:
     """Aggregate failure attributions across metric, filter, time, and join dimensions."""
     attr_list = tuple(attributions)
     failed_count = len(attr_list)
-    pass_rate = passed_count / total_count if total_count > 0 else 0.0
+    # D076: cases whose Gold reference is policy-inapplicable on the baseline
+    # snapshot are structural, not agent failures; they leave the denominator,
+    # aligned with the formal score eligibility rule.
+    eligible = total_count - excluded_count
+    pass_rate = passed_count / eligible if eligible > 0 else 0.0
 
     # Count total occurrences of each dimension if provided, else baseline on attributions
     totals: dict[tuple[str, str], int] = Counter()
@@ -166,6 +172,10 @@ def build_diagnostic_summary(
     limitations = (
         "Desensitized diagnostics summary; Gold queries and private datasets are never disclosed.",
         "Dimension failure rates reflect current test suite distribution.",
+        (
+            "Cases whose Gold reference is policy-inapplicable on the baseline snapshot are "
+            "excluded from the pass-rate denominator, aligned with formal score eligibility."
+        ),
     )
 
     return DiagnosticSummary(
@@ -173,6 +183,8 @@ def build_diagnostic_summary(
         passed_cases=passed_count,
         failed_cases=failed_count,
         pass_rate=round(pass_rate, 4),
+        excluded_cases=excluded_count,
+        excluded_case_ids=tuple(excluded_ids),
         attributions=attr_list,
         aggregations=tuple(aggregations),
         limitations=limitations,
@@ -202,6 +214,7 @@ def render_diagnostic_markdown(summary: DiagnosticSummary) -> str:
         f"- **Total Cases**: {summary.total_cases}",
         f"- **Passed Cases**: {summary.passed_cases}",
         f"- **Failed Cases**: {summary.failed_cases}",
+        f"- **Excluded (Structural)**: {summary.excluded_cases}",
         f"- **Pass Rate**: {summary.pass_rate:.1%}",
         "",
         "## Dimensional Failure Aggregations",
@@ -233,6 +246,24 @@ def render_diagnostic_markdown(summary: DiagnosticSummary) -> str:
                 f"| {attr.case_id} | {attr.stage} | {attr.primary_failure_code} | "
                 f"{q.metric_name or '-'} | {filters_str} | {attr.diff_summary or '-'} |"
             )
+
+    if summary.excluded_case_ids:
+        lines.extend(
+            [
+                "",
+                "## Structural Exclusions",
+                "",
+                (
+                    "Gold reference is policy-inapplicable on the baseline snapshot; "
+                    "excluded from the pass-rate denominator (aligned with formal score "
+                    "eligibility)."
+                ),
+                "",
+                "| Case ID |",
+                "| --- |",
+            ]
+        )
+        lines.extend(f"| {case_id} |" for case_id in summary.excluded_case_ids)
 
     lines.extend(["", "## Limitations", ""])
     lines.extend(f"- {item}" for item in summary.limitations)
@@ -277,6 +308,20 @@ def render_diagnostic_html(summary: DiagnosticSummary) -> str:
 
     empty_attr = '<tr><td colspan="6" class="text-muted">No failed cases</td></tr>'
     attr_body = "".join(attr_rows) if attr_rows else empty_attr
+
+    excluded_section = ""
+    if summary.excluded_case_ids:
+        excluded_rows = "".join(
+            f"<tr><td><strong>{_esc(case_id)}</strong></td></tr>"
+            for case_id in summary.excluded_case_ids
+        )
+        excluded_section = (
+            '<div class="card"><h2>Structural Exclusions</h2>'
+            '<p class="text-muted">Gold reference is policy-inapplicable on the baseline '
+            "snapshot; excluded from the pass-rate denominator.</p>"
+            "<table><thead><tr><th>Case ID</th></tr></thead>"
+            f"<tbody>{excluded_rows}</tbody></table></div>"
+        )
 
     limits = "".join(f"<li>{_esc(item)}</li>" for item in summary.limitations)
 
@@ -416,6 +461,10 @@ def render_diagnostic_html(summary: DiagnosticSummary) -> str:
         <div class="stat-value text-danger">{summary.failed_cases}</div>
       </div>
       <div class="stat-card">
+        <div class="stat-label">Excluded (Structural)</div>
+        <div class="stat-value text-muted">{summary.excluded_cases}</div>
+      </div>
+      <div class="stat-card">
         <div class="stat-label">Pass Rate</div>
         <div class="stat-value">{summary.pass_rate:.1%}</div>
       </div>
@@ -459,6 +508,8 @@ def render_diagnostic_html(summary: DiagnosticSummary) -> str:
       </table>
     </div>
 
+    {excluded_section}
+
     <div class="card">
       <h2>Limitations & Boundaries</h2>
       <ul class="limitations">{limits}</ul>
@@ -467,6 +518,25 @@ def render_diagnostic_html(summary: DiagnosticSummary) -> str:
 </body>
 </html>
 """
+
+
+def _baseline_inapplicable(snapshots: Any) -> bool:
+    """D076: true when the baseline snapshot's Gold reference is policy-inapplicable.
+
+    Formal snapshots carry a boolean ``applicable`` with an explicit Gold policy
+    code; matrix snapshots carry the ``"policy_incompatible"`` enum value. Both
+    mean the reference query was rejected before any Agent could run, so the
+    case is structural and must not count as an agent failure.
+    """
+
+    baseline = next(
+        (snap for snap in snapshots if getattr(snap, "snapshot_id", "") == "baseline"),
+        None,
+    )
+    if baseline is None:
+        return False
+    state = getattr(baseline, "applicable", True)
+    return state is False or state == "policy_incompatible"
 
 
 def diagnose_matrix_run(
@@ -483,6 +553,7 @@ def diagnose_matrix_run(
     all_quads: list[DiagnosticQuadruple] = []
     attributions: list[CaseFailureAttribution] = []
     passed_cases = 0
+    excluded_ids: list[str] = []
 
     for item in report.cases:
         blueprint = case_map.get(item.case_id)
@@ -503,6 +574,7 @@ def diagnose_matrix_run(
         # Check outcomes across all applicable snapshots
         snapshots = getattr(item, "snapshots", ())
         failed = False
+        excluded = False
         fail_code = None
         fail_stage = "execution"
         fail_diff = None
@@ -529,7 +601,10 @@ def diagnose_matrix_run(
                         break
         elif hasattr(item, "evaluation"):
             eval_rec = item.evaluation
-            if eval_rec is not None and eval_rec.outcome != "pass":
+            if _baseline_inapplicable(snapshots):
+                excluded = True
+                excluded_ids.append(item.case_id)
+            elif eval_rec is not None and eval_rec.outcome != "pass":
                 failed = True
                 fail_code = eval_rec.reason_code or "FAILURE"
                 fail_stage = (
@@ -551,32 +626,38 @@ def diagnose_matrix_run(
                         fail_diff = f"snapshot {snap.snapshot_id} mismatch"
                         break
         else:
-            for snap in snapshots:
-                is_app = (
-                    getattr(snap, "applicable", "") == "applicable"
-                    or getattr(snap, "applicable", False) is True
-                )
-                is_pass = getattr(snap, "outcome", None) == "pass" or getattr(
-                    snap, "independent_match", False
-                )
-                if is_app and not is_pass:
-                    failed = True
-                    fail_code = (
-                        getattr(snap, "reason_code", None)
-                        or getattr(snap, "failure_class", None)
-                        or "FAILURE"
+            if _baseline_inapplicable(snapshots):
+                excluded = True
+                excluded_ids.append(item.case_id)
+            else:
+                for snap in snapshots:
+                    is_app = (
+                        getattr(snap, "applicable", "") == "applicable"
+                        or getattr(snap, "applicable", False) is True
                     )
-                    fail_stage = (
-                        snap.stage
-                        if getattr(snap, "stage", None)
-                        in {"plan", "sql_guard", "execution", "comparison", "interaction"}
-                        else "execution"
+                    is_pass = getattr(snap, "outcome", None) == "pass" or getattr(
+                        snap, "independent_match", False
                     )
-                    if getattr(snap, "reason_code", None):
-                        fail_diff = f"reason: {snap.reason_code}"
-                    break
+                    if is_app and not is_pass:
+                        failed = True
+                        fail_code = (
+                            getattr(snap, "reason_code", None)
+                            or getattr(snap, "failure_class", None)
+                            or "FAILURE"
+                        )
+                        fail_stage = (
+                            snap.stage
+                            if getattr(snap, "stage", None)
+                            in {"plan", "sql_guard", "execution", "comparison", "interaction"}
+                            else "execution"
+                        )
+                        if getattr(snap, "reason_code", None):
+                            fail_diff = f"reason: {snap.reason_code}"
+                        break
 
-        if not failed:
+        if excluded:
+            pass
+        elif not failed:
             passed_cases += 1
         else:
             attributions.append(
@@ -595,6 +676,8 @@ def diagnose_matrix_run(
         passed_count=passed_cases,
         attributions=attributions,
         all_quadruples=all_quads,
+        excluded_count=len(excluded_ids),
+        excluded_ids=tuple(excluded_ids),
     )
 
 
@@ -630,6 +713,7 @@ def write_diagnostics_report(output_dir: Path, summary: DiagnosticSummary) -> di
         "total_cases": summary.total_cases,
         "passed_cases": summary.passed_cases,
         "failed_cases": summary.failed_cases,
+        "excluded_cases": summary.excluded_cases,
         "pass_rate": summary.pass_rate,
         "report_dir": str(output_dir),
     }

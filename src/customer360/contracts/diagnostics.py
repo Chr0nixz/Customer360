@@ -48,6 +48,8 @@ class DiagnosticSummary(Contract):
     passed_cases: int = Field(ge=0)
     failed_cases: int = Field(ge=0)
     pass_rate: float = Field(ge=0.0, le=1.0)
+    excluded_cases: int = Field(ge=0, default=0)
+    excluded_case_ids: tuple[Text, ...] = Field(default_factory=tuple)
     attributions: tuple[CaseFailureAttribution, ...] = Field(default_factory=tuple)
     aggregations: tuple[DimensionFailureAggregation, ...] = Field(default_factory=tuple)
     limitations: tuple[Text, ...] = Field(default_factory=tuple)

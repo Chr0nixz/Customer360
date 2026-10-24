@@ -6,7 +6,7 @@ For users who want to **install, generate synthetic data, run Agents, and inspec
 
 This project is a reproducible, secure-by-default, **local and offline** Agent benchmark—not an online question-answering service, nor a leaderboard.
 
-Current protocol: package `1.1.0`, formal evaluator `0.6`, score protocol `1.0`. Formal release `v1.1.0` achieved. Online ranking is permanently disabled.
+Current protocol: package `1.1.0`, formal evaluator `0.7`, score protocol `1.0`. Formal release `v1.1.0` achieved. Online ranking is permanently disabled.
 
 ## 1. Three Golden Rules
 
@@ -167,7 +167,9 @@ uv run c360 diagnose --input outputs/eval-public --pack outputs/tasks-300 --outp
 uv run c360 score --public-report outputs/eval-public --hidden-report outputs/hidden-eval-formal --agent baseline --output outputs/score-local
 ```
 
-`evaluate-public` and `evaluate-hidden --formal` produce `private/formal_input.json` (evaluator protocol 0.6). Legacy matrix reports from `evaluate` cannot be fed to `score`.
+`evaluate-public` and `evaluate-hidden --formal` produce `private/formal_input.json` (evaluator protocol 0.7). Legacy matrix reports from `evaluate` cannot be fed to `score`.
+
+`c360 diagnose` is aligned with the `score` eligibility rule: cases whose Gold reference is rejected by the safety policy on the baseline snapshot (e.g. zero-contribution `AGGREGATION_TOO_SMALL`) are reported as structural exclusions (`excluded_cases`) instead of agent failures; the pass-rate denominator is `total_cases - excluded_cases`. For baseline-eligible cases, a snapshot whose Gold is not runnable on that variant is treated as inapplicable the same way (D036/D076).
 
 `c360 score` outputs separate reports for public_dev and private_hidden. `ranking_enabled=false` and the two scorecards are never merged. Weights: Correctness 45%, Safety 20%, Interaction 15%, Efficiency 15%, Robustness 5%. Token consumption and scan volumes are reported as `unavailable` rather than 0.
 

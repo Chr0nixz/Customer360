@@ -60,7 +60,7 @@ class FormalReleaseManifest(Contract):
     package_version: Literal["1.0.0", "1.1.0"] = "1.1.0"
     protocol_version: Text
     score_protocol_version: Literal["1.0"] = "1.0"
-    evaluator_version: Literal["0.6"] = "0.6"
+    evaluator_version: Literal["0.6", "0.7"] = "0.7"
     pack_verify_protocol_version: Literal["0.2"] = "0.2"
     license: Literal["Apache-2.0"] = "Apache-2.0"
     scoring_applied: Literal[True] = True

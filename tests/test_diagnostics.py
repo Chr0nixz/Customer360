@@ -252,3 +252,112 @@ def test_diagnose_matrix_run_and_write_report(tmp_path):
     )
     with pytest.raises(ValueError, match="leaked candidate_sql"):
         write_diagnostics_report(leak_dir, leaked_summary)
+
+
+def _formal_style_case(case_id, baseline_applicable, outcome):
+    """D076 stub: formal reports carry boolean snapshot applicability."""
+    from types import SimpleNamespace
+
+    baseline = SimpleNamespace(
+        snapshot_id="baseline",
+        applicable=baseline_applicable,
+        policy_code=None if baseline_applicable else "AGGREGATION_TOO_SMALL",
+        independent_match=bool(baseline_applicable),
+        execution_code=None,
+    )
+    variant = SimpleNamespace(
+        snapshot_id="tiny_seed_43_distribution",
+        applicable=True,
+        independent_match=True,
+        execution_code=None,
+    )
+    return SimpleNamespace(
+        case_id=case_id,
+        split="dev",
+        expected_action="answer",
+        evaluation=SimpleNamespace(
+            outcome=outcome,
+            reason_code="OK" if outcome == "pass" else "POLICY_INCOMPATIBLE",
+            rounds=(),
+        ),
+        snapshots=(baseline, variant),
+    )
+
+
+def test_diagnose_excludes_policy_inapplicable_baseline_cases():
+    """D076: a case whose Gold is policy-inapplicable on the baseline snapshot is
+    structural, not an agent failure; it must leave the pass-rate denominator."""
+    from types import SimpleNamespace
+
+    from customer360.evaluator.diagnostics import diagnose_matrix_run
+
+    report = SimpleNamespace(
+        cases=(
+            _formal_style_case("C360_2001", False, "error"),
+            _formal_style_case("C360_2002", True, "error"),
+            _formal_style_case("C360_2003", True, "pass"),
+        )
+    )
+
+    summary = diagnose_matrix_run(report, ())
+    assert summary.total_cases == 3
+    assert summary.excluded_cases == 1
+    assert summary.excluded_case_ids == ("C360_2001",)
+    assert summary.passed_cases == 1
+    assert summary.failed_cases == 1
+    assert summary.pass_rate == 0.5
+    assert [attr.case_id for attr in summary.attributions] == ["C360_2002"]
+
+
+def test_diagnose_excludes_matrix_style_policy_incompatible_baseline():
+    """D076: matrix records express the same structural state through the
+    "policy_incompatible" applicability enum; exclusion must match."""
+    from types import SimpleNamespace
+
+    from customer360.evaluator.diagnostics import diagnose_matrix_run
+
+    baseline = SimpleNamespace(
+        snapshot_id="baseline",
+        applicable="policy_incompatible",
+        stage="agent_submit",
+        outcome="skipped",
+        reason_code="POLICY_INCOMPATIBLE",
+    )
+    variant = SimpleNamespace(
+        snapshot_id="tiny_duplicate_fanout",
+        applicable="applicable",
+        stage="same_sql_replay",
+        outcome="pass",
+        reason_code=None,
+    )
+    item = SimpleNamespace(
+        case_id="C360_2004",
+        split="dev",
+        expected_action="answer",
+        evaluation=SimpleNamespace(outcome="error", reason_code="POLICY_INCOMPATIBLE", rounds=()),
+        snapshots=(baseline, variant),
+    )
+    summary = diagnose_matrix_run(SimpleNamespace(cases=(item,)), ())
+    assert summary.excluded_cases == 1
+    assert summary.excluded_case_ids == ("C360_2004",)
+    assert summary.failed_cases == 0
+    assert summary.passed_cases == 0
+
+
+def test_write_diagnostics_report_reports_exclusions(tmp_path):
+    from types import SimpleNamespace
+
+    from customer360.evaluator.diagnostics import (
+        diagnose_matrix_run,
+        write_diagnostics_report,
+    )
+
+    item = _formal_style_case("C360_2005", False, "error")
+    summary = diagnose_matrix_run(SimpleNamespace(cases=(item,)), ())
+    out_dir = tmp_path / "diag-excluded"
+    res = write_diagnostics_report(out_dir, summary)
+    assert res["excluded_cases"] == 1
+    assert res["failed_cases"] == 0
+    md = (out_dir / "diagnostics.md").read_text(encoding="utf-8")
+    assert "C360_2005" in md
+    assert "Excluded" in md

@@ -8,7 +8,7 @@ from customer360.contracts.base import Contract, Identifier, Text
 from customer360.contracts.public import AgentRequest, AgentResponse, QueryResult
 
 EVALUATOR_VERSION: Literal["0.5"] = "0.5"
-FORMAL_EVALUATOR_VERSION: Literal["0.6"] = "0.6"
+FORMAL_EVALUATOR_VERSION: Literal["0.7"] = "0.7"
 
 FROZEN_OUTCOMES = ("pass", "fail", "error")
 FROZEN_PASS_REASON_CODES = frozenset({"OK", "CLARIFICATION_OK", "REFUSAL_OK"})
@@ -107,7 +107,7 @@ class RoundAudit(Contract):
 
 class EvaluationRecord(Contract):
     case_id: Text
-    evaluator_version: Literal["0.5", "0.6"] = EVALUATOR_VERSION
+    evaluator_version: Literal["0.5", "0.6", "0.7"] = EVALUATOR_VERSION
     outcome: Literal["pass", "fail", "error"]
     reason_code: Text
     agent_status: Text | None = None

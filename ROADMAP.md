@@ -107,6 +107,7 @@
   - **新一代公开 300 题与隐藏 100 题烘焙**：多维草案池扩充，隐藏集生成引擎建立四大高级分析特性硬性保底（各 >= 2 题），实测验证 240+61 道 Answer 题经 DuckDB 与独立 Oracle 双向验证达成 100% 绝对一致（D072）；
   - **端到端基准出分、失败归因与网关加固**：修复 Windows 多进程管道竞争 `[WinError 5]`，升级 `c360 diagnose` 统一归因分析，完整跑通 `evaluate-public`（82/120, 68.3%）、`evaluate-hidden`（66/100, 66.0%）与 `LocalModelAdapter` 回环评测（15/20, 75.0%），产出首期脱敏细粒度失败归因矩阵与交互式 HTML 诊断看板（D073）。
 - [x] D075 Baseline 质量闭环（第二轮归因驱动）：复现公开 Dev 基线 89/120（74.17%），31 个失败归因为 6 类 Agent 侧根因；落地姓名/幸福指数拒答识别、业务名逐字最长匹配指标裁决、PIT 无显式日期澄清、metric 槽位澄清、服务关系 `is_primary` 极性解析与复合关联多余谓词移除；复测 107/120（89.17%），旧正例零回退、P0 违规为 0；剩余 13 个失败均为 Gold 零贡献的结构性 POLICY_INCOMPATIBLE/AGGREGATION_TOO_SMALL（评测在调用 Agent 前即失败），待维护者决策是否在诊断口径中按 D036 排除；新增 `tests/test_d075_baseline_quality.py`（18/18）。
+- [x] D076 结构性失败口径闭环（维护者决策后落地）：`c360 diagnose` 对齐 `score` 资格判定——baseline 快照上 Gold 被安全策略拒绝的案例计入 `excluded_cases` 不再算 Agent 失败，通过率分母改为 `total_cases - excluded_cases`；`evaluate_formal` 的 `_reference` 在所有影响计分的位置经真实网关探测 Gold 可用性（baseline 一律探测，baseline 资格内案例的变体逐快照探测），封堵 D036 变体零贡献缺口（C360_1284 翻转为通过），baseline 已排除案例的变体保持 replay 语义以维持冻结的 `robustness_coverage` 硬门；`formal evaluator 0.6 → 0.7`（Literal 拓宽保持旧工件可读，conformance 门要求 0.7）；pack_verify 的 PERMISSION_DENIED 断言经 git 考古证实为 pre-D068 fact_holding 未授权的历史意外，更新为"可执行 Gold 必须在 Tiny Agent 授权下可运行"的更强不变量。复测公开 Dev 120：108 通过 / 0 失败 / 12 结构性排除，score 四硬门全过、加权 1.0；新增 `tests/test_d076_variant_gold_probe.py` 与 3 项 diagnose 排除测试。
 
 ### 下一阶段执行顺序（2026-10-18 更新）
 

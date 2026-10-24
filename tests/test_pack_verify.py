@@ -47,7 +47,7 @@ def report_300(baseline, variant, duplicate_variant, null_variant, date_variant,
     )
 
 
-def test_generated_300_replays_all_four_variants(report_300):
+def test_generated_300_replays_all_four_variants(public_300, report_300):
     assert report_300.semantic_passed is True
     assert report_300.variant_count == 4
     assert report_300.m6_structure is True
@@ -60,7 +60,16 @@ def test_generated_300_replays_all_four_variants(report_300):
     )
     assert all(row.independent_match for case in executable for row in case.variants)
     assert any(row.policy_incompatible for case in executable for row in case.variants)
-    assert any(case.policy_block_code == "PERMISSION_DENIED" for case in executable)
+    # D076: fact_holding has been granted since D068, so a compiled Gold can no
+    # longer be PERMISSION_DENIED by accident: every executable spec must be
+    # runnable under the Tiny agent policy. The permission-refusal path is
+    # exercised at the agent level by the pack's PERMISSION_DENIED refuse cases.
+    assert all(case.policy_block_code != "PERMISSION_DENIED" for case in executable)
+    assert any(
+        case.expected_action == "refuse"
+        and tuple(case.accepted_reason_codes) == ("PERMISSION_DENIED",)
+        for case in public_300.cases
+    )
 
 
 def test_generated_120_pack_matches_independent_oracle(baseline):

@@ -6,7 +6,7 @@
 
 这是一套可复现、默认可安全执行的**本地离线** Agent benchmark，不是在线问数服务，也不是排行榜。
 
-当前协议：package `1.1.0`，formal evaluator `0.6`，score protocol `1.0`。已完成 `v1.1.0` 正式发布。没有在线排名。
+当前协议：package `1.1.0`，formal evaluator `0.7`，score protocol `1.0`。已完成 `v1.1.0` 正式发布。没有在线排名。
 
 ## 1. 三条硬规则
 
@@ -167,7 +167,9 @@ uv run c360 diagnose --input outputs/eval-public --pack outputs/tasks-300 --outp
 uv run c360 score --public-report outputs/eval-public --hidden-report outputs/hidden-eval-formal --agent baseline --output outputs/score-local
 ```
 
-`evaluate-public` / `evaluate-hidden --formal` 写出 `private/formal_input.json`（evaluator 0.6）。历史 `evaluate` 矩阵报告不能拿来 `score`。
+`evaluate-public` / `evaluate-hidden --formal` 写出 `private/formal_input.json`（evaluator 0.7）。历史 `evaluate` 矩阵报告不能拿来 `score`。
+
+`c360 diagnose` 的口径与 `score` 的资格判定对齐：Gold 参考查询在 baseline 快照上被安全策略拒绝（如零贡献聚合 `AGGREGATION_TOO_SMALL`）的案例记为结构性排除（`excluded_cases`），不再计为 Agent 失败；通过率分母为 `total_cases - excluded_cases`。对 baseline 资格内的案例，变体快照上 Gold 自身不可运行时同样按不适用处理（D036/D076）。
 
 `c360 score` 分别写 public_dev 与 private_hidden，`ranking_enabled=false`，两套分数永不合并。权重：正确性 45%、安全 20%、交互 15%、效率 15%、鲁棒性 5%。Token 和扫描量是 `unavailable`，不会报 0。
 

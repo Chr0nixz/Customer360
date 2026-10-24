@@ -48,7 +48,7 @@ class FormalCase(Contract):
                 raise ValueError("missing response cannot earn response credit")
         elif self.evaluation.case_id != self.case_id:
             raise ValueError("evaluation case identity mismatch")
-        elif self.evaluation.evaluator_version != "0.6":
+        elif self.evaluation.evaluator_version not in ("0.6", "0.7"):
             raise ValueError("historical evaluator records cannot become formal inputs")
         if self.expected_action == "refuse" and self.snapshots:
             raise ValueError("refusal has no executable Gold")
@@ -58,7 +58,7 @@ class FormalCase(Contract):
 class FormalEvaluationReport(Contract):
     report_kind: Literal["formal_evaluation_input"] = "formal_evaluation_input"
     score_protocol_version: Literal["1.0"] = "1.0"
-    evaluator_version: Literal["0.6"] = "0.6"
+    evaluator_version: Literal["0.6", "0.7"] = "0.7"
     protocol_version: Literal["0.1"] = "0.1"
     scoring_applied: Literal[False] = False
     replay_mode: Literal["same_sql"] = "same_sql"
@@ -104,6 +104,11 @@ class FormalEvaluationReport(Contract):
                 and tuple(row.snapshot_id for row in case.snapshots) != self.snapshot_ids
             ):
                 raise ValueError("every answer/clarification needs five snapshot records")
+            if (
+                case.evaluation is not None
+                and case.evaluation.evaluator_version != self.evaluator_version
+            ):
+                raise ValueError("formal input cannot mix evaluator record versions")
         if not self.input_digests or not self.environment:
             raise ValueError("formal input requires data/task/environment provenance")
         return self

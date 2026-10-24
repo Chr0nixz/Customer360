@@ -31,8 +31,11 @@ def test_diagnostics_on_public_formal_run(tmp_path: Path):
     assert res.exit_code == 0
     data = json.loads(res.stdout)
     assert data["total_cases"] == 120
+    # D076: the 12 baseline policy-inapplicable cases in this historical run are
+    # excluded as structural instead of counted as agent failures (82/108 eligible).
     assert data["passed_cases"] == 82
-    assert data["failed_cases"] == 38
+    assert data["failed_cases"] == 26
+    assert data["excluded_cases"] == 12
     assert (diag_out / "diagnostics.md").is_file()
     assert (diag_out / "diagnostics.json").is_file()
     assert (diag_out / "diagnostics.html").is_file()
@@ -57,8 +60,11 @@ def test_diagnostics_on_hidden_run(tmp_path: Path):
     assert res.exit_code == 0
     data = json.loads(res.stdout)
     assert data["total_cases"] == 100
+    # D076: baseline policy-inapplicable hidden cases (if any) are excluded as
+    # structural instead of counted as agent failures; conservation still holds
+    # because exclusion only reclassifies former failures.
     assert data["passed_cases"] == 66
-    assert data["failed_cases"] == 34
+    assert data["failed_cases"] + data["excluded_cases"] == 34
     assert (diag_out / "diagnostics.md").is_file()
     assert (diag_out / "diagnostics.json").is_file()
     assert (diag_out / "diagnostics.html").is_file()

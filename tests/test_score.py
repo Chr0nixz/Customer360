@@ -40,7 +40,7 @@ def _record(
     )
     return EvaluationRecord(
         case_id=case_id,
-        evaluator_version="0.6",
+        evaluator_version="0.7",
         outcome=outcome,  # type: ignore[arg-type]
         reason_code=reason,
         elapsed_ms=elapsed_ms,

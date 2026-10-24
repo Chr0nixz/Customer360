@@ -10,7 +10,7 @@ from zipfile import ZipFile
 
 from customer360 import __version__
 from customer360.artifacts import digest, write_json_new
-from customer360.contracts.evaluation import EVALUATOR_VERSION
+from customer360.contracts.evaluation import EVALUATOR_VERSION, FORMAL_EVALUATOR_VERSION
 from customer360.contracts.evidence import (
     DOCKER_DIGEST,
     RC_GATE_NAMES,
@@ -256,8 +256,10 @@ def load_conformance(path: Path) -> ConformanceEvidence:
     report = _load_formal_input(path)
     if report.agent_id != "baseline" or report.split != "public_dev":
         raise ValueError("conformance requires evaluate-public --agent baseline")
-    if report.case_count != 120 or report.evaluator_version != "0.6":
-        raise ValueError("conformance requires 120 public_dev cases on evaluator 0.6")
+    if report.case_count != 120 or report.evaluator_version != FORMAL_EVALUATOR_VERSION:
+        raise ValueError(
+            f"conformance requires 120 public_dev cases on evaluator {FORMAL_EVALUATOR_VERSION}"
+        )
     if report.scoring_applied:
         raise ValueError("conformance formal_input cannot already apply scores")
     report_path = path / "private/formal_input.json" if path.is_dir() else path
