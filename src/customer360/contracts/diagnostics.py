@@ -5,7 +5,7 @@ Public and desensitized; does not expose private gold queries or seeds.
 
 from typing import Literal
 
-from pydantic import Field
+from pydantic import Field, model_validator
 
 from customer360.contracts.base import Contract, Text
 
@@ -53,3 +53,9 @@ class DiagnosticSummary(Contract):
     attributions: tuple[CaseFailureAttribution, ...] = Field(default_factory=tuple)
     aggregations: tuple[DimensionFailureAggregation, ...] = Field(default_factory=tuple)
     limitations: tuple[Text, ...] = Field(default_factory=tuple)
+
+    @model_validator(mode="after")
+    def counts_conserve(self) -> "DiagnosticSummary":
+        if self.passed_cases + self.failed_cases + self.excluded_cases != self.total_cases:
+            raise ValueError("passed, failed and excluded cases must conserve the total")
+        return self

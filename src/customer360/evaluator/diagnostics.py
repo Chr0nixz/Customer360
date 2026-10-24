@@ -585,7 +585,10 @@ def diagnose_matrix_run(
             and not hasattr(item, "evaluation")
             and not hasattr(item, "snapshots")
         ):
-            # HiddenEvalRecord
+            # HiddenEvalRecord (legacy non-formal hidden path). It carries no
+            # Gold-side baseline applicability signal, so the D076 structural
+            # exclusion is only defined for records with snapshots (formal and
+            # matrix runs); the release chain scores the formal hidden path.
             if item.outcome != "pass":
                 failed = True
                 fail_code = item.reason_code or "FAILURE"

@@ -254,6 +254,31 @@ def test_diagnose_matrix_run_and_write_report(tmp_path):
         write_diagnostics_report(leak_dir, leaked_summary)
 
 
+def test_diagnostic_summary_counts_must_conserve():
+    """D076 hardening: passed + failed + excluded must equal the total."""
+    import pytest
+    from pydantic import ValidationError
+
+    from customer360.contracts.diagnostics import DiagnosticSummary
+
+    with pytest.raises(ValidationError, match="conserve"):
+        DiagnosticSummary(
+            total_cases=5,
+            passed_cases=1,
+            failed_cases=1,
+            pass_rate=0.5,
+            excluded_cases=1,
+        )
+    conserved = DiagnosticSummary(
+        total_cases=3,
+        passed_cases=1,
+        failed_cases=1,
+        pass_rate=0.5,
+        excluded_cases=1,
+    )
+    assert conserved.excluded_case_ids == ()
+
+
 def _formal_style_case(case_id, baseline_applicable, outcome):
     """D076 stub: formal reports carry boolean snapshot applicability."""
     from types import SimpleNamespace

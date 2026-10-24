@@ -100,7 +100,7 @@ def _score_report(split: str, case_count: int, *, agent_id: str = "baseline") ->
         ),
         environment={"os": "test"},
         input_report_digests={"formal_input": "a" * 64},
-        evaluator_version="0.6",
+        evaluator_version="0.7",
         data_version="tiny-v1",
         task_version="generated-0.1",
         metadata_version="0.3",
@@ -219,6 +219,18 @@ def test_score_inputs_accept_baseline_120(tmp_path: Path) -> None:
     assert evidence.public_case_count == 120
 
 
+def test_score_inputs_reject_legacy_evaluator_reports(tmp_path: Path) -> None:
+    """D076 hardening: score evidence cannot bind pre-0.7 evaluator reports."""
+    score_dir = _write_score_dir(tmp_path / "score")
+    score_path = score_dir / "private/score.json"
+    payload = json.loads(score_path.read_text(encoding="utf-8"))
+    for report in payload["reports"]:
+        report["evaluator_version"] = "0.6"
+    score_path.write_text(json.dumps(payload), encoding="utf-8")
+    with pytest.raises(ValueError, match="evaluator 0.7"):
+        load_score_inputs(score_dir)
+
+
 def test_semantic_acceptance_requires_nested_pass(tmp_path: Path) -> None:
     payload = {
         "gate": "semantic_acceptance",
@@ -306,6 +318,27 @@ def test_formal_release_rejects_tampered_public_artifact(
     checked = check_formal_release(output, root=REPO)
     assert checked["passed"] is False
     assert any("digest mismatch" in issue.lower() for issue in checked["issues"])
+
+
+def test_formal_release_rejects_legacy_evaluator_manifest(
+    tmp_path: Path, formal_distributions
+) -> None:
+    """D076 hardening: the manifest itself must claim the frozen evaluator version."""
+    from customer360.tasks.generator import generate_task_pack, write_generated_pack
+
+    pack_dir = tmp_path / "pack"
+    write_generated_pack(pack_dir, generate_task_pack(seed=42, count=300))
+    output = tmp_path / "release"
+    prepare_formal_release(output, public_pack=pack_dir, root=REPO)
+
+    manifest_path = output / "formal_release_manifest.json"
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    manifest["evaluator_version"] = "0.6"
+    manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
+
+    checked = check_formal_release(output, root=REPO)
+    assert checked["passed"] is False
+    assert any("not frozen" in item for item in checked["issues"])
 
 
 def test_formal_release_rejects_missing_public_artifact(

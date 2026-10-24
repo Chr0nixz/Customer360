@@ -211,6 +211,10 @@ def load_score_inputs(score_dir: Path) -> ScoreInputsEvidence:
     public, hidden = load_score_bundle(score_dir)
     if public.agent_id != "baseline" or hidden.agent_id != "baseline":
         raise ValueError("score_inputs RC evidence requires agent_id=baseline")
+    if any(report.evaluator_version != FORMAL_EVALUATOR_VERSION for report in (public, hidden)):
+        raise ValueError(
+            f"score_inputs RC evidence requires evaluator {FORMAL_EVALUATOR_VERSION} reports"
+        )
     if public.case_count != 120:
         raise ValueError("score_inputs public_dev requires 120 generated-dev cases")
     if hidden.case_count < 8:
@@ -275,8 +279,11 @@ def load_negative_control(path: Path) -> NegativeControlEvidence:
     report = _load_formal_input(path)
     if report.agent_id != "wrong" or report.split != "public_dev":
         raise ValueError("negative_control requires evaluate-public --agent wrong")
-    if report.case_count != 120:
-        raise ValueError("negative_control requires 120 public_dev cases")
+    if report.case_count != 120 or report.evaluator_version != FORMAL_EVALUATOR_VERSION:
+        raise ValueError(
+            f"negative_control requires 120 public_dev cases on evaluator "
+            f"{FORMAL_EVALUATOR_VERSION}"
+        )
     scored = aggregate_score(report)
     correctness = next(item for item in scored.dimensions if item.name == "correctness")
     full_pass = correctness.eligible > 0 and correctness.passed == correctness.eligible
@@ -699,6 +706,7 @@ def check_formal_release(manifest_dir: Path, *, root: Path | None = None) -> dic
     if (
         manifest.package_version not in {"1.0.0", "1.1.0"}
         or manifest.score_protocol_version != "1.0"
+        or manifest.evaluator_version != FORMAL_EVALUATOR_VERSION
     ):
         issues.append("formal protocol versions are not frozen")
     if not (root / "LICENSE").is_file() or not (root / "NOTICE").is_file():
