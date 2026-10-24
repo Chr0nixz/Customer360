@@ -152,6 +152,12 @@
 - **问句改写与检验闭环**：`_render` 自动合成复合关联与 Top-K 自然语言问句与改写，`check_generated_rewrite` 建立一致性审查，`pack_verify` 自动注入 `ComparisonPolicy(ordered=...)` 有序全等裁决；
 - **专属测试套件**：新增 `tests/test_v1_4_generator_expansion.py`（6 项测试全绿通过）。
 
+**2026-10-24 基于第二轮归因矩阵的 Baseline 质量闭环 (D075)**：
+- **复现与归因**：seed 42 重建数据/四变体/300 题包（与 `tasks-300-v14` 字节级一致）后复现公开 Dev 基线 89/120（74.17%，含 11b7c57 已修复的 C360_1218），31 个失败归因为 6 类 Agent 侧根因 + 2 类结构性失败；
+- **Agent 侧修复（仅动 `src/customer360/agent/`）**：① "客户姓名"（PERMISSION_DENIED）与"幸福指数"（UNKNOWN_METRIC）拒答识别，对齐题包拒答模板 accepted reason codes；② 指标选择引入业务名逐字最长匹配 +150 裁决，修复"App渠道/买入客户+成功交易笔数"误选预命名指标导致输出列名错配（C360_1193/1204）与"活跃客户数"丢失 `status='active'` 过滤（C360_1217/1276）；③ `point_in_time_required` 无显式日期一律澄清 `time_window`（C360_1194）；④ "最新+资产状况/情况/数据"缺 metric 槽位澄清（C360_1202）；⑤ 服务关系 Join `is_primary` 极性按"主服务"前缀解析（C360_1265/1266）；⑥ 复合关联计划移除多余 `h.snapshot_date` 谓词（C360_1290）；
+- **验证结果**：复测公开 Dev 120 题 89 → 107（74.17% → 89.17%），旧正例零回退，P0 安全违规为 0，`--agent wrong` 负对照 0/120 未获满分；LocalModelAdapter 回环（human 20）经 `LocalInferenceServer` 内置确定性解析器同步受益，15 → 17；剩余 13 个失败均为 Gold 零贡献的结构性失败（12 个 baseline 上 POLICY_INCOMPATIBLE + C360_1284 在 seed43 变体零贡献），任何 Agent 不可解，待维护者决策是否在诊断口径中按 D036 排除（`c360 score` 已在资格分母中排除，`diagnose` 通过率口径未排除）；
+- **测试与质量**：新增 `tests/test_d075_baseline_quality.py`（18/18，全部经真实受控网关）；全量 pytest 590 passed / 1 failed / 5 skipped——唯一失败 `test_pack_verify.py::test_generated_300_replays_all_four_variants` 为 **D068 起的既有失败**（二分确认：2d4c714 通过、b82dae7 起失败；D068 复合关联落地改变了默认 300 题包组成，使 Gold 触发 PERMISSION_DENIED 探针的可执行案例消失，与本轮 Agent 改动无关，待维护者决策）；ruff check/format 与 `c360 doctor` 通过。
+
 阅读顺序：要跑命令先读 [使用说明](docs/user-guide.md)；改代码读 AGENTS.md → 本文件 → docs/architecture.md → docs/data_dictionary.md → ROADMAP.md；公开到 GitHub 读 [docs/github-publish.md](docs/github-publish.md) 与 [CONTRIBUTING.md](CONTRIBUTING.md)。原方案继续保留，矛盾处理见 ROADMAP。
 
 ## 2. 已完成与尚未完成

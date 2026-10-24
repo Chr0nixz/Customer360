@@ -109,7 +109,10 @@ def test_local_model_end_to_end_human_eval(tmp_path: Path, monkeypatch: pytest.M
         assert res_diag.exit_code == 0
         diag_data = json.loads(res_diag.stdout)
         assert diag_data["total_cases"] == 20
-        assert diag_data["passed_cases"] == 15
-        assert diag_data["failed_cases"] == 5
+        # D075: the deterministic planner behind LocalInferenceServer now resolves
+        # the active-customer-count and metric/time-slot clarification patterns,
+        # so the local-model loop improved from 15/20 to 17/20.
+        assert diag_data["passed_cases"] == 17
+        assert diag_data["failed_cases"] == 3
         assert (diag_out / "diagnostics.md").is_file()
         assert (diag_out / "diagnostics.html").is_file()

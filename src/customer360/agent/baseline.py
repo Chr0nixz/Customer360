@@ -168,15 +168,11 @@ class BaselineAgent:
     def _plan(self, intent: Intent, metric: dict[str, Any], fallback_anchor: date) -> QueryPlan:
         join_path = intent.join_path
         if join_path == "customer_transactions_and_holdings":
+            # 复合关联的"当前持有"仅由 holding_status=active 表达；持有侧没有
+            # snapshot_date 口径，附加该过滤会把历史持仓快照错误排除。
             composite_predicates: list[PlanFilter] = [
                 PlanFilter(field="status", operator="eq", values=("success",), alias="t"),
                 PlanFilter(field="holding_status", operator="eq", values=("active",), alias="h"),
-                PlanFilter(
-                    field="snapshot_date",
-                    operator="eq",
-                    values=(fallback_anchor.isoformat(),),
-                    alias="h",
-                ),
             ]
             if intent.time_kind == "rolling" and intent.days:
                 anchor = intent.time_date or fallback_anchor

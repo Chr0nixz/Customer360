@@ -106,6 +106,7 @@
   - **复合派生比率**：落地 `RatioSpec` 与 `ratio` 字段，编译器自动注入 `NULLIF(den, 0)`、固定精度 `ROUND` 与 `CASE WHEN` 条件聚合，SQL Guard 扩展 `exp.If` 与比率静态审计（D071, D073）；
   - **新一代公开 300 题与隐藏 100 题烘焙**：多维草案池扩充，隐藏集生成引擎建立四大高级分析特性硬性保底（各 >= 2 题），实测验证 240+61 道 Answer 题经 DuckDB 与独立 Oracle 双向验证达成 100% 绝对一致（D072）；
   - **端到端基准出分、失败归因与网关加固**：修复 Windows 多进程管道竞争 `[WinError 5]`，升级 `c360 diagnose` 统一归因分析，完整跑通 `evaluate-public`（82/120, 68.3%）、`evaluate-hidden`（66/100, 66.0%）与 `LocalModelAdapter` 回环评测（15/20, 75.0%），产出首期脱敏细粒度失败归因矩阵与交互式 HTML 诊断看板（D073）。
+- [x] D075 Baseline 质量闭环（第二轮归因驱动）：复现公开 Dev 基线 89/120（74.17%），31 个失败归因为 6 类 Agent 侧根因；落地姓名/幸福指数拒答识别、业务名逐字最长匹配指标裁决、PIT 无显式日期澄清、metric 槽位澄清、服务关系 `is_primary` 极性解析与复合关联多余谓词移除；复测 107/120（89.17%），旧正例零回退、P0 违规为 0；剩余 13 个失败均为 Gold 零贡献的结构性 POLICY_INCOMPATIBLE/AGGREGATION_TOO_SMALL（评测在调用 Agent 前即失败），待维护者决策是否在诊断口径中按 D036 排除；新增 `tests/test_d075_baseline_quality.py`（18/18）。
 
 ### 下一阶段执行顺序（2026-10-18 更新）
 
