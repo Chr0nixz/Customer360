@@ -170,7 +170,7 @@
 - **隐藏 100 题终验（evaluator 0.7）**：`outputs/eval-hidden-d076` integrity 通过，**86 通过 / 4 失败 / 10 结构性排除**（合格分母 90，95.56%），verify-hidden 的 10 个 policy_incompatible 与之精确吻合；隐藏钉值测试更新为实测值并推送（ae7018d）；
 - **负对照与正式分**：wrong 0/120（108 失败 + 12 排除）；`c360 score` public_dev 加权 **1.0**、private_hidden 加权 **0.9784**，双 split 四硬门全过；
 - **RC 证据重签（8/8）**：verify-pack 240/240 + verify-hidden 61/61 → semantic_acceptance ✓；双构建字节一致 → reproducible_build ✓；WSL2 docker-ce 29.4.3 构建镜像（dead 代理 drop-in 停用并备份为 `http-proxy.conf.disabled-d076`，`/etc/docker/daemon.json` 配置国内 registry 镜像源）→ 只读/无网/uid 10001 沙箱 `c360 doctor` 通过 → docker_runtime ✓（真实 image Id `sha256:ce80c656...`）；`check-formal-release` issues 为空；
-- **版本升级 1.1.0 → 1.2.0**：`__init__.py` / `pyproject.toml` / manifest 与证据契约 Literal / 冻结版本集合同步；`c360-1.2.0` manifest 8/8 门全绿；双语 Release Notes 见 [docs/releases/v1.2.0.md](docs/releases/v1.2.0.md)；**tag 未推送，等维护者确认**。
+- **版本升级 1.1.0 → 1.2.0**：`__init__.py` / `pyproject.toml` / manifest 与证据契约 Literal / 冻结版本集合同步；`c360-1.2.0` manifest 8/8 门全绿；双语 Release Notes 见 [docs/releases/v1.2.0.md](docs/releases/v1.2.0.md)（wheel 校验和硬编码；sdist 因包含 docs/ 与说明自身构成自引用，改由发布流水线 SHA256SUMS 发布）；维护者已确认，**v1.2.0 标签打在提交 `release: finalize v1.2.0 notes` 上**。
 
 阅读顺序：要跑命令先读 [使用说明](docs/user-guide.md)；改代码读 AGENTS.md → 本文件 → docs/architecture.md → docs/data_dictionary.md → ROADMAP.md；公开到 GitHub 读 [docs/github-publish.md](docs/github-publish.md) 与 [CONTRIBUTING.md](CONTRIBUTING.md)。原方案继续保留，矛盾处理见 ROADMAP。
 
