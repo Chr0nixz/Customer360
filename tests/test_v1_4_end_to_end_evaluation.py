@@ -18,7 +18,7 @@ from customer360.agent.local_server import LocalInferenceServer
 from customer360.cli import app
 
 PUBLIC_FORMAL = Path("outputs/eval-public-baseline/private/formal_input.json")
-HIDDEN_EVAL = Path("outputs/eval-hidden-baseline/private/hidden.json")
+HIDDEN_FORMAL_D076 = Path("outputs/eval-hidden-d076/private/formal_input.json")
 BENCHMARK_BASELINE = Path("outputs/benchmark_env/baseline")
 BENCHMARK_VARIANTS = (
     Path("outputs/benchmark_env/variants/distribution"),
@@ -61,8 +61,8 @@ def test_diagnostics_on_public_formal_run(tmp_path: Path):
 
 
 def test_diagnostics_on_hidden_run(tmp_path: Path):
-    if not HIDDEN_EVAL.is_file():
-        pytest.skip("maintainer artifact outputs/eval-hidden-baseline is not present")
+    if not HIDDEN_FORMAL_D076.is_file():
+        pytest.skip("maintainer artifact outputs/eval-hidden-d076 is not present")
     runner = CliRunner()
     diag_out = tmp_path / "test-diag-hidden"
 
@@ -71,7 +71,7 @@ def test_diagnostics_on_hidden_run(tmp_path: Path):
         [
             "diagnose",
             "--input",
-            "outputs/eval-hidden-baseline",
+            "outputs/eval-hidden-d076",
             "--pack",
             "outputs/hidden-pack-v14",
             "--output",
@@ -81,11 +81,12 @@ def test_diagnostics_on_hidden_run(tmp_path: Path):
     assert res.exit_code == 0
     data = json.loads(res.stdout)
     assert data["total_cases"] == 100
-    # D076: baseline policy-inapplicable hidden cases (if any) are excluded as
-    # structural instead of counted as agent failures; conservation still holds
-    # because exclusion only reclassifies former failures.
-    assert data["passed_cases"] == 66
-    assert data["failed_cases"] + data["excluded_cases"] == 34
+    # Re-pinned after the maintainer acceptance run under evaluator 0.7
+    # (outputs/eval-hidden-d076): 10 baseline policy-inapplicable cases are
+    # excluded as structural; 4 agent failures remain.
+    assert data["passed_cases"] == 86
+    assert data["failed_cases"] == 4
+    assert data["excluded_cases"] == 10
     assert (diag_out / "diagnostics.md").is_file()
     assert (diag_out / "diagnostics.json").is_file()
     assert (diag_out / "diagnostics.html").is_file()
