@@ -8,7 +8,7 @@
 
 ## 冻结边界
 
-- package 1.1.0、formal evaluator 0.7（D076 起；已出厂的 v1.1.0 证据为 0.6）、score protocol 1.0、pack verify 0.2。
+- package 1.2.0、formal evaluator 0.7（D076 起；已出厂的 v1.1.0 证据为 0.6）、score protocol 1.0、pack verify 0.2。
 - 只发布本地可复现 benchmark；Public Dev 与 Private Hidden 分开报告，永久 `ranking_enabled=false`。
 - Apache-2.0；hidden 数据、trusted Gold、私有报告不进入公开 tar、wheel、sdist 或 Docker image。源码 Git 可含 `data/trusted`（仅 C360_0001–0020），但不得含隐藏 pack 或 `outputs/`。
 - 超时、worker crash、执行错误、非法/缺失响应计入失败；policy-incompatible 单独记录。

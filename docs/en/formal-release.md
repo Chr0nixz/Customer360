@@ -8,7 +8,7 @@ For day-to-day installation, evaluation, and scoring, see the [User Guide](user-
 
 ## Frozen Boundaries
 
-- Package 1.1.0, formal evaluator 0.7 (since D076; the released v1.1.0 evidence was 0.6), score protocol 1.0, pack verification 0.2.
+- Package 1.2.0, formal evaluator 0.7 (since D076; the released v1.1.0 evidence was 0.6), score protocol 1.0, pack verification 0.2.
 - Only reproducible local benchmarks are published; Public Dev and Private Hidden are reported separately, with `ranking_enabled=false` permanently.
 - Apache-2.0 license. Hidden data, trusted Gold, and private traces must never enter public tarballs, wheels, sdists, or Docker images. The source Git tree may retain `data/trusted` (covering only `C360_0001–0020`), but never hidden packs or `outputs/`.
 - Timeouts, worker crashes, execution errors, and invalid/missing responses count as failures; policy-incompatible cases are audited separately.

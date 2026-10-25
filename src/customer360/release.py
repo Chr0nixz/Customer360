@@ -704,7 +704,7 @@ def check_formal_release(manifest_dir: Path, *, root: Path | None = None) -> dic
     manifest = FormalReleaseManifest.model_validate_json(path.read_text(encoding="utf-8"))
     issues: list[str] = []
     if (
-        manifest.package_version not in {"1.0.0", "1.1.0"}
+        manifest.package_version not in {"1.0.0", "1.1.0", "1.2.0"}
         or manifest.score_protocol_version != "1.0"
         or manifest.evaluator_version != FORMAL_EVALUATOR_VERSION
     ):

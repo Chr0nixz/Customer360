@@ -6,7 +6,7 @@ For users who want to **install, generate synthetic data, run Agents, and inspec
 
 This project is a reproducible, secure-by-default, **local and offline** Agent benchmark—not an online question-answering service, nor a leaderboard.
 
-Current protocol: package `1.1.0`, formal evaluator `0.7`, score protocol `1.0`. Formal release `v1.1.0` achieved. Online ranking is permanently disabled.
+Current protocol: package `1.2.0`, formal evaluator `0.7`, score protocol `1.0`. Formal release `v1.2.0` achieved. Online ranking is permanently disabled.
 
 ## 1. Three Golden Rules
 
